@@ -24,7 +24,8 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      {/* BASE_URL is Vite's `base`: /postfg/ in builds, / in dev. */}
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
         <AuthProvider>
           <Routes>
             <Route path={PATHS.LOGIN} element={<Login />} />
