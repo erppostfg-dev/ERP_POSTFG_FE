@@ -59,16 +59,3 @@ export function ReviewRulesDummy() {
     </DummySection>
   )
 }
-
-export function ChannelApisDummy() {
-  return (
-    <DummySection what="Channel API settings">
-      {card(<>
-        <Row title="Amazon: pull POs automatically" hint="New WORKING shipments become POs"><Switch start={false} /></Row>
-        <Row title="Amazon: check every (minutes)" hint="How often shipments are checked for changes"><input className={input} defaultValue={120} /></Row>
-        <Row title="Uniware: read shipment status" hint="Read-only sync into PO Overview (needs the account rights)"><Switch start={false} /></Row>
-        <Row title="Uniware: check every (minutes)" hint="How often statuses are read"><input className={input} defaultValue={60} /></Row>
-      </>)}
-    </DummySection>
-  )
-}

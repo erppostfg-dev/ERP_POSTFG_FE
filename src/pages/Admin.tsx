@@ -15,7 +15,8 @@ import type { ColKind } from '../lib/ops'
 import { Toggle, VerifySettings } from './ops/VerifySettings'
 import { PoIssues } from './ops/PoIssues'
 import { PO_ISSUES_TEXT } from '../constants/poIssues'
-import { ChannelApisDummy, NotificationsDummy, ReviewRulesDummy } from './SettingsDummy'
+import { NotificationsDummy, ReviewRulesDummy } from './SettingsDummy'
+import { IntakeSettings } from './ops/IntakeSettings'
 import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
 
 /*
@@ -62,7 +63,7 @@ function SettingsTab() {
         {section === 'po-verify' && <VerifySettings />}
         {section === 'notifications' && <NotificationsDummy />}
         {section === 'review-rules' && <ReviewRulesDummy />}
-        {section === 'channel-apis' && <ChannelApisDummy />}
+        {section === 'po-intake' && <IntakeSettings />}
       </div>
     </div>
   )

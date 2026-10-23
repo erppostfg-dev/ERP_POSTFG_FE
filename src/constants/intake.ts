@@ -1,0 +1,45 @@
+/*
+ * Users & Roles -> Settings -> PO intake (user, 2026-10-23): per channel that comes by email or API, an ON / OFF switch,
+ * a start ("Process from") and a limit per day. OFF = nothing of that channel comes in (emails stay in Gmail, Amazon is
+ * not read). Switching ON takes the channel's POs from its start until now, once, then new ones as they arrive; over
+ * today's limit they wait as held and go one by one. Manual uploads are never held.
+ */
+export const PO_INTAKE_ENDPOINT = '/admin/po-intake'
+
+export const INTAKE_TEXT = {
+  TITLE: 'PO intake by channel',
+  SUB: 'Which channels are processed, from when, and how many POs a day. A channel that is OFF takes nothing: its emails stay in Gmail and Amazon is not read. Switching a channel ON takes its POs from its "Process from" date until now, once, then every new one as it arrives. Over the day\'s limit, POs wait (held) and go one by one, the rest on the next day. Manual uploads are never held.',
+  CHANNEL: 'Channel',
+  SOURCE: 'Comes by',
+  SOURCE_LABEL: { email: 'Email', api: 'API' } as Record<string, string>,
+  TAKE: 'Process POs',
+  LIMIT: 'Limit per day',
+  LIMIT_HINT: 'Empty = no limit. Resets every day (India time).',
+  NO_LIMIT: 'no limit',
+  TODAY: 'Today',
+  HELD: 'Held',
+  HELD_HINT: 'Waiting for their turn: they go one by one while the channel is ON and has room today',
+  BEFORE_START: 'Before start',
+  BEFORE_START_HINT: 'Held, received before "Process from": left alone until the date is moved back to include them',
+  CHANGED: 'Last changed',
+  NEVER: 'never switched on',
+  ON: 'ON',
+  OFF: 'OFF',
+  LOADING: 'Loading channels…',
+  FROM: 'Process from',
+  FROM_HINT: 'POs from this date and time on; older ones are never taken. While the channel is ON, moving it earlier takes that channel\'s POs since then, once.',
+  FROM_NONE: 'not set',
+  UNIVERSAL: 'Universal start',
+  UNIVERSAL_HINT: "Sets the same 'Process from' on every channel (overwrites each channel's own). Only channels that are ON take POs from it; the rest when switched on.",
+  APPLY_ALL: 'Apply to all channels',
+  CLEAR: 'Clear',
+  SAVED_UNIVERSAL: (when: string | null) => (when ? `Every channel now starts from ${when}. Channels that are ON take their POs since then.` : 'Start date cleared on every channel.'),
+  SAVED_FROM: (name: string, when: string | null) => (when ? `${name}: processes POs from ${when}.` : `${name}: start date cleared.`),
+  SWITCH_ON_TITLE: (name: string) => `Switch on ${name}`,
+  SWITCH_ON_HINT: 'POs from this date and time are taken, once, then every new one as it arrives. Older ones stay where they are (Gmail / Amazon).',
+  SWITCH_ON: 'Switch on',
+  CANCEL: 'Cancel',
+  SAVED_ON: (name: string, held: number) => `${name}: switched ON. Its POs from the start date are being taken${held ? `; ${held} held PO${held === 1 ? '' : 's'} go one by one` : ''}.`,
+  SAVED_OFF: (name: string) => `${name}: switched OFF. Its new POs stay at the source until it is switched on.`,
+  SAVED_LIMIT: (name: string, limit: number | null) => `${name}: limit per day ${limit === null ? 'removed' : `set to ${limit}`}.`,
+} as const

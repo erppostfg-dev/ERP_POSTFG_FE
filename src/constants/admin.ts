@@ -35,9 +35,9 @@ export const ADMIN_TEXT = {
  */
 export const SETTINGS_SECTIONS = [
   { key: 'po-verify', label: 'PO verification', hint: 'Verify POs against the original before the Uniware CSV, per channel' },
+  { key: 'po-intake', label: 'PO intake', hint: 'Which channels are processed and how many POs a day' },
   // DUMMY groups (pages/SettingsDummy.tsx): only to see the layout; nothing is saved.
   { key: 'notifications', label: 'Notifications', hint: 'Dummy: emails and alerts', dummy: true },
   { key: 'review-rules', label: 'PO review rules', hint: 'Dummy: tolerances and approval', dummy: true },
-  { key: 'channel-apis', label: 'Channel APIs', hint: 'Dummy: Amazon / Uniware sync', dummy: true },
 ] as const
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]['key']
