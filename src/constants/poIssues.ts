@@ -33,7 +33,7 @@ export const PO_STATUS_TONE: Record<string, 'ok' | 'warn' | 'info' | 'crit' | 'n
 
 export const PO_ISSUES_TEXT = {
   TAB: 'PO issues',
-  TITLE: 'PO issues by channel',
+  TITLE: 'PO issues',
   SUB: 'Pick a channel to see the kinds of problems its POs had; open a kind to see every SKU / location / reason, and one of those to see its POs. Counted once per PO, by when the PO came in.',
   LOADING: 'Counting…',
   EMPTY: 'No POs in this period.',
@@ -56,4 +56,17 @@ export const PO_ISSUES_TEXT = {
   OPEN_OF: (open: number, total: number) => `${open} of ${total} still a problem`,
   ALL_FIXED: 'All fixed',
   HIDE_FIXED: 'Hide fixed',
+  // By category (user, 2026-10-23: category first, a table per channel, Excel with the SKU and how many times)
+  VIEW_CATEGORY: 'By category',
+  VIEW_CHANNEL: 'By channel',
+  SUB_CATEGORY: 'Pick a kind of problem to see, for every channel, each SKU / location / reason and how many POs had it. Download a channel, or all channels as one Excel file (a sheet per channel).',
+  CATEGORY_COUNT: (pos: number, open: number) => `${pos} PO${pos === 1 ? '' : 's'} · ${open} still a problem`,
+  TIMES: 'Times (POs)',
+  EXCEL: 'Excel',
+  EXCEL_ALL: 'Download all (Excel)',
+  EXCEL_INCLUDE_FIXED: 'Include fixed in Excel',
+  EXCEL_NONE: 'Nothing still open to download (tick "Include fixed in Excel" for the fixed ones).',
+  EXCEL_FILE: (category: string, who: string, days: number) => `PO issues - ${category} - ${who} - last ${days} days`,
+  ALL_CHANNELS: 'all channels',
+  CHANNEL_HEAD: (pos: number, open: number, total: number) => `${pos} PO${pos === 1 ? '' : 's'} · ${open} of ${total} still a problem`,
 } as const

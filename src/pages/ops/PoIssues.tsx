@@ -8,6 +8,7 @@ import {
   ISSUE_ITEM_LABEL, ISSUE_KIND_LABEL, PO_ISSUES_DAYS, PO_ISSUES_DEFAULT_DAYS, PO_ISSUES_TEXT as T, PO_STATUS_LABEL, PO_STATUS_TONE,
 } from '../../constants/poIssues'
 import { istDateTime } from '../../lib/time'
+import { PoIssuesByCategory } from './PoIssuesByCategory'
 
 /*
  * Users & Roles -> PO issues (user, 2026-10-22: channel based; channels on the left with only "n of m with issues",
@@ -19,6 +20,7 @@ import { istDateTime } from '../../lib/time'
  */
 
 type View = { kind?: string; item?: string }
+type Mode = 'category' | 'channel'
 
 const money = (n: number) => `${n > 0 ? '+' : ''}₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 const th = 'sticky top-0 z-10 border-b border-primary/20 bg-primary-soft px-3 py-2 text-left text-[11.5px] font-semibold text-primary whitespace-nowrap'
@@ -26,6 +28,8 @@ const td = 'border-b border-line/70 px-3 py-2 text-[12.5px]'
 
 export function PoIssues() {
   const [days, setDays] = useState<number>(PO_ISSUES_DEFAULT_DAYS)
+  // By category first (user, 2026-10-23); By channel kept.
+  const [mode, setMode] = useState<Mode>('category')
   const q = useQuery({ queryKey: ['admin', 'po-issues', days], queryFn: ({ signal }) => getPoIssues(days, signal) })
   const [channel, setChannel] = useState<string | null>(null)
   const [view, setView] = useState<View>({})
@@ -41,7 +45,16 @@ export function PoIssues() {
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
         <div>
           <div className="text-[14px] font-semibold text-ink-900">{T.TITLE}</div>
-          <p className="mt-1 max-w-3xl text-[12.5px] text-ink-600">{T.SUB}</p>
+          <p className="mt-1 max-w-3xl text-[12.5px] text-ink-600">{mode === 'category' ? T.SUB_CATEGORY : T.SUB}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 rounded-[var(--radius)] bg-alt/70 p-1">
+          {(['category', 'channel'] as const).map((m) => (
+            <button key={m} type="button" onClick={() => setMode(m)}
+              className={`rounded-md px-3 py-1.5 text-[12.5px] font-semibold transition-colors duration-150 ${mode === m ? 'bg-surface text-primary shadow-sm' : 'text-ink-600 hover:text-ink-900'}`}>
+              {m === 'category' ? T.VIEW_CATEGORY : T.VIEW_CHANNEL}
+            </button>
+          ))}
         </div>
         <div className="flex items-center gap-1 rounded-[var(--radius)] bg-alt/70 p-1">
           {PO_ISSUES_DAYS.map((d) => (
@@ -51,6 +64,7 @@ export function PoIssues() {
             </button>
           ))}
         </div>
+        </div>
       </div>
 
       {q.error ? (
@@ -59,6 +73,8 @@ export function PoIssues() {
         <div className="flex items-center justify-center gap-2 rounded-[var(--radius)] border border-line bg-surface px-4 py-10 text-[13px] text-ink-600"><Loader2 className="size-4 animate-spin" />{T.LOADING}</div>
       ) : !channels.length ? (
         <div className="rounded-[var(--radius)] border border-line bg-surface px-4 py-10 text-center text-[13px] text-ink-600">{T.EMPTY}</div>
+      ) : mode === 'category' ? (
+        <div className={`transition-opacity duration-200 ${q.isFetching ? 'opacity-60' : ''}`}><PoIssuesByCategory channels={channels} days={days} /></div>
       ) : (
         <div className={`grid gap-3 transition-opacity duration-200 md:grid-cols-[240px_1fr] ${q.isFetching ? 'opacity-60' : ''}`}>
           {/* Left: the channels */}
