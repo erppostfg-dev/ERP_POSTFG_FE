@@ -12,11 +12,13 @@ import { COPIED_MS, COPYABLE_COLUMNS, GRID_HINT } from '../constants/ui'
 
 // ---- Toolbar -----------------------------------------------------------
 export function SectionToolbar({
-  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra, selectedCount = 0, onClearSelection,
+  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra, onUpload, selectedCount = 0, onClearSelection,
 }: {
   q: string; setQ: (v: string) => void; placeholder?: string
   filtersOpen?: boolean; onToggleFilters?: () => void; activeFilters?: number
   entity: string; onExport: (ext: 'csv' | 'xls') => void; primary?: ReactNode; extra?: ReactNode
+  /** What Upload CSV does on a live page (e.g. open the page that takes the files); default: the sample upload modal. */
+  onUpload?: () => void
   /** Rows ticked in the table: CSV / Excel then download only those (the page's onExport decides). */
   selectedCount?: number
   onClearSelection?: () => void
@@ -62,7 +64,7 @@ export function SectionToolbar({
           className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
           <Download className="size-4" /> Excel
         </button>
-        <button onClick={() => setUpload(true)} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line bg-surface px-3 text-[13px] font-medium text-ink-900 hover:bg-canvas">
+        <button onClick={() => (onUpload ? onUpload() : setUpload(true))} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line bg-surface px-3 text-[13px] font-medium text-ink-900 hover:bg-canvas">
           <Upload className="size-4" /> Upload CSV
         </button>
         {primary}

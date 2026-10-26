@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import type { ReactNode } from 'react'
 import { api, ApiError } from '../api/client'
 import { ACCESS, AUTH_ENDPOINTS, ERROR_CODE, type AccessLevel } from '../constants/auth'
+import { preview, PREVIEW_ACCESS, PREVIEW_ENABLED, PREVIEW_USER } from '../dev/intransitPreview'
 
 /* The signed-in user from GET /auth/me; the session itself is the backend's httpOnly cookie. */
 
@@ -31,6 +32,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api<Me>(AUTH_ENDPOINTS.ME)
       .then((me) => setState({ status: 'signedIn', user: me.user, access: me.access, capabilities: me.capabilities ?? {} }))
       .catch((e: unknown) => {
+        // DEV-ONLY: In-transit preview without backend / login (src/dev/intransitPreview.ts).
+        if (PREVIEW_ENABLED) {
+          preview.on = true
+          setState({ status: 'signedIn', user: PREVIEW_USER, access: { ...PREVIEW_ACCESS }, capabilities: {} })
+          return
+        }
         const code = e instanceof ApiError ? e.code : ERROR_CODE.NETWORK
         setState({ status: 'signedOut', error: code === ERROR_CODE.UNAUTHENTICATED ? undefined : code })
       })
