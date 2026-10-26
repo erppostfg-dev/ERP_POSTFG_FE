@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { Pop, usePopover } from './pickers'
+import { TOOLBAR_TEXT } from '../constants/ui'
 
 type Tone = 'ok' | 'warn' | 'crit' | 'info' | 'neutral' | 'primary'
 
@@ -209,19 +211,50 @@ export function Button({
 }
 
 // ---- Data toolbar (Columns / Filters / Density / Export / Bulk) -------
+export type Density = 'comfortable' | 'compact'
+
+/*
+ * Columns / Filters / Density work only when the page passes what they need (user, 2026-10-16: they looked clickable
+ * but did nothing); without it the button is shown disabled.
+ */
 export function Toolbar({
-  total, onExport, onBulk, right,
-}: { total?: number; onExport?: () => void; onBulk?: () => void; right?: ReactNode }) {
-  const Item = ({ label, icon, onClick }: { label: string; icon: string; onClick?: () => void }) => (
-    <button onClick={onClick} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary-soft/60">
+  total, onExport, onBulk, right, columns, filtersOpen, activeFilters = 0, onToggleFilters, density, onDensity,
+}: {
+  total?: number; onExport?: () => void; onBulk?: () => void; right?: ReactNode
+  /** Show / hide columns: every column's label, the hidden ones, and the ones that can't be hidden. */
+  columns?: { all: string[]; hidden: ReadonlySet<string>; locked?: ReadonlySet<string>; onToggle: (label: string) => void }
+  filtersOpen?: boolean; activeFilters?: number; onToggleFilters?: () => void
+  density?: Density; onDensity?: (d: Density) => void
+}) {
+  const cols = usePopover()
+  const Item = ({ label, icon, onClick, on = false, badge }: { label: string; icon: string; onClick?: () => void; on?: boolean; badge?: number }) => (
+    <button onClick={onClick} disabled={!onClick} title={onClick ? undefined : TOOLBAR_TEXT.NOT_HERE}
+      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-soft/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${on ? 'bg-primary-soft' : ''}`}>
       <span className="text-sm leading-none">{icon}</span> {label}
+      {!!badge && <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">{badge}</span>}
     </button>
   )
   return (
     <div className="flex flex-wrap items-center gap-1 border-b border-line px-3 py-2">
-      <Item label="Columns" icon="▚" />
-      <Item label="Filters" icon="⧩" />
-      <Item label="Density" icon="≡" />
+      <div ref={cols.ref} className="relative">
+        <Item label="Columns" icon="▚" onClick={columns ? cols.toggle : undefined} on={cols.open} badge={columns?.hidden.size} />
+        {columns && cols.open && (
+          <Pop leaving={cols.leaving} className="max-h-72 w-56 overflow-y-auto">
+            {columns.all.map((c) => {
+              const locked = columns.locked?.has(c)
+              return (
+                <label key={c} className={`flex items-center gap-2 rounded px-2 py-1.5 text-[13px] ${locked ? 'text-ink-400' : 'cursor-pointer hover:bg-alt'}`}>
+                  <input type="checkbox" checked={!columns.hidden.has(c)} disabled={locked} onChange={() => columns.onToggle(c)} className="accent-[var(--color-primary)]" />
+                  {c}
+                </label>
+              )
+            })}
+          </Pop>
+        )}
+      </div>
+      <Item label="Filters" icon="⧩" onClick={onToggleFilters} on={filtersOpen || activeFilters > 0} badge={activeFilters} />
+      <Item label={density === 'compact' ? 'Compact' : 'Density'} icon="≡" on={density === 'compact'}
+        onClick={onDensity ? () => onDensity(density === 'compact' ? 'comfortable' : 'compact') : undefined} />
       <Item label="Export" icon="↓" onClick={onExport} />
       {typeof total === 'number' && <span className="ml-2 text-[11px] text-slate-400">Total: {total.toLocaleString('en-IN')} items</span>}
       <div className="ml-auto flex items-center gap-2">

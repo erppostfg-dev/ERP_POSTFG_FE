@@ -172,3 +172,10 @@ input, textarea, select {
   .pf-slide-from-left, .pf-slide-from-right { animation: none; }
 }
 
+
+/* In-transit build progress (2026-10-19): a short bar sliding along the track while the length of the work is unknown. */
+@keyframes pf-indeterminate { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+.pf-indeterminate { animation: pf-indeterminate 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .pf-indeterminate { animation: none; width: 100%; opacity: 0.5; }
+}

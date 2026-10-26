@@ -25,5 +25,8 @@ export const TABLE_HEIGHT = {
 
 /** Tables: how long the "Copied" chip stays on a clicked cell, and the hint under every table (user, 2026-10-15). */
 export const COPIED_MS = 1_200
-export const GRID_HINT = { OPEN_AND_COPY: 'Click a cell to copy · double-click a row to open', COPY: 'Click a cell to copy' } as const
+/** Old-style table toolbar (Columns / Filters / Density): shown on a button the page has not wired up. */
+export const TOOLBAR_TEXT = { NOT_HERE: 'Not available on this table' } as const
+
+export const GRID_HINT ={ OPEN_AND_COPY: 'Click a cell to copy · double-click a row to open', COPY: 'Click a cell to copy' } as const
 

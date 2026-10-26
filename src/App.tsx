@@ -13,6 +13,7 @@ import ShortSkus from './pages/ops/ShortSkus'
 import InventoryCalc from './pages/dp/InventoryCalc'
 import DrrAging from './pages/dp/DrrAging'
 import DPAnalytics from './pages/dp/DPAnalytics'
+import IntransitStock from './pages/dp/IntransitStock'
 import { APPROVALS, CHANNEL_PRIORITY_DEFAULT } from './lib/ops'
 import { useAuth, type User } from './auth/AuthContext'
 import { FullPageMessage } from './auth/RequireAuth'
@@ -90,6 +91,7 @@ export default function App() {
     [PATHS.SKUS_SHORT, <ShortSkus priority={prio} />],
     [PATHS.OPS_ANALYTICS, <Analytics go={() => navigate(PATHS.INVENTORY)} />],
     [PATHS.INVENTORY, <InventoryCalc />],
+    [PATHS.INTRANSIT_STOCK, <IntransitStock />],
     [PATHS.DRR_AGING, <DrrAging />],
     [PATHS.PLANNING_ANALYTICS, <DPAnalytics />],
     [PATHS.APPROVALS, <Approvals />],

@@ -24,6 +24,7 @@ export const PATHS = {
   PLANNING: '/planning',
   INVENTORY: '/planning/inventory',
   DRR_AGING: '/planning/drr-aging',
+  INTRANSIT_STOCK: '/planning/intransit-stock',
   PLANNING_ANALYTICS: '/planning/analytics',
   APPROVALS: '/approvals',
 } as const
@@ -40,6 +41,8 @@ export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
   PATHS.PO_OVERVIEW, // GET /po-overview/shipments + /lines + /filter-options (our POs)
   PATHS.CHANNEL_CUSTOMERS, // GET /masters/channel-customers; legal name, type, GSTIN, terms, margin, PO source = NOT_IN_DB
   PATHS.WAREHOUSES, // GET /masters/warehouses/pep + /channel; no warehouse table, so most PEP facility fields = NOT_IN_DB
+  PATHS.INVENTORY, // GET /intransit/snapshot (the Daily Snapshot's Sheet35(2), worked out in the browser); DRR / aging / WoW not available yet
+  PATHS.INTRANSIT_STOCK, // /intransit: input files, API fetches, report builds
 ])
 
 /** Dev builds only: mark pages that still show sample data. */
@@ -86,6 +89,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Demand Planning',
     items: [
       { path: PATHS.INVENTORY, label: 'Inventory Calculation' },
+      { path: PATHS.INTRANSIT_STOCK, label: 'In-transit Stock' },
       { path: PATHS.DRR_AGING, label: 'DRR & Aging' },
       { path: PATHS.PLANNING_ANALYTICS, label: 'Analytics' },
     ],
