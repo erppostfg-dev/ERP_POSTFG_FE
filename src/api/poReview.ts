@@ -11,6 +11,13 @@ export type PoReviewItem = {
   status: string
   ocrStatus: string
   source: string
+  /** Email subject; for an API PO the channel's name for it (Amazon: the shipment name). */
+  subject: string | null
+  /** Uniware hand-off (completed POs): first CSV download and the uploaded-into-Uniware mark. */
+  csvDownloadedAt: string | null
+  csvDownloadedBy: string | null
+  uniwareUploadedAt: string | null
+  uniwareUploadedBy: string | null
   fileName: string
   poDate: string | null
   receivedAt: string | null
@@ -193,4 +200,19 @@ export function submitPo(uploadId: string, body: ResubmitBody) {
 /* POST /po-review/:uploadId/reject: the reviewer rejects directly; the PO leaves the list (who / why kept). */
 export function rejectPo(uploadId: string, remark: string) {
   return api<{ status: string; rejectedIssues: string[] }>(`${one(uploadId)}/reject`, { method: 'POST', body: JSON.stringify({ remark }) })
+}
+
+/* POST /po-review/uniware-uploaded: mark POs uploaded into Uniware (or undo); they then show in PO Overview. */
+export function markUniwareUploaded(uploadIds: string[], undo = false) {
+  return api<{ changed: string[] }>(`${PO_REVIEW_ENDPOINT}/uniware-uploaded`, { method: 'POST', body: JSON.stringify({ uploadIds, undo }) })
+}
+
+
+/* POST /po-review/recheck (2026-10-22): re-check every PO in review against today's master now; issues the master
+   fixed close, POs with nothing left pass (sale order + CSV). The server also does it every 30 min and after a master
+   load. */
+export function recheckReview() {
+  return api<{ checked: number; issuesClosed: number; completed: { uploadId: string; poNumber: string | null; saleOrder: string }[]; partly: number; failed: number }>(
+    `${PO_REVIEW_ENDPOINT}/recheck`, { method: 'POST' },
+  )
 }

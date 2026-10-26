@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:lan": "vite --mode lan",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -17,7 +18,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router": "^7.18.4",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "xlsx": "file:vendor/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

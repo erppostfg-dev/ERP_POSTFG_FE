@@ -2,23 +2,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, Filter, History, MoreHorizontal, Pencil, Search, Upload, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Calendar, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, Filter, History, MoreHorizontal, Pencil, Search, Upload, X } from 'lucide-react'
 import { Badge, BulkUpload, downloadCsv } from './ui'
 import { DatePicker, Pop, usePopover } from './pickers'
 import { fmtDate, statusTone, type ColKind } from '../lib/ops'
 import { NOT_IN_DB } from '../constants/masters'
 import { copyText } from '../lib/clipboard'
-import { COPIED_MS, GRID_HINT } from '../constants/ui'
+import { COPIED_MS, COPYABLE_COLUMNS, GRID_HINT } from '../constants/ui'
 
 // ---- Toolbar -----------------------------------------------------------
 export function SectionToolbar({
-  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra, onUpload,
+  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra, onUpload, selectedCount = 0, onClearSelection,
 }: {
   q: string; setQ: (v: string) => void; placeholder?: string
   filtersOpen?: boolean; onToggleFilters?: () => void; activeFilters?: number
   entity: string; onExport: (ext: 'csv' | 'xls') => void; primary?: ReactNode; extra?: ReactNode
   /** What Upload CSV does on a live page (e.g. open the page that takes the files); default: the sample upload modal. */
   onUpload?: () => void
+  /** Rows ticked in the table: CSV / Excel then download only those (the page's onExport decides). */
+  selectedCount?: number
+  onClearSelection?: () => void
 }) {
   const [upload, setUpload] = useState(false)
   return (
@@ -45,10 +48,20 @@ export function SectionToolbar({
       )}
       {extra}
       <div className="ml-auto flex flex-wrap items-center gap-2">
-        <button onClick={() => onExport('csv')} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
+        {/* Always takes its place (hidden at 0), so ticking a row never moves the toolbar or the table (user, 2026-10-19). */}
+        {onClearSelection && (
+          <span aria-hidden={selectedCount === 0}
+            className={`inline-flex h-9 min-w-[150px] items-center justify-center gap-2 rounded-[var(--radius)] border border-primary/30 px-3 text-[12.5px] text-primary transition-opacity duration-200 ${selectedCount > 0 ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+            <span className="tnum font-semibold">{selectedCount} selected</span>
+            <button onClick={onClearSelection} tabIndex={selectedCount > 0 ? 0 : -1} className="text-ink-600 underline-offset-2 hover:text-ink-900 hover:underline">Clear</button>
+          </span>
+        )}
+        <button onClick={() => onExport('csv')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
+          className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
           <Download className="size-4" /> CSV
         </button>
-        <button onClick={() => onExport('xls')} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
+        <button onClick={() => onExport('xls')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
+          className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
           <Download className="size-4" /> Excel
         </button>
         <button onClick={() => (onUpload ? onUpload() : setUpload(true))} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line bg-surface px-3 text-[13px] font-medium text-ink-900 hover:bg-canvas">
@@ -76,11 +89,19 @@ export type FilterDef =
   | { key: string; label: string; type: 'text'; placeholder?: string }
 export type FilterValues = Record<string, string | string[]>
 
+/** A multi-select gets a search box when it has more options than this. */
+const MULTI_SEARCH_FROM = 6
+
 export const countActive = (v: FilterValues) => Object.values(v).filter((x) => (Array.isArray(x) ? x.length : x)).length
 
-function MultiSelect({ value, onChange, options, placeholder }: { value: string[]; onChange: (v: string[]) => void; options: readonly string[]; placeholder: string }) {
+export function MultiSelect({ value, onChange, options, placeholder }: { value: string[]; onChange: (v: string[]) => void; options: readonly string[]; placeholder: string }) {
   // Our popover: opens / closes with the same animation as the other pickers (components/pickers.tsx).
   const { open, leaving, ref, toggle } = usePopover()
+  // A search box on top of long lists (2026-10-19, user: channels were hard to find).
+  const [q, setQ] = useState('')
+  useEffect(() => { if (open) setQ('') }, [open])
+  const searchable = options.length > MULTI_SEARCH_FROM
+  const shown = q.trim() ? options.filter((o) => o.toLowerCase().includes(q.trim().toLowerCase())) : options
   return (
     <div ref={ref} className="relative">
       <button
@@ -98,8 +119,21 @@ function MultiSelect({ value, onChange, options, placeholder }: { value: string[
         )}
       </button>
       {open && (
-        <Pop leaving={leaving} className="max-h-60 w-full min-w-[180px] overflow-y-auto">
-          {options.map((o) => {
+        <Pop leaving={leaving} className="max-h-72 w-full min-w-[200px] overflow-y-auto">
+          {searchable && (
+            <div className="sticky -top-1 z-10 -mx-1 -mt-1 mb-1 border-b border-line bg-surface p-1.5">
+              <div className="flex items-center gap-1.5 rounded-md border border-line px-2 focus-within:border-primary">
+                <Search className="size-3.5 shrink-0 text-ink-400" />
+                <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" className="h-7 min-w-0 flex-1 bg-transparent text-[13px] outline-none" />
+              </div>
+              <div className="mt-1 flex items-center justify-between px-0.5 text-[11.5px] text-ink-400">
+                <span>{shown.length} of {options.length}</span>
+                {value.length > 0 && <button type="button" onClick={() => onChange([])} className="hover:text-ink-900">Clear ({value.length})</button>}
+              </div>
+            </div>
+          )}
+          {shown.length === 0 && <div className="px-2 py-3 text-center text-[12.5px] text-ink-400">No match</div>}
+          {shown.map((o) => {
             const on = value.includes(o)
             return (
               <label key={o} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-alt">
@@ -120,7 +154,9 @@ export function FilterPanel({ defs, value, onApply, onClose }: { defs: FilterDef
   const [draft, setDraft] = useState<FilterValues>(value)
   const set = (k: string, v: string | string[]) => setDraft((d) => ({ ...d, [k]: v }))
   return (
-    <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface p-4 shadow-[0_1px_0_rgba(79,70,229,0.06)]">
+    // relative z-42: the open dropdowns hang over the table below (its fixed cells go up to z-40), and stay under the
+    // sidebar when it opens over the page (z-45).
+    <div className="relative z-[42] rounded-[var(--radius-card)] border border-primary/25 bg-surface p-4 shadow-[0_1px_0_rgba(79,70,229,0.06)]">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-[13px] font-semibold text-ink-900">Filters</div>
         <button onClick={onClose} className="rounded p-1 text-ink-400 hover:bg-alt hover:text-ink-900"><X className="size-4" /></button>
@@ -140,8 +176,9 @@ export function FilterPanel({ defs, value, onApply, onClose }: { defs: FilterDef
         ))}
       </div>
       <div className="mt-4 flex justify-end gap-2">
-        <button onClick={() => { setDraft({}); onApply({}) }} className="h-8 rounded-[var(--radius)] border border-line px-3 text-[13px] font-medium hover:bg-canvas">Clear</button>
-        <button onClick={() => onApply(draft)} className="h-8 rounded-[var(--radius)] bg-primary px-3.5 text-[13px] font-semibold text-white hover:opacity-90">Apply</button>
+        {/* Apply and Clear both close the panel once done, on every page (user, 2026-10-16). */}
+        <button onClick={() => { setDraft({}); onApply({}); onClose() }} className="h-8 rounded-[var(--radius)] border border-line px-3 text-[13px] font-medium hover:bg-canvas">Clear</button>
+        <button onClick={() => { onApply(draft); onClose() }} className="h-8 rounded-[var(--radius)] bg-primary px-3.5 text-[13px] font-semibold text-white hover:opacity-90">Apply</button>
       </div>
     </div>
   )
@@ -267,10 +304,12 @@ function RowMenu({ items }: { items: () => { label: string; onClick: () => void 
 
 export function DataGrid<T>({
   cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, maxHeight, onScrolledChange,
+  selected, onSelectedChange,
 }: {
   cols: [string, keyof T, ColKind][]; rows: T[]; rowKey: (r: T) => string; sticky?: number
   onRowClick?: (r: T) => void; rowMenu?: (r: T) => { label: string; onClick: () => void }[]; pageSize?: number
-  trailing?: { label: string; render: (r: T) => ReactNode }[]; rowClass?: (r: T) => string
+  /** Extra columns at the end; with `sortValue` the header gets ↑/↓ and a click sorts every row by it (2026-10-19). */
+  trailing?: { label: string; render: (r: T) => ReactNode; sortValue?: (r: T) => number | string; sortHint?: string }[]; rowClass?: (r: T) => string
   /** A header row above the columns: each group spans `span` columns in order; `edit` = marked with a pencil. */
   groups?: { label: string; span: number; edit?: boolean }[]
   /** Columns the person can edit: their header carries a pencil (no colour). */
@@ -285,7 +324,25 @@ export function DataGrid<T>({
   maxHeight?: string
   /** Told true when the table is scrolled / dragged away from its top-left start, false when it is back there. */
   onScrolledChange?: (scrolled: boolean) => void
+  /**
+   * Row checkboxes (2026-10-16, user: "download only the ticked rows"): a fixed first column; the header box ticks /
+   * unticks every row of `rows` (the current search + filters, all pages). Keys = rowKey.
+   */
+  selected?: ReadonlySet<string>
+  onSelectedChange?: (keys: Set<string>) => void
 }) {
+  const selectable = !!selected && !!onSelectedChange
+  const SELECT_W = 40
+  const allKeys = rows.map(rowKey)
+  const ticked = selectable ? allKeys.filter((k) => selected!.has(k)).length : 0
+  const toggleAll = () => onSelectedChange?.(ticked === allKeys.length ? new Set() : new Set(allKeys))
+  const toggle = (k: string) => {
+    const next = new Set(selected)
+    if (next.has(k)) next.delete(k); else next.add(k)
+    onSelectedChange?.(next)
+  }
+  const headBox = useRef<HTMLInputElement>(null)
+  useEffect(() => { if (headBox.current) headBox.current.indeterminate = ticked > 0 && ticked < allKeys.length }, [ticked, allKeys.length])
   const [page, setPage] = useState(0)
   // Every table (user, 2026-10-15): a single click copies that cell's text (as shown), a double-click opens the row.
   const [copied, setCopied] = useState<string | null>(null)
@@ -303,10 +360,25 @@ export function DataGrid<T>({
       copyTimer.current = setTimeout(() => setCopied(null), COPIED_MS)
     })
   }
+  /** Only code / name columns copy on click (COPYABLE_COLUMNS); dates, numbers and statuses don't. */
+  const copyable = (label: string) => COPYABLE_COLUMNS.has(label.trim().toLowerCase())
   const chip = (id: string) => copied === id && <span key={id} className="pf-copy-chip pointer-events-none absolute right-1 top-1/2 z-[6] -translate-y-1/2 rounded bg-ink-900 px-1.5 py-0.5 text-[10.5px] font-semibold text-white shadow">Copied</span>
+  // Sorting by a trailing column: none -> high first (↓) -> low first (↑) -> none. All rows are sorted, then paged.
+  const [sort, setSort] = useState<{ label: string; dir: 'asc' | 'desc' } | null>(null)
+  const sortCol = sort ? trailing?.find((t) => t.label === sort.label && t.sortValue) : undefined
+  const sortedRows = useMemo(() => {
+    if (!sort || !sortCol?.sortValue) return rows
+    const v = sortCol.sortValue
+    const sign = sort.dir === 'asc' ? 1 : -1
+    return [...rows].sort((a, b) => { const x = v(a), y = v(b); return (x < y ? -1 : x > y ? 1 : 0) * sign })
+  }, [rows, sort, sortCol])
+  const cycleSort = (label: string) => {
+    setSort((s) => (s?.label !== label ? { label, dir: 'desc' } : s.dir === 'desc' ? { label, dir: 'asc' } : null))
+    setPage(0)
+  }
   const pages = Math.max(1, Math.ceil(rows.length / pageSize))
   useEffect(() => setPage(0), [rows.length])
-  const view = rows.slice(page * pageSize, page * pageSize + pageSize)
+  const view = sortedRows.slice(page * pageSize, page * pageSize + pageSize)
   const scrolledRef = useRef(false)
   const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const away = e.currentTarget.scrollLeft > 0 || e.currentTarget.scrollTop > 0
@@ -317,7 +389,8 @@ export function DataGrid<T>({
   const GROUP_ROW_PX = 28
   // Fixed columns: each its own width, each placed after the widths before it.
   const widthOf = (i: number) => stickyWidths?.[i] ?? stickyW
-  const leftOf = (i: number) => Array.from({ length: i }, (_, j) => widthOf(j)).reduce((a, b) => a + b, 0)
+  // The checkbox column (when there is one) sits first, so every fixed column moves right by its width.
+  const leftOf = (i: number) => (selectable ? SELECT_W : 0) + Array.from({ length: i }, (_, j) => widthOf(j)).reduce((a, b) => a + b, 0)
   const fixed = (i: number) => (i < sticky ? { left: leftOf(i), width: widthOf(i), minWidth: widthOf(i), maxWidth: widthOf(i) } : undefined)
   return (
     <div className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
@@ -326,6 +399,7 @@ export function DataGrid<T>({
           <thead>
             {groups && (
               <tr>
+                {selectable && <th style={{ left: 0, width: SELECT_W }} className="sticky top-0 z-40 h-7 border-b border-line bg-alt" />}
                 {groups.map((g, i) => {
                   // A group over the fixed columns is fixed with them; the others keep their name visible just right of
                   // the fixed columns while their columns scroll under it.
@@ -342,6 +416,11 @@ export function DataGrid<T>({
               </tr>
             )}
             <tr>
+              {selectable && (
+                <th style={{ left: 0, width: SELECT_W, minWidth: SELECT_W, top: groups ? GROUP_ROW_PX : 0 }} className="sticky z-20 border-b border-line bg-alt px-3 py-2.5 text-left">
+                  <input ref={headBox} type="checkbox" aria-label="Select all rows" checked={allKeys.length > 0 && ticked === allKeys.length} onChange={toggleAll} className="size-4 cursor-pointer accent-[var(--color-primary)]" />
+                </th>
+              )}
               {cols.map(([label, key], i) => (
                 <th
                   key={label}
@@ -351,13 +430,26 @@ export function DataGrid<T>({
                   {editable?.has(key) ? <span className="inline-flex items-center gap-1">{label}<Pencil className="size-3 shrink-0" /></span> : label}
                 </th>
               ))}
-              {trailing?.map((t) => <th key={t.label} style={{ top: groups ? GROUP_ROW_PX : 0 }} className="sticky z-10 border-b border-line bg-alt px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">{t.label}</th>)}
+              {trailing?.map((t) => {
+                const on = sort?.label === t.label ? sort.dir : null
+                const Icon = on === 'desc' ? ArrowDown : on === 'asc' ? ArrowUp : ArrowUpDown
+                return (
+                  <th key={t.label} style={{ top: groups ? GROUP_ROW_PX : 0 }} className="sticky z-10 border-b border-line bg-alt px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">
+                    {t.sortValue ? (
+                      <button type="button" onClick={() => cycleSort(t.label)} title={t.sortHint ?? 'Sort'}
+                        className={`inline-flex items-center gap-1 uppercase tracking-wide transition-colors duration-150 hover:text-ink-900 ${on ? 'text-primary' : ''}`}>
+                        {t.label}<Icon className="size-3.5" />
+                      </button>
+                    ) : t.label}
+                  </th>
+                )
+              })}
               {rowMenu && <th style={{ top: groups ? GROUP_ROW_PX : 0 }} className="sticky right-0 z-20 border-b border-l border-line bg-alt px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">Action</th>}
             </tr>
           </thead>
           <tbody>
             {view.length === 0 && (
-              <tr><td colSpan={cols.length + 2} className="px-4 py-14 text-center text-[13px] text-ink-400">No records match the current search & filters.</td></tr>
+              <tr><td colSpan={cols.length + 3} className="px-4 py-14 text-center text-[13px] text-ink-400">No records match the current search & filters.</td></tr>
             )}
             {view.map((r) => {
               const k = rowKey(r)
@@ -365,21 +457,27 @@ export function DataGrid<T>({
                 <tr key={k}
                   onDoubleClick={onRowClick ? () => onRowClick(r) : undefined}
                   onMouseDown={(e) => { if (e.detail > 1) e.preventDefault() }} className={`group ${rowClass?.(r) ?? ''}`}>
+                  {selectable && (
+                    <td style={{ left: 0, width: SELECT_W, minWidth: SELECT_W }} onDoubleClick={(e) => e.stopPropagation()}
+                      className={`sticky z-[5] border-b border-line px-3 py-2.5 group-hover:bg-canvas ${selected!.has(k) ? 'bg-primary-soft' : 'bg-surface'}`}>
+                      <input type="checkbox" aria-label="Select row" checked={selected!.has(k)} onChange={() => toggle(k)} className="size-4 cursor-pointer accent-[var(--color-primary)]" />
+                    </td>
+                  )}
                   {cols.map(([label, key, kind], i) => (
                     <td
                       key={label}
                       style={fixed(i)}
                       title={i < sticky ? String(r[key] ?? '') : undefined}
-                      onClick={(e) => copyCell(e, `${k}|${i}`)}
-                      className={`cursor-copy whitespace-nowrap border-b border-line px-3 py-2.5 transition-colors duration-200 group-hover:bg-canvas ${i < sticky ? 'sticky z-[5] overflow-hidden text-ellipsis bg-surface' : 'relative'} ${i === sticky - 1 ? 'border-r' : ''} ${copied === `${k}|${i}` ? '!bg-primary-soft' : ''}`}
+                      onClick={copyable(label) ? (e) => copyCell(e, `${k}|${i}`) : undefined}
+                      className={`${copyable(label) ? 'cursor-copy' : ''} whitespace-nowrap border-b border-line px-3 py-2.5 transition-colors duration-200 group-hover:bg-canvas ${i < sticky ? 'sticky z-[5] overflow-hidden text-ellipsis bg-surface' : 'relative'} ${i === sticky - 1 ? 'border-r' : ''} ${copied === `${k}|${i}` ? '!bg-primary-soft' : ''}`}
                     >
                       <Cell kind={kind} v={r[key]} />
                       {chip(`${k}|${i}`)}
                     </td>
                   ))}
                   {trailing?.map((t, j) => (
-                    <td key={t.label} onClick={(e) => copyCell(e, `${k}|t${j}`)}
-                      className={`relative cursor-copy whitespace-nowrap border-b border-line px-3 py-2.5 transition-colors duration-200 group-hover:bg-canvas ${copied === `${k}|t${j}` ? '!bg-primary-soft' : ''}`}>
+                    <td key={t.label} onClick={copyable(t.label) ? (e) => copyCell(e, `${k}|t${j}`) : undefined}
+                      className={`relative ${copyable(t.label) ? 'cursor-copy' : ''} whitespace-nowrap border-b border-line px-3 py-2.5 transition-colors duration-200 group-hover:bg-canvas ${copied === `${k}|t${j}` ? '!bg-primary-soft' : ''}`}>
                       {t.render(r)}{chip(`${k}|t${j}`)}
                     </td>
                   ))}
@@ -439,3 +537,33 @@ export const textareaCls = fieldCls.replace('h-9 ', '') + ' min-h-[68px] py-2 le
 export function DateInput({ value, onChange, className = '' }: { value: string; onChange: (v: string) => void; className?: string }) {
   return <DatePicker value={value} onChange={onChange} className={className} />
 }
+
+/**
+ * The applied filters as chips under the toolbar (2026-10-19, user: they were only visible inside the filter panel).
+ * One chip per value ("Channel: Zepto ×"); × removes that value; "Clear all" removes every filter. Hidden when none.
+ */
+export function FilterChips({ defs, value, onChange }: { defs: FilterDef[]; value: FilterValues; onChange: (v: FilterValues) => void }) {
+  const chips: { key: string; label: string; text: string; remove: () => void }[] = []
+  for (const d of defs) {
+    const v = value[d.key]
+    if (Array.isArray(v)) {
+      for (const one of v) chips.push({ key: `${d.key}|${one}`, label: d.label, text: one, remove: () => onChange({ ...value, [d.key]: v.filter((x) => x !== one) }) })
+    } else if (v) {
+      chips.push({ key: d.key, label: d.label, text: d.type === 'date' ? fmtDate(v) : v, remove: () => onChange({ ...value, [d.key]: '' }) })
+    }
+  }
+  if (!chips.length) return null
+  return (
+    <div className="pf-tab-in flex flex-wrap items-center gap-1.5">
+      <span className="mr-0.5 inline-flex items-center gap-1 text-[12px] text-ink-400"><Filter className="size-3.5" />Filtered by</span>
+      {chips.map((c) => (
+        <span key={c.key} className="inline-flex h-7 items-center gap-1 rounded-full border border-primary/25 bg-primary-soft pl-2.5 pr-1 text-[12px] text-primary">
+          <span className="text-primary/70">{c.label}:</span><span className="font-semibold">{c.text}</span>
+          <button type="button" onClick={c.remove} title="Remove" className="rounded-full p-0.5 hover:bg-primary/15"><X className="size-3" /></button>
+        </span>
+      ))}
+      <button type="button" onClick={() => onChange({})} className="ml-1 text-[12px] text-ink-600 underline-offset-2 hover:text-ink-900 hover:underline">Clear all</button>
+    </div>
+  )
+}
+

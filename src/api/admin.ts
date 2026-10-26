@@ -1,0 +1,49 @@
+import { api } from './client'
+import { ADMIN_ENDPOINT } from '../constants/admin'
+
+/* Users & Roles (POST_FG routes/admin.routes.ts, 2026-10-15): admin / developer only. */
+
+export type AccessLevel = 'none' | 'viewer' | 'editor'
+
+export type AdminUser = {
+  id: number
+  name: string
+  email: string
+  status: 'active' | 'inactive'
+  roles: string[]
+  team: string | null
+  facilities: string[]
+  addedBy: string | null
+  createdAt: string | null
+  lastLoginAt: string | null
+  welcomeSentAt: string | null
+  welcomeError: string | null
+}
+
+export type UserOptions = {
+  roles: { key: string; label: string; description: string | null; isSystem: boolean }[]
+  teams: { key: string; label: string }[]
+  facilityScopedTeams: string[]
+  facilities: { code: string; name: string | null }[]
+  emailDomain: string
+}
+
+export type UserBody = { email?: string; name?: string; roles?: string[]; team?: string | null; facilities?: string[]; status?: 'active' | 'inactive'; sendEmail?: boolean }
+
+export type RoleItem = { key: string; label: string; description: string | null; isSystem: boolean; users: number; grants: Record<string, AccessLevel> }
+/** isCapability = a special permission (on = editor, off = none), e.g. "PO Review: edit all fields". */
+export type RolePage = { slug: string; label: string; section: string; isSection: boolean; isCapability?: boolean; description?: string | null }
+/** Roles are a fixed list (backend ROLE_CATALOG): only a role's page access can be changed here. */
+export type RoleBody = { grants: Record<string, AccessLevel> }
+
+const json = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) })
+
+export const listUsers = (signal?: AbortSignal) => api<AdminUser[]>(ADMIN_ENDPOINT.USERS, { signal })
+export const getUserOptions = (signal?: AbortSignal) => api<UserOptions>(ADMIN_ENDPOINT.USER_OPTIONS, { signal })
+export const createUser = (body: UserBody) => api<AdminUser>(ADMIN_ENDPOINT.USERS, json('POST', body))
+export const updateUser = (id: number, body: UserBody) => api<AdminUser>(ADMIN_ENDPOINT.USER(id), json('PATCH', body))
+export const resendWelcome = (id: number) => api<{ sent: boolean; error: string | null }>(ADMIN_ENDPOINT.WELCOME(id), { method: 'POST' })
+
+export const listRoles = (signal?: AbortSignal) => api<RoleItem[]>(ADMIN_ENDPOINT.ROLES, { signal })
+export const getRolePages = (signal?: AbortSignal) => api<RolePage[]>(ADMIN_ENDPOINT.ROLE_PAGES, { signal })
+export const updateRole = (key: string, body: RoleBody) => api<RoleItem>(ADMIN_ENDPOINT.ROLE(key), json('PATCH', body))

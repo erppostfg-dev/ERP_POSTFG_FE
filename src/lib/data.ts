@@ -354,7 +354,9 @@ export function fillRate(po: PO): number {
 }
 
 // ---- Masters: SKU Management (matches channel-level mgmt screen) --------
-export const MASTER_TABS = ['PEP SKU master', 'Channel SKU master', 'Channel / Customer master', 'Warehouses']
+/** Masters menu (2026-10-16, user): Title Case; Channel Master (was Channel / Customer master); Channel Location Master
+ *  (was the Channel warehouses sub-tab of Warehouses). */
+export const MASTER_TABS = ['PEP SKU Master', 'Channel SKU Master', 'Channel Master', 'Channel Location Master', 'Warehouses']
 
 export const SKU_CHANNEL_PILLS = [
   'Blinkit', 'Zepto', 'BigBasket', 'Flipkart Qcom', 'Myntra', 'Nykaa', 'Purplle',

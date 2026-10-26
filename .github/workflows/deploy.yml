@@ -1,0 +1,135 @@
+# Frontend CI/CD: branch -> environment -> S3 + CloudFront.
+#
+#   push to dev   -> GitHub Environment "dev"  -> dev bucket + dev CloudFront
+#   push to main  -> GitHub Environment "prod" -> prod bucket + prod CloudFront (after approval, if
+#                    the prod Environment has required reviewers)
+#   Run workflow  -> same mapping from the chosen branch (rebuild and redeploy that branch)
+#   Rollback      -> Actions: open an earlier successful run of the branch -> Re-run all jobs
+#
+# Each GitHub Environment holds: secret AWS_ROLE_ARN (Terraform output frontend_deploy_role_arn),
+# variables S3_BUCKET (frontend_bucket_name), CLOUDFRONT_DISTRIBUTION_ID
+# (frontend_cloudfront_distribution_id) and VITE_API_BASE_URL (/api/v1: CloudFront sends /api/*
+# to the backend on the same address). No .env file in the repository: VITE_* values are baked
+# into the JavaScript at build time, so they are public; never put secrets in them.
+name: deploy
+
+on:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # GitHub OIDC token for the AWS deploy role
+  contents: read
+
+# One deploy at a time per branch; a second push waits instead of racing the first.
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-1
+
+jobs:
+  check:
+    name: typecheck
+    if: github.ref_name == 'dev' || github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+
+  deploy:
+    name: deploy ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+    needs: check
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+    env:
+      ENV_NAME: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+      S3_BUCKET: ${{ vars.S3_BUCKET }}
+      CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+    steps:
+      - name: Check the Environment's settings
+        run: |
+          missing=""
+          [ -n "${{ secrets.AWS_ROLE_ARN }}" ] || missing="$missing secret:AWS_ROLE_ARN"
+          [ -n "$S3_BUCKET" ] || missing="$missing variable:S3_BUCKET"
+          [ -n "$CLOUDFRONT_DISTRIBUTION_ID" ] || missing="$missing variable:CLOUDFRONT_DISTRIBUTION_ID"
+          [ -n "$VITE_API_BASE_URL" ] || missing="$missing variable:VITE_API_BASE_URL"
+          if [ -n "$missing" ]; then
+            echo "::error::GitHub Environment '$ENV_NAME' is missing:$missing"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # VITE_API_BASE_URL (job env) is read by Vite and baked into the bundle.
+      - name: Build
+        run: npm run build
+
+      - name: AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: gha-deploy-frontend-${{ env.ENV_NAME }}-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Order matters: new assets first, index.html (which points at them) last, so a visitor
+      # never gets an index.html whose files are not uploaded yet. Old hashed assets are kept,
+      # so a page loaded before the deploy can still fetch its lazy chunks.
+      - name: Upload to S3
+        run: |
+          # Hashed build files: cached for a year, never change under the same name.
+          aws s3 sync dist/assets "s3://$S3_BUCKET/assets" \
+            --exclude "*.mjs" \
+            --cache-control "public, max-age=31536000, immutable"
+          # .mjs (the PDF viewer's module worker): browsers require a JavaScript content type.
+          aws s3 sync dist/assets "s3://$S3_BUCKET/assets" \
+            --exclude "*" --include "*.mjs" \
+            --content-type "text/javascript" \
+            --cache-control "public, max-age=31536000, immutable"
+          # Other top-level files (favicon etc., if any): short cache; stale ones removed.
+          aws s3 sync dist "s3://$S3_BUCKET" \
+            --exclude "assets/*" --exclude "index.html" \
+            --delete \
+            --cache-control "public, max-age=300"
+          # The entry page: always revalidated, so a new deploy shows up at once.
+          aws s3 cp dist/index.html "s3://$S3_BUCKET/index.html" \
+            --content-type "text/html; charset=utf-8" \
+            --cache-control "no-cache"
+
+      - name: Refresh CloudFront
+        run: |
+          INVALIDATION_ID="$(aws cloudfront create-invalidation \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --paths "/*" \
+            --query Invalidation.Id --output text)"
+          echo "Invalidation $INVALIDATION_ID"
+          aws cloudfront wait invalidation-completed \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --id "$INVALIDATION_ID" \
+            || echo "::warning::Invalidation $INVALIDATION_ID still running; the new version appears within minutes."
+
+      - name: Summary
+        run: |
+          SITE="$(aws cloudfront get-distribution --id "$CLOUDFRONT_DISTRIBUTION_ID" --query Distribution.DomainName --output text 2>/dev/null || true)"
+          {
+            echo "## Frontend → $ENV_NAME"
+            echo "- Commit: \`${GITHUB_SHA:0:12}\`"
+            echo "- Bucket: \`$S3_BUCKET\`"
+            echo "- Site: https://${SITE:-<distribution $CLOUDFRONT_DISTRIBUTION_ID>}"
+          } >> "$GITHUB_STEP_SUMMARY"

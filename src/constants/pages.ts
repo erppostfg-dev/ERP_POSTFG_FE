@@ -14,11 +14,14 @@ export const PATHS = {
   PEP_SKUS: '/masters/pep-skus',
   CHANNEL_SKUS: '/masters/channel-skus',
   CHANNEL_CUSTOMERS: '/masters/channel-customers',
+  CHANNEL_LOCATIONS: '/masters/channel-locations',
   WAREHOUSES: '/masters/warehouses',
   OPERATIONS: '/operations',
   PO_OVERVIEW: '/operations/po-overview',
   PO_REVIEW: '/operations/po-review',
   PO_WORKING: '/operations/po-working',
+  /** Amazon inbound plans + FBA shipments (2026-10-19). */
+  AMAZON_INBOUND: '/operations/amazon-inbound',
   SKUS_SHORT: '/operations/skus-short',
   OPS_ANALYTICS: '/operations/analytics',
   PLANNING: '/planning',
@@ -27,6 +30,8 @@ export const PATHS = {
   INTRANSIT_STOCK: '/planning/intransit-stock',
   PLANNING_ANALYTICS: '/planning/analytics',
   APPROVALS: '/approvals',
+  /** Users & Roles (2026-10-15): backend page key /admin (admin / developer). */
+  ADMIN: '/admin',
 } as const
 
 /**
@@ -35,12 +40,15 @@ export const PATHS = {
  */
 export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
   PATHS.PO_REVIEW, // Processed tab live; In Review and Manual Upload still marked inside the page
+  PATHS.ADMIN, // GET /admin/users + /admin/roles
   PATHS.APPROVALS, // GET /approvals/po-reviews (PO reviews only; other approval types not built, hidden)
   PATHS.PEP_SKUS, // GET /masters/pep-skus; fields with no DB column show NOT_IN_DB
   PATHS.CHANNEL_SKUS, // GET /masters/channel-skus; status has no DB column (NOT_IN_DB)
   PATHS.PO_OVERVIEW, // GET /po-overview/shipments + /lines + /filter-options (our POs)
   PATHS.CHANNEL_CUSTOMERS, // GET /masters/channel-customers; legal name, type, GSTIN, terms, margin, PO source = NOT_IN_DB
-  PATHS.WAREHOUSES, // GET /masters/warehouses/pep + /channel; no warehouse table, so most PEP facility fields = NOT_IN_DB
+  PATHS.CHANNEL_LOCATIONS, // GET /masters/channel-locations (details_channels)
+  PATHS.WAREHOUSES, // GET /masters/warehouses/pep; no warehouse table, so most PEP facility fields = NOT_IN_DB
+  PATHS.AMAZON_INBOUND, // GET /amazon/inbound/* (inbound plans + shipments)
   PATHS.INVENTORY, // GET /intransit/snapshot (the Daily Snapshot's Sheet35(2), worked out in the browser); DRR / aging / WoW not available yet
   PATHS.INTRANSIT_STOCK, // /intransit: input files, API fetches, report builds
 ])
@@ -64,7 +72,8 @@ export const MASTER_TAB_BY_PATH: Record<string, string> = {
   [PATHS.PEP_SKUS]: MASTER_TABS[0],
   [PATHS.CHANNEL_SKUS]: MASTER_TABS[1],
   [PATHS.CHANNEL_CUSTOMERS]: MASTER_TABS[2],
-  [PATHS.WAREHOUSES]: MASTER_TABS[3],
+  [PATHS.CHANNEL_LOCATIONS]: MASTER_TABS[3],
+  [PATHS.WAREHOUSES]: MASTER_TABS[4],
 }
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -80,6 +89,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: PATHS.PO_OVERVIEW, label: 'PO Overview' },
       { path: PATHS.PO_REVIEW, label: 'PO Processing & Review' },
       { path: PATHS.PO_WORKING, label: 'PO Working' },
+      { path: PATHS.AMAZON_INBOUND, label: 'Amazon Inbound' },
       { path: PATHS.SKUS_SHORT, label: 'SKUs Short' },
       { path: PATHS.OPS_ANALYTICS, label: 'Analytics' },
     ],
@@ -95,4 +105,5 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   { key: PATHS.APPROVALS, label: 'Approvals', items: [] },
+  { key: PATHS.ADMIN, label: 'Users & Roles', items: [] },
 ]

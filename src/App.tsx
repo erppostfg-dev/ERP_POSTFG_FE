@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
-import { useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, ChevronDown, ChevronsLeft, ChevronsRight, Database, LineChart, LogOut, Search, Truck } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { BadgeCheck, ChevronDown, UsersRound, ChevronsLeft, ChevronsRight, Database, LineChart, LogOut, Search, Truck } from 'lucide-react'
 import Analytics from './pages/Analytics'
 import Masters from './pages/Masters'
 import Approvals from './pages/Approvals'
+import Admin from './pages/Admin'
 import POOverview from './pages/ops/POOverview'
 import POProcessing from './pages/ops/POProcessing'
 import POWorking from './pages/ops/POWorking'
+import AmazonInbound from './pages/ops/AmazonInbound'
 import ShortSkus from './pages/ops/ShortSkus'
 import InventoryCalc from './pages/dp/InventoryCalc'
 import DrrAging from './pages/dp/DrrAging'
 import DPAnalytics from './pages/dp/DPAnalytics'
 import IntransitStock from './pages/dp/IntransitStock'
-import { APPROVALS, CHANNEL_PRIORITY_DEFAULT } from './lib/ops'
+import { CHANNEL_PRIORITY_DEFAULT } from './lib/ops'
+import { countPendingApprovals } from './api/approvals'
+import { APPROVALS_BADGE_REFRESH_MS } from './constants/poReview'
 import { useAuth, type User } from './auth/AuthContext'
 import { FullPageMessage } from './auth/RequireAuth'
 import { ACCESS, ROLE_LABEL, TEAM_LABEL, UI_TEXT } from './constants/auth'
@@ -35,10 +39,10 @@ const GROUP_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   [PATHS.OPERATIONS]: Truck,
   [PATHS.PLANNING]: LineChart,
   [PATHS.APPROVALS]: BadgeCheck,
+  [PATHS.ADMIN]: UsersRound,
 }
 
 const BRANDS = ['All', 'mCaffeine', 'Hyphen'] as const
-const pending = APPROVALS.filter((a) => a.status === 'Pending').length
 
 /** The group a path belongs to, and its item (groups with children). */
 const findRoute = (pathname: string) => {
@@ -78,6 +82,15 @@ export default function App() {
     g.items.length > 0 || (NAV_GROUPS.find((n) => n.key === g.key)!.items.length === 0 && canSee(g.key)),
   )
   const firstPath = (g: NavGroup) => g.items[0]?.path ?? g.key
+  // Approvals badge = the real number of PO reviews waiting (2026-10-15; was the design's sample count, and it showed
+  // on Users & Roles too). Key under 'approvals', so the Approvals page's live updates refresh it at once.
+  const pendingQ = useQuery({
+    queryKey: ['approvals', 'pending-count'],
+    queryFn: ({ signal }) => countPendingApprovals(signal),
+    enabled: canSee(PATHS.APPROVALS),
+    refetchInterval: APPROVALS_BADGE_REFRESH_MS,
+  })
+  const badgeOf = (key: string) => (key === PATHS.APPROVALS ? pendingQ.data ?? 0 : 0)
 
   const current = findRoute(pathname)
   const viewOnly = current !== null && auth.accessFor(current.item?.path ?? current.group.key) === ACCESS.VIEWER
@@ -88,6 +101,7 @@ export default function App() {
     [PATHS.PO_OVERVIEW, <POOverview />],
     [PATHS.PO_REVIEW, <POProcessing />],
     [PATHS.PO_WORKING, <POWorking prio={prio} setPrio={setPrio} />],
+    [PATHS.AMAZON_INBOUND, <AmazonInbound />],
     [PATHS.SKUS_SHORT, <ShortSkus priority={prio} />],
     [PATHS.OPS_ANALYTICS, <Analytics go={() => navigate(PATHS.INVENTORY)} />],
     [PATHS.INVENTORY, <InventoryCalc />],
@@ -95,6 +109,7 @@ export default function App() {
     [PATHS.DRR_AGING, <DrrAging />],
     [PATHS.PLANNING_ANALYTICS, <DPAnalytics />],
     [PATHS.APPROVALS, <Approvals />],
+    [PATHS.ADMIN, <Admin />],
   ]
 
   // Pages stay alive once opened (hidden when not shown), so switching back keeps their filters, tabs and scroll;
@@ -112,7 +127,9 @@ export default function App() {
     <div className={`grid h-full grid-cols-1 transition-[grid-template-columns] duration-300 ease-in-out ${railed ? 'md:grid-cols-[68px_1fr]' : 'md:grid-cols-[248px_1fr]'}`}>
       {/* Left nav rail: a 68px rail when collapsed (or while a table wants the full view); hovering it opens it over
           the page (peek). The panel's width animates; its labels are clipped while it moves. */}
-      <aside className="relative hidden min-h-0 md:block" onMouseEnter={() => railed && setPeek(true)} onMouseLeave={() => setPeek(false)}>
+      {/* Its own layer (z-45): above the tables' frozen columns / header (z up to 40) when it opens over the page,
+          below pop-ups and drawers (z 50+). Fix 2026-10-22: PO Overview's frozen PO Number column showed over it. */}
+      <aside className="relative z-[45] hidden min-h-0 md:block" onMouseEnter={() => railed && setPeek(true)} onMouseLeave={() => setPeek(false)}>
       <div className={`absolute inset-y-0 left-0 z-40 flex min-h-0 flex-col overflow-hidden whitespace-nowrap border-r border-line bg-surface transition-[width,box-shadow] duration-300 ease-in-out ${wide ? 'w-[248px]' : 'w-[68px]'} ${peek ? 'shadow-xl' : ''}`}>
         <div className={`flex gap-2.5 px-4 py-4 ${wide ? 'items-center' : 'flex-col items-center px-0'}`}>
           <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-[13px] font-bold text-white">PF</div>
@@ -147,7 +164,7 @@ export default function App() {
                 >
                   <Icon className="size-4 shrink-0" />
                   {wide && <span className="flex-1 text-left">{g.label}{leaf && isDummyPage(g.key) && <DummyDot />}</span>}
-                  {wide && leaf && pending > 0 && <span className={`tnum rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${activeGroup ? 'bg-white/20 text-white' : 'bg-crit-soft text-crit'}`}>{pending}</span>}
+                  {wide && leaf && badgeOf(g.key) > 0 && <span title="PO reviews waiting for approval" className={`tnum rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${activeGroup ? 'bg-white/20 text-white' : 'bg-crit-soft text-crit'}`}>{badgeOf(g.key)}</span>}
                   {wide && !leaf && <ChevronDown className={`size-3.5 text-ink-400 transition-transform ${open[g.key] ? '' : '-rotate-90'}`} />}
                 </button>
                 {wide && !leaf && open[g.key] && (
@@ -207,7 +224,7 @@ export default function App() {
             {/* Who am I: the team when the person has one (e.g. "Warehouse"), else their role(s) (e.g. "Admin") */}
             {auth.status === 'signedIn' && (
               <span className="hidden whitespace-nowrap rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary sm:inline" title={auth.user.email}>
-                {auth.user.team ? TEAM_LABEL[auth.user.team] ?? auth.user.team : auth.user.roles.map((r) => ROLE_LABEL[r] ?? r).join(' · ')}
+                {auth.user.team ? TEAM_LABEL[auth.user.team] ?? auth.user.team : auth.user.roles.map((r) => auth.user.roleLabels?.[r] ?? ROLE_LABEL[r] ?? r).join(' · ')}
               </span>
             )}
             <div className="hidden items-center gap-1 rounded-md border border-line p-0.5 text-[11px] sm:flex">

@@ -155,3 +155,103 @@ export function DatePicker({ value, onChange, placeholder = 'Pick a date', class
     </div>
   )
 }
+
+export interface OptionGroup {
+  label: string
+  items: { value: string; label: string }[]
+  /** Folded until its title is clicked (user, 2026-10-22: API / Email are rarely used, keep them inside). */
+  collapsible?: boolean
+}
+
+/**
+ * A single-choice dropdown with groups (2026-10-22, Manual Upload channels: Recent, then API / Email folded): the same
+ * look and open / close animation as SelectBox. A search box on top looks through every group (groups with a match
+ * open by themselves); a folded group opens / closes smoothly on a click of its title; arrow keys + Enter move through
+ * the items that are showing. Empty groups are left out.
+ */
+export function GroupedSelect({ value, groups, onChange, placeholder = '—' }: {
+  value: string; groups: OptionGroup[]; onChange: (v: string) => void; placeholder?: string
+}) {
+  const p = usePopover()
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  const [active, setActive] = useState(0)
+  const f = q.trim().toLowerCase()
+  const shown = groups
+    .map((g) => ({ ...g, items: f ? g.items.filter((it) => it.label.toLowerCase().includes(f)) : g.items }))
+    .filter((g) => g.items.length)
+  // Searching opens every group with a match; otherwise a folded group shows only when opened.
+  const isOpen = (g: OptionGroup) => !g.collapsible || !!f || open.has(g.label)
+  const visible = shown.flatMap((g) => (isOpen(g) ? g.items : []))
+  const all = groups.flatMap((g) => g.items)
+  useEffect(() => {
+    if (!p.open) return
+    setQ('')
+    // The picked channel's folded group opens with the list, so the tick is in view.
+    const home = groups.find((g) => g.collapsible && g.items.some((it) => it.value === value))
+    setOpen(home ? new Set([home.label]) : new Set())
+    setActive(0)
+  }, [p.open]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setActive(0), [f])
+  const current = all.find((it) => it.value === value)
+  const pick = (v: string) => { onChange(v); p.close() }
+  const toggleGroup = (label: string) => setOpen((s) => { const x = new Set(s); if (x.has(label)) x.delete(label); else x.add(label); return x })
+  const onKey = (e: KeyboardEvent) => {
+    if (!p.open && (e.key === 'ArrowDown' || e.key === 'Enter')) { e.preventDefault(); p.setOpen(true); return }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(visible.length - 1, i + 1)) }
+    if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(0, i - 1)) }
+    if (e.key === 'Enter' && visible[active]) { e.preventDefault(); pick(visible[active].value) }
+  }
+  let n = 0
+  return (
+    <div ref={p.ref} className="relative" onKeyDown={onKey}>
+      <button type="button" onClick={p.toggle} className={boxCls(p.open)}>
+        <span className={`min-w-0 flex-1 truncate ${current ? 'text-ink-900' : 'text-ink-400'}`}>{current?.label ?? placeholder}</span>
+        <ChevronDown className={`size-3.5 shrink-0 text-ink-400 transition-transform duration-150 ${p.open && !p.leaving ? 'rotate-180' : ''}`} />
+      </button>
+      {p.open && (
+        <Pop leaving={p.leaving} className="w-full min-w-[260px]">
+          <label className="mb-1 flex items-center gap-2 border-b border-line px-2 pb-1.5 pt-1">
+            <Search className="size-3.5 text-ink-400" />
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" className="w-full bg-transparent text-[13px] outline-none" />
+            {q && <X className="size-3.5 shrink-0 cursor-pointer text-ink-400 hover:text-ink-900" onClick={() => setQ('')} />}
+          </label>
+          <div className="max-h-80 overflow-y-auto">
+            {!shown.length && <div className="px-2 py-1.5 text-[12.5px] text-ink-400">No match</div>}
+            {shown.map((g, gi) => {
+              const expanded = isOpen(g)
+              const items = g.items.map((it) => {
+                const i = expanded ? n++ : -1
+                return (
+                  <button type="button" key={`${g.label}:${it.value}`} onMouseEnter={() => i >= 0 && setActive(i)} onClick={() => pick(it.value)}
+                    className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-ink-900 transition-colors duration-100 ${i === active ? 'bg-alt' : ''} ${g.collapsible ? 'pl-5' : ''}`}>
+                    <span className="min-w-0 flex-1 truncate">{it.label}</span>
+                    {it.value === value && <Check className="size-3.5 shrink-0 text-primary" />}
+                  </button>
+                )
+              })
+              return (
+                <div key={g.label} className={gi ? 'mt-1 border-t border-line pt-1' : ''}>
+                  {g.collapsible ? (
+                    <button type="button" onClick={() => toggleGroup(g.label)}
+                      className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600 hover:bg-alt">
+                      <ChevronRight className={`size-3.5 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
+                      <span className="flex-1">{g.label}</span>
+                      <span className="rounded-full bg-alt px-1.5 text-[10px] text-ink-400">{g.items.length}</span>
+                    </button>
+                  ) : (
+                    <div className="px-2 pb-0.5 pt-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">{g.label}</div>
+                  )}
+                  {/* Height animates from 0 to its content: grid rows 0fr -> 1fr. */}
+                  <div className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                    <div className="overflow-hidden">{items}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Pop>
+      )}
+    </div>
+  )
+}

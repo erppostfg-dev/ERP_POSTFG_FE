@@ -41,6 +41,10 @@ export const listApprovals = (status: ApprovalStatus, q: string, signal?: AbortS
   return apiWithMeta<ApprovalItem[], ApprovalListMeta>(`${APPROVALS_ENDPOINT}?${p}`, { signal })
 }
 
+/** Just the number of PO reviews waiting for an approver (the sidebar badge). */
+export const countPendingApprovals = (signal?: AbortSignal) =>
+  apiWithMeta<ApprovalItem[], ApprovalListMeta>(`${APPROVALS_ENDPOINT}?status=pending&pageSize=1`, { signal }).then((r) => r.meta.counts.pending ?? 0)
+
 export const getApproval = (id: string, signal?: AbortSignal) => api<ApprovalDetail>(`${APPROVALS_ENDPOINT}/${encodeURIComponent(id)}`, { signal })
 
 export const approveSubmission = (id: string, remark?: string) =>

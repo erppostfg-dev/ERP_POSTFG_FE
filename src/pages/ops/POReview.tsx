@@ -1,22 +1,27 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
-import { AlertTriangle, Check, Download, ExternalLink, FileText, Link2, Mail, X } from 'lucide-react'
+import { useChannelOptions } from '../../lib/channels'
+import { AlertTriangle, Check, ExternalLink, Link2, Mail, RefreshCw, X } from 'lucide-react'
 import { Badge, Button } from '../../components/ui'
-import { DataGrid, FilterPanel, SectionToolbar, applyFilters, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
+import { DataGrid, FilterChips, FilterPanel, SectionToolbar, applyFilters, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
+import { Reveal } from '../../components/shell'
 import type { ColKind } from '../../lib/ops'
 import {
-  getPoFile, getPoReview, listPoReview, rejectPo, submitPo,
+  getPoFile, getPoReview, listPoReview, recheckReview, rejectPo, submitPo,
   type LineCorrection, type Num, type PoReviewDetail, type PoReviewIssue, type PoReviewItem, type PoReviewLine, type ResubmitBody, type StillOpen,
 } from '../../api/poReview'
 import { ApiError } from '../../api/client'
 import {
-  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, PREVIEW_TYPES, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
+  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
 } from '../../constants/poReview'
 import { ACCESS } from '../../constants/auth'
 import { PATHS } from '../../constants/pages'
 import { useAuth } from '../../auth/AuthContext'
 import { istDateTime } from '../../lib/time'
 import { SkuPicker } from './SkuPicker'
+import { FileCell, SourceCell } from './SourceCells'
+import { FileViewer } from '../../components/FileViewer'
+import { CAPABILITY, REVIEW_EDIT_TEXT, editRules, fieldOpen, type LineField } from '../../constants/reviewEdit'
 
 /*
  * In Review: POs that failed validation (GET /po-review?status=needs_review), oldest first, and the review panel
@@ -28,16 +33,18 @@ import { SkuPicker } from './SkuPicker'
 type ReviewRow = {
   id: string; poNumber: string; channel: string; receivedAt: string; lines: number | null; value: number | null
   openIssues: number; issueTypes: string[]; source: string; file: string
+  subject: string | null
 }
 
 const RCOLS: [string, keyof ReviewRow, ColKind][] = [
-  ['Ingest ID', 'id', 'mono'], ['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['Received At', 'receivedAt', 'mono'],
+  // Ingest ID left out of the screen and the download (user, 2026-10-16); rows still use it as their key.
+  ['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['Received At', 'receivedAt', 'mono'],
   ['Lines', 'lines', 'num'], ['Value', 'value', 'money'],
 ]
 
 const toRow = (r: PoReviewItem): ReviewRow => ({
   id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', receivedAt: istDateTime(r.receivedAt), lines: r.lines, value: r.poValue,
-  openIssues: r.openIssues, issueTypes: r.issueTypes, source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName,
+  openIssues: r.openIssues, issueTypes: r.issueTypes, source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, subject: r.subject,
 })
 
 const distinct = (values: string[]) => [...new Set(values.filter(Boolean))].sort()
@@ -71,6 +78,10 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
     return () => ctrl.abort()
   }, [reload, liveTick, onCount])
 
+  // Ticked rows (by id): CSV / Excel download only these; none ticked = every row shown. Rows that left the list drop out.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const picked = rows.filter((r) => selected.has(r.id))
+
   // A row has several issue types, so the Issue filter is applied here; search and the other filters by the shared helper.
   const s = useSection<ReviewRow>(rows, ['poNumber', 'id', 'channel', 'file'])
   const { issue, ...others } = s.filters
@@ -81,11 +92,24 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
     return applyFilters(searched, others).filter((r) => !picked.length || r.issueTypes.some((t) => picked.includes(label(t))))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, s.q, s.filters])
+  const channelOptions = useChannelOptions(rows.map((r) => r.channel))
   const defs: FilterDef[] = [
-    { key: 'channel', label: 'Channel', type: 'multi', options: distinct(rows.map((r) => r.channel)) },
+    { key: 'channel', label: 'Channel', type: 'multi', options: channelOptions },
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows.map((r) => r.source)) },
     { key: 'issue', label: 'Issue', type: 'multi', options: distinct(rows.flatMap((r) => r.issueTypes.map(label))) },
   ]
+
+  // Re-check after a master fix (2026-10-22): editors only; the result goes into the notice line.
+  const { accessFor } = useAuth()
+  const canEditList = accessFor(PATHS.PO_REVIEW) === ACCESS.EDITOR
+  const [rechecking, setRechecking] = useState(false)
+  const recheck = () => {
+    setRechecking(true)
+    recheckReview()
+      .then((r) => { setNotice(RECHECK_TEXT.RESULT(r.issuesClosed, r.completed.length, r.partly)); setReload((n) => n + 1) })
+      .catch((e: unknown) => setNotice(e instanceof ApiError ? e.message : String(e)))
+      .finally(() => setRechecking(false))
+  }
 
   // Created or rejected: the PO leaves this list (and the list is read again, someone else may have acted too).
   const done = (message: string) => {
@@ -103,8 +127,16 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
         </div>
       )}
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search PO number, ingest ID, channel, file…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
-        entity="In-review POs" onExport={(e) => exportRows('in_review', e, RCOLS, shown)} />
-      {s.open && <FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+        entity="In-review POs" onExport={(e) => exportRows('in_review', e, RCOLS, picked.length ? picked : shown)}
+        selectedCount={picked.length} onClearSelection={() => setSelected(new Set())}
+        primary={canEditList && rows.length > 0 ? (
+          <button onClick={recheck} disabled={rechecking} title={RECHECK_TEXT.HINT}
+            className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-primary/40 bg-surface px-3 text-[13px] font-semibold text-primary hover:bg-primary-soft disabled:opacity-60">
+            <RefreshCw className={`size-4 ${rechecking ? 'animate-spin' : ''}`} />{rechecking ? RECHECK_TEXT.BUSY : RECHECK_TEXT.BUTTON}
+          </button>
+        ) : undefined} />
+      <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
+      {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {state.error ? (
         <div className="flex items-center gap-3 rounded-[var(--radius)] border border-crit/30 bg-crit-soft px-4 py-3 text-[13px] text-crit">
           <AlertTriangle className="size-4" /> Could not load POs in review: {state.error}
@@ -115,14 +147,20 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
       ) : !rows.length ? (
         <div className={box}>No POs are waiting for review.</div>
       ) : (
-        <DataGrid cols={RCOLS} rows={shown} rowKey={(r) => r.id} onRowClick={setSel}
+        <DataGrid cols={RCOLS} rows={shown} rowKey={(r) => r.id} onRowClick={setSel} selected={selected} onSelectedChange={setSelected}
           rowClass={() => '[&>td:first-child]:shadow-[inset_3px_0_0_var(--color-crit)]'}
           trailing={[
             { label: 'Issues', render: (r) => <span className="flex flex-wrap gap-1">{r.issueTypes.map((t) => <Badge key={t} tone="crit">{label(t)}</Badge>)}</span> },
             { label: 'Open issues', render: (r) => <span className="tnum text-crit">{r.openIssues}</span> },
-            { label: 'Source', render: (r) => { const I = srcIcon[r.source] ?? Mail; return <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-600"><I className="size-3.5" />{r.source}</span> } },
-            { label: 'Original file', render: (r) => <span className="inline-flex items-center gap-1 font-mono text-[12px] text-primary"><Link2 className="size-3.5" />{r.file}</span> },
-            { label: '', render: () => <span className="text-[12px] font-semibold text-primary">Review →</span> },
+            { label: 'Source', render: (r) => <SourceCell source={r.source} subject={r.subject} fallback={r.poNumber} icon={srcIcon[r.source] ?? Mail} /> },
+            { label: 'Original file', render: (r) => <FileCell uploadId={r.id} name={r.file} /> },
+            // A button (not text): one click opens the review panel, the same as a double-click, instead of being copied.
+            { label: '', render: (r) => (
+              <button type="button" onClick={() => setSel(r)}
+                className="pf-press group/rv inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] font-semibold text-primary transition-colors duration-150 hover:bg-primary-soft">
+                Review <span className="transition-transform duration-200 group-hover/rv:translate-x-0.5">→</span>
+              </button>
+            ) },
           ]} />
       )}
       {sel && <ReviewPanel uploadId={sel.id} poNumber={sel.poNumber} onClose={() => setSel(null)} onDone={done} onStale={() => setReload((n) => n + 1)}
@@ -132,6 +170,9 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
 }
 
 // ---- Review panel ---------------------------------------------------------------------------------------------------
+
+/** The review panel's open / close animation (ms), the same as .pf-panel-in / -out in index.css. */
+const PANEL_MS = 220
 
 const money = (v: Num | number) => (v === '' ? '—' : `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
 const plain = (v: Num | string | null | undefined) => (v === '' || v === null || v === undefined ? '' : String(v))
@@ -143,13 +184,18 @@ type LineEdit = { pep: string; qty: string; mrp: string; rate: string }
 const lineKey = (l: PoReviewLine) => String(l.lineNo)
 const startOf = (l: PoReviewLine): LineEdit => ({ pep: l.pepCode, qty: plain(l.qty), mrp: plain(l.poMrp), rate: plain(l.poUnitPrice) })
 
-function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale, gone = false }: {
+function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, gone = false }: {
   uploadId: string; poNumber: string; onClose: () => void; onDone: (message: string) => void; onStale: () => void
   /** The live list no longer has this PO: someone else submitted or rejected it meanwhile. */
   gone?: boolean
 }) {
-  const { accessFor } = useAuth()
+  // Opens with a short rise + fade and closes the same way (user, 2026-10-16: smooth both ways); X, Close and Esc wait for it.
+  const [leaving, setLeaving] = useState(false)
+  const onClose = useCallback(() => { setLeaving(true); setTimeout(closeNow, PANEL_MS) }, [closeNow])
+  const { accessFor, can } = useAuth()
   const canEdit = accessFor(PATHS.PO_REVIEW) === ACCESS.EDITOR
+  // Only the values with an error, unless the role has "PO Review: edit all fields" (2026-10-22; server checks too).
+  const editAll = can(CAPABILITY.PO_REVIEW_EDIT_ALL)
   const [data, setData] = useState<PoReviewDetail | null>(null)
   const [error, setError] = useState<string>()
   const [edits, setEdits] = useState<Record<string, LineEdit>>({})
@@ -204,6 +250,9 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale, gone = fals
   const unresolved = open.filter((i) => !handled(i))
   const rejectOnly = open.some((i) => REJECT_ONLY_ISSUES.includes(i.type))
   const headerIssue = (field: string) => open.find((i) => i.lineNo === null && i.field === field)
+  const rules = useMemo(() => editRules(open), [open])
+  const editable = (l: PoReviewLine, f: LineField) => canEdit && (editAll || fieldOpen(rules, lineKey(l), f))
+  const lockTip = (l: PoReviewLine, f: LineField) => (canEdit && !editable(l, f) ? REVIEW_EDIT_TEXT.LOCKED : undefined)
   const lineIssues = (l: PoReviewLine) => open.filter((i) => i.lineNo !== null && String(i.lineNo) === String(l.lineNo))
   const stillOpenOn = (l: PoReviewLine) => actionError?.stillOpen?.filter((i) => i.lineNo !== null && String(i.lineNo) === String(l.lineNo)) ?? []
   // Issues not shown next to a field or a line: listed (and accepted) in "Other checks".
@@ -301,15 +350,15 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale, gone = fals
     const off = ours !== undefined && ours !== null && differs(numOrEmpty(v), ours)
     return (
       <>
-        <input type="number" step="any" min={0} value={v} disabled={!canEdit} onChange={(ev) => setEdits({ ...edits, [lineKey(l)]: { ...e, [k]: ev.target.value } })}
-          className={`tnum h-8 w-24 rounded-md border px-2 ${off ? 'border-crit/60 bg-crit-soft' : 'border-line'} disabled:bg-alt`} />
+        <input type="number" step="any" min={0} value={v} disabled={!editable(l, k)} title={lockTip(l, k)} onChange={(ev) => setEdits({ ...edits, [lineKey(l)]: { ...e, [k]: ev.target.value } })}
+          className={`tnum h-8 w-24 rounded-md border px-2 ${off ? 'border-crit/60 bg-crit-soft' : 'border-line'} disabled:cursor-not-allowed disabled:bg-alt disabled:text-ink-600`} />
         {ours !== undefined && ours !== null && ours !== '' && <div className={`mt-0.5 text-[11px] ${off ? 'text-crit' : 'text-ink-400'}`}>ours {ours}</div>}
       </>
     )
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-surface">
+    <div className={`fixed inset-0 z-50 flex flex-col bg-surface ${leaving ? 'pf-panel-out' : 'pf-panel-in'}`}>
       <div className="flex items-start justify-between border-b border-line px-5 py-3">
         <div>
           <div className="flex items-baseline gap-2">
@@ -318,6 +367,7 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale, gone = fals
             {data && <span className="font-serif text-[14px] text-ink-600">{data.lines.length} line items</span>}
           </div>
           <p className="text-[12px] text-ink-600">{canEdit ? REVIEW_TEXT.INTRO : REVIEW_TEXT.VIEW_ONLY}</p>
+          {canEdit && <p className="mt-0.5 text-[11.5px] text-ink-400">{editAll ? REVIEW_EDIT_TEXT.EDIT_ALL : REVIEW_EDIT_TEXT.ONLY_ERRORS}</p>}
         </div>
         <button onClick={onClose} className="rounded-md p-1.5 text-ink-400 hover:bg-alt hover:text-ink-900"><X className="size-5" /></button>
       </div>
@@ -356,7 +406,7 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale, gone = fals
               {data.locationCandidates.length > 0 ? (
                 <label className="block">
                   <span className={lab}>Delivery location</span>
-                  <select value={locationId} disabled={!canEdit} onChange={(e) => setLocationId(e.target.value)}
+                  <select value={locationId} disabled={!canEdit || !(editAll || rules.location)} title={canEdit && !(editAll || rules.location) ? REVIEW_EDIT_TEXT.LOCKED : undefined} onChange={(e) => setLocationId(e.target.value)}
                     className={`${inputCls} ${picked ? '' : 'border-crit/60 bg-crit-soft'}`}>
                     <option value="">Pick the location…</option>
                     {data.locationCandidates.map((c) => <option key={c.detailsChannelId} value={c.detailsChannelId}>{[c.locationCode, c.pincode].filter(Boolean).join(' · ')}</option>)}
@@ -386,7 +436,7 @@ function ReviewPanel({ uploadId, poNumber, onClose, onDone, onStale, gone = fals
                         <td className="tnum px-2.5 py-2 text-ink-400">{plain(l.lineNo)}</td>
                         <td className="px-2.5 py-2"><div className="font-mono">{l.channelSkuCode || '—'}</div><div className="max-w-[200px] truncate text-[11px] text-ink-600" title={l.description}>{l.description}</div></td>
                         <td className="px-2.5 py-2">
-                          <SkuPicker value={e?.pep ?? ''} options={data.skuOptions} disabled={!canEdit} invalid={!e?.pep}
+                          <SkuPicker value={e?.pep ?? ''} options={data.skuOptions} disabled={!editable(l, 'pep')} invalid={!e?.pep}
                             onChange={(pep) => setEdits({ ...edits, [lineKey(l)]: { ...e, pep } })} />
                           {(o?.skuName ?? (e?.pep === l.pepCode ? l.skuName : '')) && <div className="mt-0.5 max-w-[220px] truncate text-[11px] text-ink-600">{o?.skuName ?? l.skuName}</div>}
                           {errs.map((i) => (
@@ -527,60 +577,25 @@ function ResolvedMark({ ok }: { ok: boolean }) {
     : <span className="ml-auto text-[11.5px] font-medium text-crit">{REVIEW_TEXT.TO_RESOLVE}</span>
 }
 
-// pdf.js is large: loaded only when a PDF is opened in the review panel.
-const PdfViewer = lazy(() => import('../../components/PdfViewer').then((m) => ({ default: m.PdfViewer })))
-
 /**
- * The PO file in the Figma viewer frame: PDFs one page at a time (page arrows, zoom, drag), images inline, the email
- * body sandboxed, anything else as a download. Open / download use short-lived S3 links.
+ * The PO file in the Figma viewer frame, shown in the app for every type (components/FileViewer): PDFs page by page,
+ * sheets as grids, JSON as tables, the email body sandboxed. Open in a new tab uses the short-lived S3 link.
  */
 function DocumentViewer({ data }: { data: PoReviewDetail }) {
   const url = data.files.poFile
   const fileName = data.upload.fileName
-  const type = (data.files.poFileType ?? fileName.split('.').pop() ?? '').toLowerCase()
-  const is = (list: readonly string[]) => list.includes(type)
   const uploadId = data.upload.uploadId
   const load = useCallback((signal: AbortSignal) => getPoFile(uploadId, signal), [uploadId])
-
-  const title = (
-    <>
-      <FileText className="size-4 shrink-0" />
-      <span className="min-w-0 truncate font-medium" title={fileName}>{fileName}</span>
-    </>
-  )
-  const actions = url && (
-    <>
-      <a href={url} target="_blank" rel="noreferrer" title="Open in a new tab" className="hover:opacity-100"><ExternalLink className="size-4" /></a>
-      <a href={data.files.poFileDownload ?? url} download={fileName} title="Download" className="hover:opacity-100"><Download className="size-4" /></a>
-    </>
-  )
-  if (url && is(PREVIEW_TYPES.PDF)) {
+  if (!url) {
     return (
-      <Suspense fallback={<div className="flex-1 rounded-[var(--radius-card)] bg-[#323639] p-6 text-center text-[13px] text-white/80">{REVIEW_TEXT.PDF_LOADING}</div>}>
-        <PdfViewer load={load} title={title} actions={actions} loadingText={REVIEW_TEXT.PDF_LOADING} failedText={REVIEW_TEXT.PDF_FAILED} />
-      </Suspense>
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-[var(--radius-card)] bg-[#323639] p-6 text-center text-[13px] text-white/80">
+        {REVIEW_TEXT.NO_FILE}
+      </div>
     )
   }
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] bg-[#323639]">
-      <div className="flex items-center gap-3 px-4 py-2.5 text-[13px] text-white/90">
-        <div className="flex min-w-0 flex-1 items-center gap-2">{title}</div>
-        {actions && <span className="flex shrink-0 items-center gap-3 opacity-80">{actions}</span>}
-      </div>
-      <div className="min-h-0 flex-1 bg-[#525659]">
-        {!url ? (
-          <div className="p-6 text-center text-[13px] text-white/80">{REVIEW_TEXT.NO_FILE}</div>
-        ) : is(PREVIEW_TYPES.HTML) ? (
-          <iframe src={url} title={fileName} sandbox="" className="h-full w-full border-0 bg-white" />
-        ) : is(PREVIEW_TYPES.IMAGE) ? (
-          <div className="h-full overflow-auto p-5"><img src={url} alt={fileName} className="mx-auto bg-white shadow-xl" /></div>
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-[13px] text-white/80">
-            {REVIEW_TEXT.NO_PREVIEW}
-            <a href={data.files.poFileDownload ?? url} download={fileName} className="inline-flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 font-semibold text-white hover:bg-white/20"><Download className="size-4" />Download {fileName}</a>
-          </div>
-        )}
-      </div>
-    </div>
+    <FileViewer load={load} fileName={fileName} type={data.files.poFileType} actions={
+      <a href={url} target="_blank" rel="noreferrer" title={FILE_VIEWER_TEXT.OPEN_TAB} className="hover:opacity-100"><ExternalLink className="size-4" /></a>
+    } />
   )
 }

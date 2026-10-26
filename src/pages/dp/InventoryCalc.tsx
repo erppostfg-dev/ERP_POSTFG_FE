@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Badge, Button, Card, downloadCsv, PageTitle, SubTabs, Td, Th, Toolbar, type Density } from '../../components/ui'
 import { DataGrid, FilterPanel, SectionToolbar, applyFilters, countActive, exportRows, useSection, type FilterDef, type FilterValues } from '../../components/kit'
+import { Reveal } from '../../components/shell'
 import { FACILITY_COLUMNS, INTRANSIT_TEXT, REPORT_TABLES } from '../../constants/intransit'
 import { PATHS } from '../../constants/pages'
 import type { InventoryLine } from '../../lib/sheet35'
@@ -233,7 +234,7 @@ function ChannelView({ lines, onUpload }: { lines: Line[]; onUpload: () => void 
   return (
     <div className="space-y-3">
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search channel…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active} entity="Channel inventory" onUpload={onUpload} onExport={(e) => exportRows('inventory_channel', e, cols, s.filtered)} />
-      {s.open && <FilterPanel defs={[{ key: 'channel', label: 'Channel', type: 'multi', options: rows.map((r) => r.channel) }]} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+      <Reveal open={s.open}><FilterPanel defs={[{ key: 'channel', label: 'Channel', type: 'multi', options: rows.map((r) => r.channel) }]} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       <DataGrid cols={cols} rows={s.filtered} rowKey={(r) => r.channel} trailing={aging} />
     </div>
   )
@@ -257,7 +258,7 @@ function SkuView({ lines, onUpload }: { lines: Line[]; onUpload: () => void }) {
   return (
     <div className="space-y-3">
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search SKU code or name…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active} entity="SKU inventory" onUpload={onUpload} onExport={(e) => exportRows('inventory_sku', e, cols, s.filtered)} />
-      {s.open && <FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+      <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       <DataGrid cols={cols} rows={s.filtered} rowKey={(r) => r.sku} trailing={aging} />
     </div>
   )
@@ -338,7 +339,7 @@ function TypeView({ lines, onUpload }: { lines: Line[]; onUpload: () => void }) 
   return (
     <div className="space-y-3">
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search SKU, channel…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active} entity="Inventory by type" onUpload={onUpload} onExport={(e) => exportRows('inventory_type', e, cols, s.filtered)} />
-      {s.open && <FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+      <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       <DataGrid cols={cols} rows={s.filtered} rowKey={(r) => r.key} trailing={aging} />
     </div>
   )

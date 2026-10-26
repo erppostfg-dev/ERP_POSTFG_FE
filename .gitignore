@@ -10,3 +10,6 @@ vite.config.*.timestamp-*
 *-debug.log*
 logs/
 *.log
+
+# LAN https certificate (npm run dev:lan)
+certs/

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { SlidersHorizontal, Truck } from 'lucide-react'
 import { Badge, Button, Drawer, PageTitle } from '../../components/ui'
 import { DataGrid, FilterPanel, PrimaryBtn, SectionToolbar, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
+import { Reveal } from '../../components/shell'
 import {
   CITIES, FACILITIES, OPS_CHANNELS, SHIPMENTS, ST_WAREHOUSE, TRANSPORTERS, daysUntil, fmtDate, shipmentCriticality, type ColKind, type Shipment,
 } from '../../lib/ops'
@@ -49,7 +50,7 @@ export default function POWorking({ prio, setPrio }: { prio: Record<string, numb
         entity="PO Working updates" onExport={(e) => exportRows('po_working', e, COLS, s.filtered)}
         extra={<Button icon={<SlidersHorizontal className="size-3.5" />} onClick={() => setPrioOpen(true)}>Channel priority</Button>}
         primary={<PrimaryBtn icon={<Truck className="size-4" />}>Bulk logistics update</PrimaryBtn>} />
-      {s.open && <FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+      <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
 
       <DataGrid cols={COLS} rows={s.filtered} rowKey={(r) => r.uid} onRowClick={setSel}
         rowClass={(r) => (r.crit === 'Critical' ? '[&>td:first-child]:shadow-[inset_3px_0_0_var(--color-crit)]' : '')}

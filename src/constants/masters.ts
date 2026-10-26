@@ -5,7 +5,7 @@ export const MASTERS_ENDPOINT = {
   CHANNEL_SKUS: '/masters/channel-skus',
   CHANNEL_CUSTOMERS: '/masters/channel-customers',
   PEP_WAREHOUSES: '/masters/warehouses/pep',
-  CHANNEL_WAREHOUSES: '/masters/warehouses/channel',
+  CHANNEL_WAREHOUSES: '/masters/channel-locations',
 } as const
 
 /** Shown in a field the page has but the database has no column for yet. */

@@ -5,8 +5,9 @@ import { AlertTriangle, History, Layers, Pencil, Plus, RefreshCw } from 'lucide-
 import { ApiError } from '../api/client'
 import { listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSkus, listPepWarehouses, type ChannelCustomerItem, type ChannelSkuItem, type ChannelWarehouseItem, type PepSkuItem, type PepWarehouseItem } from '../api/masters'
 import { NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS } from '../constants/masters'
+import { MASTER_TABS } from '../lib/data'
 import { OPS_CHANNELS, type ColKind } from '../lib/ops'
-import { Badge, Button, Drawer, PageTitle, SubTabs } from '../components/ui'
+import { Badge, Button, Drawer, PageTitle } from '../components/ui'
 import { Reveal } from '../components/shell'
 import { DataGrid, FilterPanel, PrimaryBtn, SectionToolbar, exportRows, inputCls, useSection, type FilterDef } from '../components/kit'
 
@@ -79,7 +80,7 @@ const status = (r: Row) => r.status === NOT_IN_DB ? notInDb : <Badge tone={r.sta
 
 const CFG: Record<string, Cfg> = {
   pep: {
-    title: 'PEP SKU master', sub: 'Every sellable PEP SKU with its Uniware name, classification, MRP and GST', key: 'code', entity: 'PEP SKUs', addLabel: 'Add SKU',
+    title: 'PEP SKU Master', sub: 'Every sellable PEP SKU with its Uniware name, classification, MRP and GST', key: 'code', entity: 'PEP SKUs', addLabel: 'Add SKU',
     search: ['code', 'name', 'category', 'sub'], placeholder: 'Search SKU code, Uniware name, category…',
     cols: [['SKU Code', 'code', 'mono'], ['Uniware Name', 'name', 'text'], ['Brand', 'brand', 'text'], ['SKU Type', 'type', 'text'], ['Category', 'category', 'text'], ['Sub-Category', 'sub', 'text'], ['Filling', 'filling', 'text'], ['MRP', 'mrp', 'money'], ['GST', 'gst', 'text']],
     fields: [{ key: 'code', label: 'SKU code' }, { key: 'name', label: 'Uniware name' }, { key: 'brand', label: 'Brand' }, { key: 'type', label: 'SKU type' },
@@ -94,7 +95,7 @@ const CFG: Record<string, Cfg> = {
     ],
   },
   channelSku: {
-    title: 'Channel SKU master', sub: 'How each channel lists a PEP SKU — channel code, margin and the rate we bill at', key: 'id', titleKey: 'channelSku', entity: 'Channel SKUs', addLabel: 'Map channel SKU',
+    title: 'Channel SKU Master', sub: 'How each channel lists a PEP SKU — channel code, margin and the rate we bill at', key: 'id', titleKey: 'channelSku', entity: 'Channel SKUs', addLabel: 'Map channel SKU',
     search: ['channelSku', 'pepCode', 'name', 'ean'], placeholder: 'Search channel SKU, PEP code, product, EAN…',
     cols: [['Channel SKU', 'channelSku', 'mono'], ['Channel', 'channel', 'text'], ['PEP Code', 'pepCode', 'mono'], ['Product Name', 'name', 'text'], ['Brand', 'brand', 'text'], ['MRP', 'mrp', 'money'], ['Margin %', 'margin', 'num'], ['Rate After Margin', 'rate', 'money'], ['EAN', 'ean', 'mono']],
     fields: [{ key: 'channel', label: 'Channel' }, { key: 'channelSku', label: 'Channel SKU code' }, { key: 'pepCode', label: 'PEP SKU code' }, { key: 'name', label: 'Product name' },
@@ -105,7 +106,7 @@ const CFG: Record<string, Cfg> = {
     trailing: [{ label: 'Status', render: status }],
   },
   customer: {
-    title: 'Channel / Customer master', sub: 'Every sales channel, with the Uniware channels and PEP facilities its delivery locations use', key: 'id', titleKey: 'channel', entity: 'Channels', addLabel: 'Add channel',
+    title: 'Channel Master', sub: 'Every sales channel, with the Uniware channels and PEP facilities its delivery locations use', key: 'id', titleKey: 'channel', entity: 'Channels', addLabel: 'Add channel',
     search: ['channel', 'slug', 'aliases', 'channelCodes'], placeholder: 'Search channel, slug, other name, Uniware channel…',
     cols: [['Channel', 'channel', 'text'], ['Slug', 'slug', 'mono'], ['Uniware Channel', 'channelCodes', 'mono'], ['Locations', 'locations', 'num'], ['Legal Name', 'legal', 'text'], ['Type', 'type', 'text'], ['Billing GSTIN', 'gstin', 'mono'], ['Payment Terms', 'terms', 'text'], ['Default Margin %', 'margin', 'num'], ['PO Source', 'poSource', 'text']],
     fields: [{ key: 'channel', label: 'Channel' }, { key: 'slug', label: 'Slug' }, { key: 'aliases', label: 'Other names (PO intake)' }, { key: 'channelCodes', label: 'Uniware channel code(s)' },
@@ -117,7 +118,7 @@ const CFG: Record<string, Cfg> = {
     trailing: [{ label: 'Status', render: status }],
   },
   pepWh: {
-    title: 'PEP warehouses', sub: 'Our dispatch facilities (the Uniware facility codes the channel locations use)', key: 'facility', entity: 'PEP warehouses', addLabel: 'Add warehouse',
+    title: 'Warehouses', sub: 'Our dispatch facilities (the Uniware facility codes the channel locations use)', key: 'facility', entity: 'warehouses', addLabel: 'Add warehouse',
     search: ['facility', 'spellings', 'channels'], placeholder: 'Search facility or channel…',
     cols: [['Facility', 'facility', 'mono'], ['Spellings in DB', 'spellings', 'mono'], ['Locations Served', 'locations', 'num'], ['Channels', 'channels', 'text'], ['Entity', 'entity', 'text'], ['Location', 'location', 'text'], ['Type', 'type', 'text'], ['Bill-To GSTIN', 'billTo', 'mono'], ['Ship-To GSTIN', 'shipTo', 'mono']],
     fields: [{ key: 'facility', label: 'Facility code (Unicommerce)' }, { key: 'spellings', label: 'Spellings in DB' }, { key: 'locations', label: 'Channel locations served' }, { key: 'channels', label: 'Channels served' },
@@ -128,7 +129,7 @@ const CFG: Record<string, Cfg> = {
     trailing: [{ label: 'Status', render: status }],
   },
   chWh: {
-    title: 'Channel warehouses', sub: 'Channel delivery locations (DCs / FCs) and which PEP facility serves them', key: 'id', titleKey: 'code', entity: 'Channel warehouses', addLabel: 'Add channel warehouse',
+    title: 'Channel Location Master', sub: 'Every channel delivery location (DC / FC) and the PEP facility that serves it', key: 'id', titleKey: 'code', entity: 'channel locations', addLabel: 'Add channel location',
     search: ['code', 'channel', 'customer', 'state', 'pincode', 'gstin'], placeholder: 'Search location code, channel, Uniware customer, state, pincode, GSTIN…',
     cols: [['Location Code', 'code', 'mono'], ['Channel', 'channel', 'text'], ['Uniware Customer', 'customer', 'mono'], ['City', 'city', 'text'], ['State', 'state', 'text'], ['Pincode', 'pincode', 'mono'], ['Consignee GSTIN', 'gstin', 'mono'], ['Served By', 'servedBy', 'mono'], ['Appointment Via', 'apptPortal', 'text']],
     fields: [{ key: 'channel', label: 'Channel' }, { key: 'code', label: 'Location code' }, { key: 'customer', label: 'Uniware customer code' }, { key: 'channelCode', label: 'Uniware channel code' },
@@ -146,12 +147,15 @@ const CFG: Record<string, Cfg> = {
 const mastersKey = (id: string) => ['masters', id] as const
 const NO_ROWS: Row[] = []
 
-export default function Masters({ tab = 'PEP SKU master' }: { tab?: string }) {
-  const [wh, setWh] = useState<'pepWh' | 'chWh'>('pepWh')
-  const id = tab === 'Channel SKU master' ? 'channelSku' : tab === 'Channel / Customer master' ? 'customer' : tab === 'Warehouses' ? wh : 'pep'
+/** Masters menu item (MASTER_TABS) -> its list. */
+const TAB_ID: Record<string, string> = {
+  [MASTER_TABS[0]]: 'pep', [MASTER_TABS[1]]: 'channelSku', [MASTER_TABS[2]]: 'customer', [MASTER_TABS[3]]: 'chWh', [MASTER_TABS[4]]: 'pepWh',
+}
+
+export default function Masters({ tab = MASTER_TABS[0] }: { tab?: string }) {
+  const id = TAB_ID[tab] ?? 'pep'
   const queryClient = useQueryClient()
   const query = useQuery({ queryKey: mastersKey(id), queryFn: ({ signal }) => LOADERS[id](signal) })
-  /** Rows of a master: the open one from its query, another one from the cache (for the sub-tab counts). */
   const rowsOf = (k: string): Row[] => (k === id ? query.data : queryClient.getQueryData<Row[]>(mastersKey(k))) ?? NO_ROWS
   const state = { loading: query.isPending, error: query.error ? (query.error instanceof ApiError ? query.error.message : String(query.error)) : undefined }
 
@@ -164,15 +168,12 @@ export default function Masters({ tab = 'PEP SKU master' }: { tab?: string }) {
   return (
     <div className="space-y-5">
       <PageTitle
-        title={tab === 'Warehouses' ? 'Warehouses' : CFG[id].title}
-        sub={tab === 'Warehouses' ? 'Our dispatch facilities and the channel locations we deliver to' : CFG[id].sub}
+        title={CFG[id].title}
+        sub={CFG[id].sub}
         right={fromApi
           ? <span title={NOT_AVAILABLE_YET}><Button disabled icon={<RefreshCw className="size-3.5" />}>Sync now</Button></span>
           : <><span className="hidden text-[11px] text-ink-400 sm:inline">Synced from Uniware · 2 min ago</span><Button icon={<RefreshCw className="size-3.5" />}>Sync now</Button></>}
       />
-      {tab === 'Warehouses' && (
-        <SubTabs value={wh} onChange={setWh} tabs={[{ key: 'pepWh', label: 'PEP warehouses', count: rowsOf('pepWh').length || undefined }, { key: 'chWh', label: 'Channel warehouses', count: rowsOf('chWh').length || undefined }]} />
-      )}
       {fromApi && state.error ? (
         <div className="flex items-center gap-3 rounded-[var(--radius)] border border-crit/30 bg-crit-soft px-4 py-3 text-[13px] text-crit">
           <AlertTriangle className="size-4" /> Could not load {CFG[id].entity}: {state.error}

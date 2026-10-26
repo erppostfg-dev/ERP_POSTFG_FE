@@ -81,7 +81,7 @@ export function listPepWarehouses(signal?: AbortSignal) {
   return api<PepWarehouseItem[]>(MASTERS_ENDPOINT.PEP_WAREHOUSES, { signal })
 }
 
-/* GET /masters/warehouses/channel: every channel delivery location (details_channels), sorted by channel, location code. */
+/* GET /masters/channel-locations (Channel Location Master): every channel delivery location (details_channels), sorted by channel, location code. */
 
 export type ChannelWarehouseItem = {
   id: string
