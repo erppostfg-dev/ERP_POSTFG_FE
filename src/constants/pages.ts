@@ -83,8 +83,9 @@ export const NAV_GROUPS: NavGroup[] = [
     key: PATHS.OPERATIONS,
     label: 'B2B/B2C Operations',
     items: [
-      { path: PATHS.PO_OVERVIEW, label: 'PO Overview' },
+      // PO Processing & Review first, then PO Overview (user, 2026-10-26).
       { path: PATHS.PO_REVIEW, label: 'PO Processing & Review' },
+      { path: PATHS.PO_OVERVIEW, label: 'PO Overview' },
       { path: PATHS.PO_WORKING, label: 'PO Working' },
       { path: PATHS.AMAZON_INBOUND, label: 'Amazon Inbound' },
       { path: PATHS.SKUS_SHORT, label: 'SKUs Short' },
