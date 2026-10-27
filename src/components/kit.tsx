@@ -300,8 +300,44 @@ function RowMenu({ items }: { items: () => { label: string; onClick: () => void 
   )
 }
 
+// ---- Fixed-column fit: text widths measured on a canvas in the grid's own fonts -------------------------------------
+const HEAD_FONT = '600 11px'
+const HEAD_TRACKING = 0.275 // tracking-wide: 0.025em of 11px per letter
+const BODY_FONT = '400 13px'
+const MONO_FONT = '400 12.5px'
+const CELL_PAD = 26 // px-3 on both sides + the border, + a little air
+const BADGE_PAD = 18
+const FIT_MIN = 56
+let measureCtx: CanvasRenderingContext2D | null | undefined
+const families: Record<string, string> = {}
+const familyOf = (mono: boolean) => {
+  const k = mono ? 'mono' : 'body'
+  if (!families[k]) {
+    const el = document.createElement('span')
+    if (mono) el.className = 'font-mono'
+    document.body.appendChild(el)
+    families[k] = getComputedStyle(el).fontFamily || (mono ? 'monospace' : 'sans-serif')
+    el.remove()
+  }
+  return families[k]
+}
+const textWidth = (text: string, font: string, tracking = 0): number => {
+  if (measureCtx === undefined) measureCtx = document.createElement('canvas').getContext('2d')
+  if (!measureCtx) return text.length * 8
+  measureCtx.font = `${font} ${familyOf(font === MONO_FONT)}`
+  return measureCtx.measureText(text).width + tracking * text.length
+}
+/** The text a cell shows (as Cell renders it). */
+const cellText = (kind: ColKind, v: unknown): string => {
+  if (v === '' || v === null || v === undefined) return '—'
+  if (kind === 'date') return fmtDate(String(v))
+  if (kind === 'num') return Number(v).toLocaleString('en-IN')
+  if (kind === 'money') return `₹${Number(v).toLocaleString('en-IN')}`
+  return String(v)
+}
+
 export function DataGrid<T>({
-  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, maxHeight, onScrolledChange,
+  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, stickyFit, maxHeight, onScrolledChange,
   selected, onSelectedChange,
 }: {
   cols: [string, keyof T, ColKind][]; rows: T[]; rowKey: (r: T) => string; sticky?: number
@@ -318,6 +354,8 @@ export function DataGrid<T>({
   onRowHistory?: (r: T) => void
   /** Width (px) of each fixed column; default 132 each. Fixed cells cut long values with "…" (full value on hover). */
   stickyWidths?: number[]
+  /** Fixed columns only as wide as their header / values need (all loaded rows), at most their stickyWidths width. */
+  stickyFit?: boolean
   /** Give the table its own scroll area of this height (CSS), so the header rows and the sideways scrollbar stay on screen. */
   maxHeight?: string
   /** Told true when the table is scrolled / dragged away from its top-left start, false when it is back there. */
@@ -385,8 +423,24 @@ export function DataGrid<T>({
   const stickyW = 132
   /** Height of the group header row (h-7), so the column header row sticks just under it. */
   const GROUP_ROW_PX = 28
+  // Fit (2026-10-26, PO Overview): each fixed column as wide as its widest header / value, never wider than before,
+  // so the scrolling part gets the space. Measured on all loaded rows, so the widths don't jump between pages.
+  const fitWidths = useMemo(() => {
+    if (!stickyFit) return undefined
+    return cols.slice(0, sticky).map(([label, key, kind], i) => {
+      const cap = stickyWidths?.[i] ?? stickyW
+      // The header may wrap onto two lines here, so only its longest word has to fit; the values decide the width.
+      const head = Math.max(...label.toUpperCase().split(/\s+/).map((w) => textWidth(w, HEAD_FONT, HEAD_TRACKING))) + (editable?.has(key) ? 16 : 0)
+      let widest = head
+      for (const r of rows) {
+        widest = Math.max(widest, textWidth(cellText(kind, r[key]), kind === 'mono' ? MONO_FONT : BODY_FONT) + (kind === 'status' ? BADGE_PAD : 0))
+        if (widest >= cap) break
+      }
+      return Math.min(cap, Math.max(FIT_MIN, Math.ceil(widest) + CELL_PAD))
+    })
+  }, [stickyFit, cols, sticky, stickyWidths, rows, editable])
   // Fixed columns: each its own width, each placed after the widths before it.
-  const widthOf = (i: number) => stickyWidths?.[i] ?? stickyW
+  const widthOf = (i: number) => fitWidths?.[i] ?? stickyWidths?.[i] ?? stickyW
   // The checkbox column (when there is one) sits first, so every fixed column moves right by its width.
   const leftOf = (i: number) => (selectable ? SELECT_W : 0) + Array.from({ length: i }, (_, j) => widthOf(j)).reduce((a, b) => a + b, 0)
   const fixed = (i: number) => (i < sticky ? { left: leftOf(i), width: widthOf(i), minWidth: widthOf(i), maxWidth: widthOf(i) } : undefined)
@@ -423,7 +477,7 @@ export function DataGrid<T>({
                 <th
                   key={label}
                   style={{ ...fixed(i), top: groups ? GROUP_ROW_PX : 0 }}
-                  className={`sticky overflow-hidden text-ellipsis whitespace-nowrap border-b border-line px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide bg-alt text-ink-600 ${i < sticky ? 'z-20' : 'z-10'} ${i === sticky - 1 ? 'border-r' : ''}`}
+                  className={`sticky overflow-hidden border-b border-line px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide bg-alt text-ink-600 ${stickyFit && i < sticky ? 'whitespace-normal leading-tight' : 'text-ellipsis whitespace-nowrap'} ${i < sticky ? 'z-20' : 'z-10'} ${i === sticky - 1 ? 'border-r' : ''}`}
                 >
                   {editable?.has(key) ? <span className="inline-flex items-center gap-1">{label}<Pencil className="size-3 shrink-0" /></span> : label}
                 </th>
