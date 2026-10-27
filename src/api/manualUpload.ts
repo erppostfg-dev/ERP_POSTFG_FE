@@ -4,7 +4,8 @@ import { ERROR_CODE } from '../constants/auth'
 
 /* Manual upload (2026-10-22): backend routes/manual-upload.routes.ts. */
 
-export interface UploadChannel { channel: string; name: string; needs: string; twoFiles: boolean; group: 'api' | 'email' | 'manual' }
+/** optional: a file the PO may also have with the same name (Tata 1mg: "PDF"), not required. */
+export interface UploadChannel { channel: string; name: string; needs: string; twoFiles: boolean; group: 'api' | 'email' | 'manual'; optional?: string }
 export interface ManualUploadItem {
   id: string; channel: string; channelName: string; files: { filename: string; size: number }[]
   status: ManualStatus; note: string | null; uploadedBy: string | null; uploadedAt: string
