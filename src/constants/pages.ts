@@ -27,6 +27,7 @@ export const PATHS = {
   PLANNING: '/planning',
   INVENTORY: '/planning/inventory',
   DRR_AGING: '/planning/drr-aging',
+  INTRANSIT_STOCK: '/planning/intransit-stock',
   PLANNING_ANALYTICS: '/planning/analytics',
   APPROVALS: '/approvals',
   /** Users & Roles (2026-10-15): backend page key /admin (admin / developer). */
@@ -48,6 +49,8 @@ export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
   PATHS.CHANNEL_LOCATIONS, // GET /masters/channel-locations (details_channels)
   PATHS.WAREHOUSES, // GET /masters/warehouses/pep; no warehouse table, so most PEP facility fields = NOT_IN_DB
   PATHS.AMAZON_INBOUND, // GET /amazon/inbound/* (inbound plans + shipments)
+  PATHS.INVENTORY, // GET /intransit/snapshot (the Daily Snapshot's Sheet35(2), worked out in the browser); DRR / aging / WoW not available yet
+  PATHS.INTRANSIT_STOCK, // /intransit: input files, API fetches, report builds
 ])
 
 /** Dev builds only: mark pages that still show sample data. */
@@ -97,6 +100,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Demand Planning',
     items: [
       { path: PATHS.INVENTORY, label: 'Inventory Calculation' },
+      { path: PATHS.INTRANSIT_STOCK, label: 'In-transit Stock' },
       { path: PATHS.DRR_AGING, label: 'DRR & Aging' },
       { path: PATHS.PLANNING_ANALYTICS, label: 'Analytics' },
     ],
