@@ -2,22 +2,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChannelOptions } from '../../lib/channels'
 import { AlertTriangle, FileUp, Webhook, Zap, Mail } from 'lucide-react'
 import { Badge, PageTitle, SubTabs } from '../../components/ui'
-import { DataGrid, FilterChips, FilterPanel, SectionToolbar, exportRows, useSection, type FilterDef } from '../../components/kit'
+import { DataGrid, DownloadMenu, FilterChips, FilterPanel, SectionToolbar, exportRows, exportRowsExcel, useSection, type DownloadItem, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
 import type { ColKind } from '../../lib/ops'
-import { daysBefore, istDateTime, istDay } from '../../lib/time'
+import { istDateTime, istDay } from '../../lib/time'
 import { InReview } from './POReview'
 import { FileCell, SourceCell } from './SourceCells'
 import { UniwareCell, ageTone, daysWaiting, downloadCombinedCsv, downloadOneCsv, stateOf, type Handoff } from './UniwareHandoff'
-import { markUniwareUploaded } from '../../api/poReview'
-import { UNIWARE_STATE, UNIWARE_STATE_LABEL, UNIWARE_TEXT } from '../../constants/poReview'
+import { getLineItems, markUniwareUploaded } from '../../api/poReview'
+import { LINE_ITEMS, LINE_ITEMS_TEXT, UNIWARE_STATE, UNIWARE_STATE_LABEL, UNIWARE_TEXT } from '../../constants/poReview'
+import { downloadLineItemsCsv, downloadLineItemsExcel } from '../../lib/lineItemsExport'
 import { useAuth } from '../../auth/AuthContext'
 import { ACCESS } from '../../constants/auth'
 import { PATHS } from '../../constants/pages'
 import { Check, Download as DownloadIcon, Upload as UploadIcon, X as XIcon } from 'lucide-react'
-import { listPoReview, type PoReviewItem } from '../../api/poReview'
+import { listAllPoReview, type PoReviewItem } from '../../api/poReview'
 import { ApiError } from '../../api/client'
-import { PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, PROCESSED_DEFAULT_DAYS, REVIEW_LIVE, SOURCE_LABELS } from '../../constants/poReview'
+import { LIST_PAGE_SIZE, PO_STATUS, PROCESSED_FILTER, REVIEW_LIVE, SOURCE_LABELS } from '../../constants/poReview'
 import { useLiveReview } from '../../lib/liveReview'
 import { LiveDot } from '../../components/LiveDot'
 import { ShieldCheck } from 'lucide-react'
@@ -59,6 +60,8 @@ type ProcessedRow = {
   lines: number | null; units: number | null; value: number | null; saleOrder: string; source: string; file: string
   /** Raw source value (api / email / manual) for the icon, and the subject the Source cell copies. */
   sourceKey: string; subject: string | null
+  /** YYYY-MM-DD (Indian time) it was processed: the Filters panel's Processed from / to compare this. */
+  processedDay: string
   /** Uniware hand-off: the raw dates / names, its state label (filter + export) and days waiting. */
   handoff: Handoff; uniware: string; waitingDays: number
   /** Verification before Uniware (2026-10-22): state from GET /po-verify and its label (filter + export). */
@@ -85,7 +88,7 @@ const handoffOf = (r: PoReviewItem): Handoff => ({
 
 const toRow = (r: PoReviewItem): ProcessedRow => ({
   handoff: handoffOf(r), uniware: UNIWARE_STATE_LABEL[stateOf(handoffOf(r))], waitingDays: daysWaiting(handoffOf(r)),
-  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', brand: r.brand ?? '', processedAt: istDateTime(r.completedAt),
+  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', brand: r.brand ?? '', processedAt: istDateTime(r.completedAt), processedDay: r.completedAt ? istDay(new Date(r.completedAt)) : '',
   lines: r.lines, units: r.units, value: r.poValue, saleOrder: r.saleOrderCode ?? '', source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, sourceKey: r.source, subject: r.subject,
   check: '',
 })
@@ -93,10 +96,6 @@ const toRow = (r: PoReviewItem): ProcessedRow => ({
 const distinct = (rows: ProcessedRow[], k: keyof ProcessedRow) => [...new Set(rows.map((r) => String(r[k] ?? '')).filter(Boolean))].sort()
 
 function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTick: number }) {
-  const defaultFrom = daysBefore(PROCESSED_DEFAULT_DAYS - 1)
-  const today = istDay(new Date())
-  const [from, setFrom] = useState(defaultFrom)
-  const [to, setTo] = useState(today)
   const [baseRows, setRows] = useState<ProcessedRow[]>([])
   // Verification (2026-10-22): states of the loaded POs; `required` false = the check is switched off on the server.
   const [verify, setVerify] = useState<{ required: boolean; items: Map<string, VerifyStateItem> }>({ required: false, items: new Map() })
@@ -109,19 +108,19 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   const [bulkBusy, setBulkBusy] = useState(false)
   const done = (text: string) => { setNote({ tone: 'ok', text }); setReload((n) => n + 1) }
   const fail = (text: string) => setNote({ tone: 'err', text })
-  // A live reload keeps the rows on screen (no "Loading…" flash); a new date range shows the loader.
-  const range = useRef('')
+  // Every processed PO (user, 2026-10-26: all by default, dates in the Filters panel, 50 per page). A live reload keeps
+  // the rows on screen (no "Loading…" flash).
+  const loaded = useRef(false)
 
   useEffect(() => {
-    if (!from || !to || from > to) return
     const ctrl = new AbortController()
-    if (range.current !== `${from}|${to}`) setState({ loading: true })
-    range.current = `${from}|${to}`
-    listPoReview({ status: PO_STATUS.COMPLETED, from, to, pageSize: PO_REVIEW_MAX_PAGE_SIZE }, ctrl.signal)
+    if (!loaded.current) setState({ loading: true })
+    listAllPoReview({ status: PO_STATUS.COMPLETED }, ctrl.signal)
       .then((items) => {
         const next = items.map(toRow)
         setRows(next)
         onCount(next.length)
+        loaded.current = true
         setState({ loading: false })
       })
       .catch((e: unknown) => {
@@ -129,7 +128,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
         setState({ loading: false, error: e instanceof ApiError ? e.message : String(e) })
       })
     return () => ctrl.abort()
-  }, [from, to, reload, liveTick, onCount])
+  }, [reload, liveTick, onCount])
 
   useEffect(() => {
     if (!baseRows.length) return
@@ -151,6 +150,8 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   const picked = rows.filter((r) => selected.has(r.id))
   const channelOptions = useChannelOptions(distinct(rows, 'channel'))
   const defs: FilterDef[] = [
+    { key: 'processedDayFrom', label: PROCESSED_FILTER.FROM, type: 'date' },
+    { key: 'processedDayTo', label: PROCESSED_FILTER.TO, type: 'date' },
     { key: 'channel', label: 'Channel', type: 'multi', options: channelOptions },
     { key: 'brand', label: 'Brand', type: 'multi', options: distinct(rows, 'brand') },
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows, 'source') },
@@ -175,32 +176,55 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       setBulkBusy(false)
     }
   }
+  // One Download button (user, 2026-10-26): the main click is the POs (this table) as Excel, the ticked ones or, with
+  // none ticked, every PO shown (search + filters); the arrow gives CSV and the POs' line items. Read only.
+  const T = LINE_ITEMS_TEXT
+  const linePos = picked.length ? picked : s.filtered
+  const tooManyLines = linePos.length > LINE_ITEMS.MAX
+  const downloadLines = async (kind: 'csv' | 'excel') => {
+    setBulkBusy(true)
+    try {
+      const lines = await getLineItems(linePos.map((r) => r.id))
+      await (kind === 'csv' ? downloadLineItemsCsv(lines) : downloadLineItemsExcel(lines))
+      const missing = new Set(lines.filter((l) => l.s3Missing).map((l) => l.uploadId)).size
+      setNote({ tone: 'ok', text: T.DONE(linePos.length, lines.length) + (missing ? T.S3_MISSING(missing) : '') })
+    } catch (e) {
+      fail(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+  const linesHint = tooManyLines ? T.TOO_MANY(LINE_ITEMS.MAX, linePos.length, picked.length > 0) : T.HINT
+  const linesGroup = T.GROUP_LINES(linePos.length, picked.length > 0)
+  const tableRows = linePos
+  const downloadItems: DownloadItem[] = [
+    { group: T.GROUP_TABLE(tableRows.length, picked.length > 0), label: T.EXCEL, onClick: () => void exportRowsExcel('processed_pos', PEXPORT, tableRows), disabled: !tableRows.length },
+    { group: T.GROUP_TABLE(tableRows.length, picked.length > 0), label: T.CSV, onClick: () => exportRows('processed_pos', 'csv', PEXPORT, tableRows), disabled: !tableRows.length },
+    { group: linesGroup, label: T.EXCEL, onClick: () => void downloadLines('excel'), disabled: !linePos.length || tooManyLines, hint: linesHint },
+    { group: linesGroup, label: T.CSV, onClick: () => void downloadLines('csv'), disabled: !linePos.length || tooManyLines, hint: linesHint },
+  ]
   const box = 'rounded-[var(--radius)] border border-line bg-surface px-4 py-10 text-center text-[13px] text-ink-600'
   return (
     <div className="space-y-3">
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search PO number, ingest ID, file, sale order…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
-        entity="Processed POs" onExport={(e) => exportRows('processed_pos', e, PEXPORT, picked.length ? picked : s.filtered)}
+        entity="Processed POs" onExport={(e) => exportRows('processed_pos', e, PEXPORT, tableRows)}
+        exportMenu={
+          <DownloadMenu busy={bulkBusy}
+            label={T.POS_BUTTON(tableRows.length)} title={T.POS_HINT} items={downloadItems} />
+        }
         primary={canEdit && picked.length > 0 ? (
-          <span className="pf-tab-in inline-flex gap-2">
-            <button onClick={() => void bulk('csv')} disabled={bulkBusy || unverifiedPicked > 0} title={unverifiedPicked ? VERIFY_TEXT.BLOCKED(unverifiedPicked) : undefined} className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
+          <span className="pf-tab-in inline-flex flex-wrap gap-2">
+            {canEdit && <button onClick={() => void bulk('csv')} disabled={bulkBusy || unverifiedPicked > 0} title={unverifiedPicked ? VERIFY_TEXT.BLOCKED(unverifiedPicked) : undefined} className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
               <DownloadIcon className="size-4" />{UNIWARE_TEXT.BULK_DOWNLOAD(picked.length)}
-            </button>
-            {markable.length > 0 && (
+            </button>}
+            {canEdit && markable.length > 0 && (
               <button onClick={() => void bulk('mark')} disabled={bulkBusy} className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-ok px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
                 <UploadIcon className="size-4" />{UNIWARE_TEXT.BULK_MARK(markable.length)}
               </button>
             )}
           </span>
         ) : undefined}
-        selectedCount={picked.length} onClearSelection={() => setSelected(new Set())}
-        extra={
-          <div className="flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line bg-surface px-2 text-[12px] text-ink-600">
-            <span className="hidden sm:inline">Processed</span>
-            <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="tnum bg-transparent text-[12px] text-ink-900 outline-none" />
-            <span>→</span>
-            <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="tnum bg-transparent text-[12px] text-ink-900 outline-none" />
-          </div>
-        } />
+        selectedCount={picked.length} onClearSelection={() => setSelected(new Set())} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {/* What still has to go to Uniware: click to show only those. */}
@@ -209,8 +233,11 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
           {toVerifyCount > 0 && <button onClick={() => s.setFilters({ ...s.filters, check: [VERIFY_TEXT.TO_VERIFY] })} className="pf-press rounded-full bg-crit-soft px-3 py-1 font-semibold text-crit hover:opacity-90">{VERIFY_TEXT.TO_VERIFY_CHIP(toVerifyCount)}</button>}
           {pending > 0 && <button onClick={() => s.setFilters({ ...s.filters, uniware: [UNIWARE_STATE_LABEL.pending] })} className="pf-press rounded-full bg-warn-soft px-3 py-1 font-semibold text-warn hover:opacity-90">{pending} not downloaded</button>}
           {waiting > 0 && <button onClick={() => s.setFilters({ ...s.filters, uniware: [UNIWARE_STATE_LABEL.downloaded] })} className="pf-press rounded-full bg-info-soft px-3 py-1 font-semibold text-info hover:opacity-90">{waiting} downloaded, not in Uniware</button>}
-          <span className="text-ink-400">These stay here, whatever the dates, until they are marked uploaded; then they show in PO Overview.</span>
+          <span className="text-ink-400">These stay here until they are marked uploaded; then they show in PO Overview.</span>
         </div>
+      )}
+      {picked.length > LINE_ITEMS.MAX && (
+        <div className="pf-tab-in flex items-center gap-2 rounded-[var(--radius)] bg-warn-soft px-3 py-2 text-[12.5px] text-warn"><AlertTriangle className="size-4" />{T.TOO_MANY(LINE_ITEMS.MAX, picked.length, true)}</div>
       )}
       {canEdit && unverifiedPicked > 0 && (
         <div className="pf-tab-in flex items-center gap-2 rounded-[var(--radius)] bg-warn-soft px-3 py-2 text-[12.5px] text-warn"><AlertTriangle className="size-4" />{VERIFY_TEXT.BLOCKED(unverifiedPicked)}</div>
@@ -230,9 +257,9 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       ) : state.loading ? (
         <div className={box}>Loading processed POs…</div>
       ) : !rows.length ? (
-        <div className={box}>No POs were processed between {from} and {to}.</div>
+        <div className={box}>{PROCESSED_FILTER.NONE}</div>
       ) : (
-        <DataGrid cols={PCOLS} rows={s.filtered} rowKey={(r) => r.id} selected={selected} onSelectedChange={setSelected}
+        <DataGrid cols={PCOLS} rows={s.filtered} rowKey={(r) => r.id} pageSize={LIST_PAGE_SIZE} selected={selected} onSelectedChange={setSelected}
           // As PO Working's critical rows: a thin stripe on the row's left edge while it is not in Uniware (red 10+ days, yellow 5+).
           rowClass={(r) => {
             if (stateOf(r.handoff) === UNIWARE_STATE.UPLOADED) return ''

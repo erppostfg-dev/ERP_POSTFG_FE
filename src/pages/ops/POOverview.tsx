@@ -220,7 +220,7 @@ function FacilityNote({ mine, filters, setFilters, editHere }: { mine: string[];
 }
 
 
-/** Widths (px) of the fixed key columns: PO Number, Channel, Location, Final Status. */
+/** Most width (px) of the fixed key columns: PO Number, Channel, Location, Final Status (stickyFit narrows them to their values). */
 const KEY_FIXED_WIDTHS = [150, 116, 160, 140]
 
 function TeamTabs({ teams, value, onChange }: { teams: TeamColumns[]; value: string; onChange: (k: string) => void }) {
@@ -281,7 +281,7 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
       {/* key = the team tab: the grid fades in with the new columns on every team switch */}
       <div key={tab} className="pf-tab-in">
       <DataGrid
-        cols={cols} rows={s.rows} rowKey={(r) => String(r.uid)} sticky={fixedCols} stickyWidths={KEY_FIXED_WIDTHS} onRowClick={setSel} groups={groups} editable={editable} rowEditable={(r) => r.canEdit === true} onRowHistory={setHistoryOf} rowClass={(r) => (flash[String(r.uid)] ? 'pf-row-flash' : '')} maxHeight={tableHeight} pageSize={50}
+        cols={cols} rows={s.rows} rowKey={(r) => String(r.uid)} sticky={fixedCols} stickyWidths={KEY_FIXED_WIDTHS} stickyFit onRowClick={setSel} groups={groups} editable={editable} rowEditable={(r) => r.canEdit === true} onRowHistory={setHistoryOf} rowClass={(r) => (flash[String(r.uid)] ? 'pf-row-flash' : '')} maxHeight={tableHeight} pageSize={50}
         rowMenu={(r) => [{ label: 'View details', onClick: () => setSel(r) }, { label: 'History', onClick: () => setHistoryOf(r) }]}
       />
       </div>
@@ -294,7 +294,7 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
 
 /** PO Format Data: the columns up to and including PO Number stay fixed; the rest scroll (user, 2026-10-14). */
 const LINE_FIXED_COLS = PO_LINE_COLS.findIndex(([, key]) => key === 'poNumber') + 1
-/** Compact widths (px) of those fixed columns: UID, Entry Date, Brand, Channel, Location, PO Date, PO Number. */
+/** Most width (px) of those fixed columns (stickyFit narrows them to their values): UID, Entry Date, Brand, Channel, Location, PO Date, PO Number. */
 const LINE_FIXED_WIDTHS = [96, 104, 100, 110, 150, 104, 150]
 
 function LinesTab({ options, columns, onTotal, tableHeight }: { options: FilterOptions | null; columns: PoOverviewColumns | null; onTotal: (n: number) => void; tableHeight: string }) {
@@ -313,7 +313,7 @@ function LinesTab({ options, columns, onTotal, tableHeight }: { options: FilterO
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={(f) => { s.setFilters(f); s.setOpen(false) }} onClose={() => s.setOpen(false)} /></Reveal>
       <ListStatus s={s} entity="PO lines" />
       <DataGrid
-        cols={PO_LINE_COLS} rows={s.rows} rowKey={(r) => `${r.shipmentUid}-${r.srNo}`} sticky={LINE_FIXED_COLS} stickyWidths={LINE_FIXED_WIDTHS} maxHeight={tableHeight} pageSize={50} onRowClick={setSel}
+        cols={PO_LINE_COLS} rows={s.rows} rowKey={(r) => `${r.shipmentUid}-${r.srNo}`} sticky={LINE_FIXED_COLS} stickyWidths={LINE_FIXED_WIDTHS} stickyFit maxHeight={tableHeight} pageSize={50} onRowClick={setSel}
         trailing={[{ label: 'Status', render: (r) => <Cell kind="status" v={r.status} /> }]}
         rowMenu={(r) => [{ label: 'View details', onClick: () => setSel(r) }]}
       />

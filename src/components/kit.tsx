@@ -9,10 +9,11 @@ import { fmtDate, statusTone, type ColKind } from '../lib/ops'
 import { NOT_IN_DB } from '../constants/masters'
 import { copyText } from '../lib/clipboard'
 import { COPIED_MS, COPYABLE_COLUMNS, GRID_HINT } from '../constants/ui'
+import { downloadExcel } from '../lib/excelExport'
 
 // ---- Toolbar -----------------------------------------------------------
 export function SectionToolbar({
-  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra, onUpload, selectedCount = 0, onClearSelection,
+  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra, onUpload, selectedCount = 0, onClearSelection, exportMenu,
 }: {
   q: string; setQ: (v: string) => void; placeholder?: string
   filtersOpen?: boolean; onToggleFilters?: () => void; activeFilters?: number
@@ -22,6 +23,8 @@ export function SectionToolbar({
   /** Rows ticked in the table: CSV / Excel then download only those (the page's onExport decides). */
   selectedCount?: number
   onClearSelection?: () => void
+  /** One Download button (DownloadMenu) in place of the separate CSV and Excel buttons (PO review, 2026-10-26). */
+  exportMenu?: ReactNode
 }) {
   const [upload, setUpload] = useState(false)
   return (
@@ -56,14 +59,16 @@ export function SectionToolbar({
             <button onClick={onClearSelection} tabIndex={selectedCount > 0 ? 0 : -1} className="text-ink-600 underline-offset-2 hover:text-ink-900 hover:underline">Clear</button>
           </span>
         )}
-        <button onClick={() => onExport('csv')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
-          className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
-          <Download className="size-4" /> CSV
-        </button>
-        <button onClick={() => onExport('xls')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
-          className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
-          <Download className="size-4" /> Excel
-        </button>
+        {exportMenu ?? (<>
+          <button onClick={() => onExport('csv')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
+            <Download className="size-4" /> CSV
+          </button>
+          <button onClick={() => onExport('xls')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
+            <Download className="size-4" /> Excel
+          </button>
+        </>)}
         <button onClick={() => (onUpload ? onUpload() : setUpload(true))} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line bg-surface px-3 text-[13px] font-medium text-ink-900 hover:bg-canvas">
           <Upload className="size-4" /> Upload CSV
         </button>
@@ -223,6 +228,55 @@ export function exportRows<T>(name: string, ext: 'csv' | 'xls', cols: [string, k
   downloadCsv(`${name}.${ext === 'xls' ? 'xls' : 'csv'}`, cols.map((c) => c[0]), rows.map((r) => cols.map((c) => String(r[c[1]] ?? ''))))
 }
 
+/** The same table as a real .xlsx (SheetJS, codes kept as text; numbers stay numbers). */
+export const exportRowsExcel = <T,>(name: string, cols: [string, keyof T, ColKind][], rows: T[]) =>
+  downloadExcel(name, [{
+    name, header: cols.map((c) => c[0]),
+    rows: rows.map((r) => cols.map(([, k, kind]) => {
+      const v = r[k]
+      if (v === null || v === undefined) return ''
+      return (kind === 'num' || kind === 'money') && typeof v === 'number' ? v : String(v)
+    })),
+  }])
+
+// ---- One Download button (2026-10-26): the main click = the first item, the arrow lists every choice ---------------
+export type DownloadItem = { label: string; onClick: () => void; disabled?: boolean; hint?: string; group?: string }
+
+export function DownloadMenu({ label, items, busy, title }: { label: string; items: DownloadItem[]; busy?: boolean; title?: string }) {
+  const p = usePopover()
+  // The main click is always the first item (the page's default); when it can't run, the arrow still offers the rest.
+  const first = items[0]
+  const run = (i: DownloadItem) => { p.close(); i.onClick() }
+  return (
+    <div ref={p.ref} className="relative inline-flex">
+      <button onClick={() => first && run(first)} disabled={busy || !first || first.disabled} title={title}
+        className="inline-flex h-9 items-center gap-1.5 rounded-l-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15 disabled:opacity-60">
+        <Download className="size-4" /> {label}
+      </button>
+      <button onClick={p.toggle} disabled={busy} aria-label="More download options"
+        className="inline-flex h-9 items-center rounded-r-[var(--radius)] border-l border-primary/20 bg-primary-soft px-2 text-primary hover:bg-primary/15 disabled:opacity-60">
+        <ChevronDown className="size-4" />
+      </button>
+      {p.open && (
+        // Right-aligned under the button: Pop sits at the left of this box, which ends at the button's right edge.
+        <div className="absolute right-0 top-full z-40 w-72">
+        <Pop leaving={p.leaving} className="w-72">
+          {items.map((i, n) => (
+            <div key={i.label}>
+              {i.group && i.group !== items[n - 1]?.group && <div className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{i.group}</div>}
+              <button onClick={() => run(i)} disabled={i.disabled} title={i.hint}
+                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-[13px] text-ink-900 hover:bg-alt disabled:cursor-not-allowed disabled:text-ink-400 disabled:hover:bg-transparent">
+                <Download className="size-3.5 shrink-0" />{i.label}
+              </button>
+            </div>
+          ))}
+        </Pop>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---- Data grid ---------------------------------------------------------
 export function Cell({ kind, v }: { kind: ColKind; v: unknown }) {
   if (v === '' || v === null || v === undefined) return <span className="text-ink-400">—</span>
@@ -302,8 +356,44 @@ function RowMenu({ items }: { items: () => { label: string; onClick: () => void 
   )
 }
 
+// ---- Fixed-column fit: text widths measured on a canvas in the grid's own fonts -------------------------------------
+const HEAD_FONT = '600 11px'
+const HEAD_TRACKING = 0.275 // tracking-wide: 0.025em of 11px per letter
+const BODY_FONT = '400 13px'
+const MONO_FONT = '400 12.5px'
+const CELL_PAD = 26 // px-3 on both sides + the border, + a little air
+const BADGE_PAD = 18
+const FIT_MIN = 56
+let measureCtx: CanvasRenderingContext2D | null | undefined
+const families: Record<string, string> = {}
+const familyOf = (mono: boolean) => {
+  const k = mono ? 'mono' : 'body'
+  if (!families[k]) {
+    const el = document.createElement('span')
+    if (mono) el.className = 'font-mono'
+    document.body.appendChild(el)
+    families[k] = getComputedStyle(el).fontFamily || (mono ? 'monospace' : 'sans-serif')
+    el.remove()
+  }
+  return families[k]
+}
+const textWidth = (text: string, font: string, tracking = 0): number => {
+  if (measureCtx === undefined) measureCtx = document.createElement('canvas').getContext('2d')
+  if (!measureCtx) return text.length * 8
+  measureCtx.font = `${font} ${familyOf(font === MONO_FONT)}`
+  return measureCtx.measureText(text).width + tracking * text.length
+}
+/** The text a cell shows (as Cell renders it). */
+const cellText = (kind: ColKind, v: unknown): string => {
+  if (v === '' || v === null || v === undefined) return '—'
+  if (kind === 'date') return fmtDate(String(v))
+  if (kind === 'num') return Number(v).toLocaleString('en-IN')
+  if (kind === 'money') return `₹${Number(v).toLocaleString('en-IN')}`
+  return String(v)
+}
+
 export function DataGrid<T>({
-  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, maxHeight, onScrolledChange,
+  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, stickyFit, maxHeight, onScrolledChange,
   selected, onSelectedChange,
 }: {
   cols: [string, keyof T, ColKind][]; rows: T[]; rowKey: (r: T) => string; sticky?: number
@@ -320,6 +410,8 @@ export function DataGrid<T>({
   onRowHistory?: (r: T) => void
   /** Width (px) of each fixed column; default 132 each. Fixed cells cut long values with "…" (full value on hover). */
   stickyWidths?: number[]
+  /** Fixed columns only as wide as their header / values need (all loaded rows), at most their stickyWidths width. */
+  stickyFit?: boolean
   /** Give the table its own scroll area of this height (CSS), so the header rows and the sideways scrollbar stay on screen. */
   maxHeight?: string
   /** Told true when the table is scrolled / dragged away from its top-left start, false when it is back there. */
@@ -387,8 +479,24 @@ export function DataGrid<T>({
   const stickyW = 132
   /** Height of the group header row (h-7), so the column header row sticks just under it. */
   const GROUP_ROW_PX = 28
+  // Fit (2026-10-26, PO Overview): each fixed column as wide as its widest header / value, never wider than before,
+  // so the scrolling part gets the space. Measured on all loaded rows, so the widths don't jump between pages.
+  const fitWidths = useMemo(() => {
+    if (!stickyFit) return undefined
+    return cols.slice(0, sticky).map(([label, key, kind], i) => {
+      const cap = stickyWidths?.[i] ?? stickyW
+      // The header may wrap onto two lines here, so only its longest word has to fit; the values decide the width.
+      const head = Math.max(...label.toUpperCase().split(/\s+/).map((w) => textWidth(w, HEAD_FONT, HEAD_TRACKING))) + (editable?.has(key) ? 16 : 0)
+      let widest = head
+      for (const r of rows) {
+        widest = Math.max(widest, textWidth(cellText(kind, r[key]), kind === 'mono' ? MONO_FONT : BODY_FONT) + (kind === 'status' ? BADGE_PAD : 0))
+        if (widest >= cap) break
+      }
+      return Math.min(cap, Math.max(FIT_MIN, Math.ceil(widest) + CELL_PAD))
+    })
+  }, [stickyFit, cols, sticky, stickyWidths, rows, editable])
   // Fixed columns: each its own width, each placed after the widths before it.
-  const widthOf = (i: number) => stickyWidths?.[i] ?? stickyW
+  const widthOf = (i: number) => fitWidths?.[i] ?? stickyWidths?.[i] ?? stickyW
   // The checkbox column (when there is one) sits first, so every fixed column moves right by its width.
   const leftOf = (i: number) => (selectable ? SELECT_W : 0) + Array.from({ length: i }, (_, j) => widthOf(j)).reduce((a, b) => a + b, 0)
   const fixed = (i: number) => (i < sticky ? { left: leftOf(i), width: widthOf(i), minWidth: widthOf(i), maxWidth: widthOf(i) } : undefined)
@@ -425,7 +533,7 @@ export function DataGrid<T>({
                 <th
                   key={label}
                   style={{ ...fixed(i), top: groups ? GROUP_ROW_PX : 0 }}
-                  className={`sticky overflow-hidden text-ellipsis whitespace-nowrap border-b border-line px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide bg-alt text-ink-600 ${i < sticky ? 'z-20' : 'z-10'} ${i === sticky - 1 ? 'border-r' : ''}`}
+                  className={`sticky overflow-hidden border-b border-line px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide bg-alt text-ink-600 ${stickyFit && i < sticky ? 'whitespace-normal leading-tight' : 'text-ellipsis whitespace-nowrap'} ${i < sticky ? 'z-20' : 'z-10'} ${i === sticky - 1 ? 'border-r' : ''}`}
                 >
                   {editable?.has(key) ? <span className="inline-flex items-center gap-1">{label}<Pencil className="size-3 shrink-0" /></span> : label}
                 </th>

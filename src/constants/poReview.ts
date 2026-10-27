@@ -10,11 +10,20 @@ export const PO_STATUS = {
   COMPLETED: 'completed',
 } as const
 
-/** The backend's largest page; the Processed tab loads a whole date range at once. */
+/** The backend's largest page; the lists load every PO in pages of this size. */
 export const PO_REVIEW_MAX_PAGE_SIZE = 500
+/** Most pages one list load reads (500 x 40 = 20,000 POs), so a runaway loop can never hang the screen. */
+export const PO_REVIEW_MAX_PAGES = 40
 
-/** Days shown when the Processed tab opens (today and the two before). */
-export const PROCESSED_DEFAULT_DAYS = 3
+/** Rows per page on the Processed and In Review tables (user, 2026-10-26). */
+export const LIST_PAGE_SIZE = 50
+
+/** Processed tab (2026-10-26): every PO by default; the date range is in the Filters panel. */
+export const PROCESSED_FILTER = {
+  FROM: 'Processed from',
+  TO: 'Processed to',
+  NONE: 'No processed POs yet.',
+} as const
 
 /** Dates and times are shown in Indian time. */
 export const DISPLAY_TIME_ZONE = 'Asia/Kolkata'
@@ -221,6 +230,29 @@ export const UNIWARE_TEXT = {
   MARKED: (n: number) => `${n} PO${n === 1 ? '' : 's'} marked uploaded into Uniware: now in PO Overview.`,
   UNDONE: (n: number) => `Upload mark removed from ${n} PO${n === 1 ? '' : 's'}: back to waiting, out of PO Overview.`,
   SUMMARY: (pending: number, downloaded: number) => `${pending} not downloaded · ${downloaded} downloaded, not in Uniware`,
+} as const
+
+/* ---- Line items download on the Processed tab (2026-10-26): every line of the ticked POs as CSV or Excel ---- */
+/** POST_FG LINE_ITEMS: route + most POs per download (keeps it under ~2 s). */
+export const LINE_ITEMS = { ENDPOINT: `${PO_REVIEW_ENDPOINT}/line-items`, MAX: 100, FILE: 'po_line_items', SHEET: 'Line items' } as const
+
+export const LINE_ITEMS_TEXT = {
+  /** The one Download button: its main click = the POs (the table) as Excel; line items under the arrow (user, 2026-10-26). */
+  POS_BUTTON: (n: number) => `Download POs (${n})`,
+  POS_HINT: 'Excel of the POs: the ticked ones, or all shown. Arrow: CSV, or the line items of these POs.',
+  TABLE_BUTTON: 'Download',
+  CSV: 'CSV',
+  EXCEL: 'Excel',
+  HINT: 'Excel with every line of these POs, one row per line (arrow: CSV, or the table). Read only: nothing is marked.',
+  TABLE_ONLY_HINT: 'Excel of all rows shown, or only the ticked ones (arrow: CSV)',
+  GROUP_LINES: (n: number, ticked: boolean) => `Line items of ${n} ${ticked ? 'ticked' : 'shown'} PO${n === 1 ? '' : 's'}`,
+  GROUP_TABLE: (n: number, ticked: boolean) => `This table: ${n} ${ticked ? 'ticked' : 'shown'} row${n === 1 ? '' : 's'}`,
+  TOO_MANY: (max: number, n: number, ticked: boolean) =>
+    ticked
+      ? `At most ${max} POs per line items download: ${n} ticked, untick ${n - max}.`
+      : `${n} POs shown: line items go up to ${max} at a time. Filter (e.g. Processed from / to) or tick up to ${max} POs. The table itself is under the arrow.`,
+  DONE: (pos: number, lines: number) => `${lines} line${lines === 1 ? '' : 's'} of ${pos} PO${pos === 1 ? '' : 's'} downloaded.`,
+  S3_MISSING: (n: number) => ` ${n} PO${n === 1 ? '' : 's'}: the PO file could not be read, so EAN / MRP / rate / HSN / GST are empty there.`,
 } as const
 
 

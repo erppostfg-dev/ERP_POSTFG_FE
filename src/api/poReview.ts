@@ -1,6 +1,6 @@
 import { api, apiUrl, ApiError } from './client'
 import { ERROR_CODE } from '../constants/auth'
-import { PO_REVIEW_ENDPOINT } from '../constants/poReview'
+import { LINE_ITEMS, PO_REVIEW_ENDPOINT, PO_REVIEW_MAX_PAGE_SIZE, PO_REVIEW_MAX_PAGES } from '../constants/poReview'
 
 /* GET /po-review: one row per PO upload (API contract "PO review"). */
 
@@ -45,6 +45,17 @@ export function listPoReview(params: PoReviewListParams, signal?: AbortSignal) {
   const qs = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') qs.set(k, String(v))
   return api<PoReviewItem[]>(`${PO_REVIEW_ENDPOINT}?${qs}`, { signal })
+}
+
+/* Every PO of a status: GET /po-review page by page (500 each) until a short page (2026-10-26, Processed tab shows all). */
+export async function listAllPoReview(params: Omit<PoReviewListParams, 'page' | 'pageSize'>, signal?: AbortSignal) {
+  const all: PoReviewItem[] = []
+  for (let page = 1; page <= PO_REVIEW_MAX_PAGES; page++) {
+    const items = await listPoReview({ ...params, page, pageSize: PO_REVIEW_MAX_PAGE_SIZE }, signal)
+    all.push(...items)
+    if (items.length < PO_REVIEW_MAX_PAGE_SIZE) break
+  }
+  return all
 }
 
 /* GET /po-review/:uploadId: one PO for the review panel. A number field is "" when the PO doesn't have it. */
@@ -205,6 +216,50 @@ export function rejectPo(uploadId: string, remark: string) {
 /* POST /po-review/uniware-uploaded: mark POs uploaded into Uniware (or undo); they then show in PO Overview. */
 export function markUniwareUploaded(uploadIds: string[], undo = false) {
   return api<{ changed: string[] }>(`${PO_REVIEW_ENDPOINT}/uniware-uploaded`, { method: 'POST', body: JSON.stringify({ uploadIds, undo }) })
+}
+
+
+/* POST /po-review/line-items (2026-10-26): every line of the ticked processed POs (DB lines + the PO's JSON in S3),
+   for the line items CSV / Excel. Read only. */
+type LineNum = number | '' | null
+export interface LineItemRow {
+  uploadId: string
+  poNumber: string | null
+  poDate: string | null
+  channel: string | null
+  location: string | null
+  facility: string | null
+  saleOrderCode: string | null
+  processedAt: string | null
+  srNo: string | null
+  lineNo: LineNum
+  pepSkuCode: string | null
+  channelSkuCode: string | null
+  ean: string | null
+  skuName: string | null
+  description: string | null
+  brand: string | null
+  hsn: string | null
+  qty: number | null
+  freeQty: LineNum
+  channelMrp: LineNum
+  ourMrp: number | null
+  ourRate: number | null
+  landingRate: LineNum
+  unitCost: LineNum
+  gstPercent: LineNum
+  lineTotal: LineNum
+  margin: LineNum
+  gmv: number | null
+  poValue: number | null
+  /** True only when the PO was verified. */
+  isVerified: boolean
+  /** The PO's JSON could not be read from S3: only the DB columns are filled. */
+  s3Missing: boolean
+}
+
+export function getLineItems(uploadIds: string[]) {
+  return api<LineItemRow[]>(LINE_ITEMS.ENDPOINT, { method: 'POST', body: JSON.stringify({ uploadIds }) })
 }
 
 

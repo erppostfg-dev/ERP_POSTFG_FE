@@ -46,7 +46,10 @@ export const MANUAL_MAX_MB = 20
 export const MANUAL_TEXT = {
   CHANNEL: 'Channel',
   PICK_CHANNEL: 'Pick the channel…',
-  NEEDS: (needs: string, two: boolean) => (two ? `One PO = ${needs} with the same file name` : `One PO = one ${needs} file`),
+  NEEDS: (needs: string, two: boolean, optional?: string, manyPos?: boolean) =>
+    manyPos
+      ? `One ${needs} file, as downloaded (it can hold many POs: each PO is read on its own)`
+      : two ? `One PO = ${needs} with the same file name` : `One PO = one ${needs} file${optional ? ` (its ${optional} with the same file name is optional)` : ''}`,
   DROP: 'Drop PO files here or click to choose',
   DROP_HINT: `PDF, Excel or CSV · up to ${MANUAL_MAX_MB} MB each · up to ${MANUAL_MAX_FILES} files`,
   UPLOAD: (n: number) => `Upload ${n} file${n === 1 ? '' : 's'}`,
