@@ -9,10 +9,11 @@ import { fmtDate, statusTone, type ColKind } from '../lib/ops'
 import { NOT_IN_DB } from '../constants/masters'
 import { copyText } from '../lib/clipboard'
 import { COPIED_MS, COPYABLE_COLUMNS, GRID_HINT } from '../constants/ui'
+import { downloadExcel } from '../lib/excelExport'
 
 // ---- Toolbar -----------------------------------------------------------
 export function SectionToolbar({
-  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra, selectedCount = 0, onClearSelection,
+  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra, selectedCount = 0, onClearSelection, exportMenu,
 }: {
   q: string; setQ: (v: string) => void; placeholder?: string
   filtersOpen?: boolean; onToggleFilters?: () => void; activeFilters?: number
@@ -20,6 +21,8 @@ export function SectionToolbar({
   /** Rows ticked in the table: CSV / Excel then download only those (the page's onExport decides). */
   selectedCount?: number
   onClearSelection?: () => void
+  /** One Download button (DownloadMenu) in place of the separate CSV and Excel buttons (PO review, 2026-10-26). */
+  exportMenu?: ReactNode
 }) {
   const [upload, setUpload] = useState(false)
   return (
@@ -54,14 +57,16 @@ export function SectionToolbar({
             <button onClick={onClearSelection} tabIndex={selectedCount > 0 ? 0 : -1} className="text-ink-600 underline-offset-2 hover:text-ink-900 hover:underline">Clear</button>
           </span>
         )}
-        <button onClick={() => onExport('csv')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
-          className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
-          <Download className="size-4" /> CSV
-        </button>
-        <button onClick={() => onExport('xls')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
-          className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
-          <Download className="size-4" /> Excel
-        </button>
+        {exportMenu ?? (<>
+          <button onClick={() => onExport('csv')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
+            <Download className="size-4" /> CSV
+          </button>
+          <button onClick={() => onExport('xls')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
+            <Download className="size-4" /> Excel
+          </button>
+        </>)}
         <button onClick={() => setUpload(true)} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line bg-surface px-3 text-[13px] font-medium text-ink-900 hover:bg-canvas">
           <Upload className="size-4" /> Upload CSV
         </button>
@@ -219,6 +224,55 @@ export function useSection<T>(rows: T[], searchKeys: (keyof T)[]) {
 
 export function exportRows<T>(name: string, ext: 'csv' | 'xls', cols: [string, keyof T, ColKind][], rows: T[]) {
   downloadCsv(`${name}.${ext === 'xls' ? 'xls' : 'csv'}`, cols.map((c) => c[0]), rows.map((r) => cols.map((c) => String(r[c[1]] ?? ''))))
+}
+
+/** The same table as a real .xlsx (SheetJS, codes kept as text; numbers stay numbers). */
+export const exportRowsExcel = <T,>(name: string, cols: [string, keyof T, ColKind][], rows: T[]) =>
+  downloadExcel(name, [{
+    name, header: cols.map((c) => c[0]),
+    rows: rows.map((r) => cols.map(([, k, kind]) => {
+      const v = r[k]
+      if (v === null || v === undefined) return ''
+      return (kind === 'num' || kind === 'money') && typeof v === 'number' ? v : String(v)
+    })),
+  }])
+
+// ---- One Download button (2026-10-26): the main click = the first item, the arrow lists every choice ---------------
+export type DownloadItem = { label: string; onClick: () => void; disabled?: boolean; hint?: string; group?: string }
+
+export function DownloadMenu({ label, items, busy, title }: { label: string; items: DownloadItem[]; busy?: boolean; title?: string }) {
+  const p = usePopover()
+  // The main click is always the first item (the page's default); when it can't run, the arrow still offers the rest.
+  const first = items[0]
+  const run = (i: DownloadItem) => { p.close(); i.onClick() }
+  return (
+    <div ref={p.ref} className="relative inline-flex">
+      <button onClick={() => first && run(first)} disabled={busy || !first || first.disabled} title={title}
+        className="inline-flex h-9 items-center gap-1.5 rounded-l-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15 disabled:opacity-60">
+        <Download className="size-4" /> {label}
+      </button>
+      <button onClick={p.toggle} disabled={busy} aria-label="More download options"
+        className="inline-flex h-9 items-center rounded-r-[var(--radius)] border-l border-primary/20 bg-primary-soft px-2 text-primary hover:bg-primary/15 disabled:opacity-60">
+        <ChevronDown className="size-4" />
+      </button>
+      {p.open && (
+        // Right-aligned under the button: Pop sits at the left of this box, which ends at the button's right edge.
+        <div className="absolute right-0 top-full z-40 w-72">
+        <Pop leaving={p.leaving} className="w-72">
+          {items.map((i, n) => (
+            <div key={i.label}>
+              {i.group && i.group !== items[n - 1]?.group && <div className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{i.group}</div>}
+              <button onClick={() => run(i)} disabled={i.disabled} title={i.hint}
+                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-[13px] text-ink-900 hover:bg-alt disabled:cursor-not-allowed disabled:text-ink-400 disabled:hover:bg-transparent">
+                <Download className="size-3.5 shrink-0" />{i.label}
+              </button>
+            </div>
+          ))}
+        </Pop>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ---- Data grid ---------------------------------------------------------

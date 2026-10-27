@@ -3,7 +3,7 @@ import type { ComponentType } from 'react'
 import { useChannelOptions } from '../../lib/channels'
 import { AlertTriangle, Check, ExternalLink, Link2, Mail, RefreshCw, X } from 'lucide-react'
 import { Badge, Button } from '../../components/ui'
-import { DataGrid, FilterChips, FilterPanel, SectionToolbar, applyFilters, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
+import { DataGrid, DownloadMenu, FilterChips, FilterPanel, SectionToolbar, applyFilters, exportRows, exportRowsExcel, inputCls, useSection, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
 import type { ColKind } from '../../lib/ops'
 import {
@@ -12,7 +12,7 @@ import {
 } from '../../api/poReview'
 import { ApiError } from '../../api/client'
 import {
-  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
+  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_PAGE_SIZE, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
 } from '../../constants/poReview'
 import { ACCESS } from '../../constants/auth'
 import { PATHS } from '../../constants/pages'
@@ -128,6 +128,13 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
       )}
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search PO number, ingest ID, channel, file…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
         entity="In-review POs" onExport={(e) => exportRows('in_review', e, RCOLS, picked.length ? picked : shown)}
+        // One Download button (2026-10-26): Excel by default, CSV under the arrow.
+        exportMenu={
+          <DownloadMenu label={LINE_ITEMS_TEXT.TABLE_BUTTON} title={LINE_ITEMS_TEXT.TABLE_ONLY_HINT} items={[
+            { group: LINE_ITEMS_TEXT.GROUP_TABLE((picked.length ? picked : shown).length, picked.length > 0), label: LINE_ITEMS_TEXT.EXCEL, onClick: () => void exportRowsExcel('in_review', RCOLS, picked.length ? picked : shown) },
+            { group: LINE_ITEMS_TEXT.GROUP_TABLE((picked.length ? picked : shown).length, picked.length > 0), label: LINE_ITEMS_TEXT.CSV, onClick: () => exportRows('in_review', 'csv', RCOLS, picked.length ? picked : shown) },
+          ]} />
+        }
         selectedCount={picked.length} onClearSelection={() => setSelected(new Set())}
         primary={canEditList && rows.length > 0 ? (
           <button onClick={recheck} disabled={rechecking} title={RECHECK_TEXT.HINT}
@@ -147,7 +154,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
       ) : !rows.length ? (
         <div className={box}>No POs are waiting for review.</div>
       ) : (
-        <DataGrid cols={RCOLS} rows={shown} rowKey={(r) => r.id} onRowClick={setSel} selected={selected} onSelectedChange={setSelected}
+        <DataGrid cols={RCOLS} rows={shown} rowKey={(r) => r.id} pageSize={LIST_PAGE_SIZE} onRowClick={setSel} selected={selected} onSelectedChange={setSelected}
           rowClass={() => '[&>td:first-child]:shadow-[inset_3px_0_0_var(--color-crit)]'}
           trailing={[
             { label: 'Issues', render: (r) => <span className="flex flex-wrap gap-1">{r.issueTypes.map((t) => <Badge key={t} tone="crit">{label(t)}</Badge>)}</span> },
