@@ -134,7 +134,7 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
               <GroupedSelect value={channel} groups={groups} placeholder={T.PICK_CHANNEL}
                 onChange={(v) => { setChannel(v); setFiles([]) }} />
             </div>
-            {picked && <span key={channel} className="pf-tab-in text-[12px] text-ink-600">{isAmazon ? T.AMAZON_HINT : T.NEEDS(picked.needs, picked.twoFiles, picked.optional)}</span>}
+            {picked && <span key={channel} className="pf-tab-in text-[12px] text-ink-600">{isAmazon ? T.AMAZON_HINT : T.NEEDS(picked.needs, picked.twoFiles, picked.optional, picked.manyPos)}</span>}
           </div>
           <div
             onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
