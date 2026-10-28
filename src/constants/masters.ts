@@ -10,6 +10,42 @@ export const MASTERS_ENDPOINT = {
   CHANNELS: '/masters/channels',
   /** Dropdowns of the Add forms. */
   FORM_OPTIONS: '/masters/form-options',
+  /** One row's history (2026-10-28). */
+  HISTORY: (type: string, id: string) => `/masters/history/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
+  /** Every master's recent changes: ?type=&days=. */
+  CHANGES: '/masters/changes',
+} as const
+
+/*
+ * Masters history (2026-10-28, backend modules/masters/master-history.service.ts): who changed what, from the Masters
+ * pages (master_change_logs) and the In-transit master uploads (intransit_master_changes).
+ */
+/** Page config id -> the backend's master type. */
+export const MASTER_LOG_TYPE: Record<string, string> = { pep: 'pep_sku', channelSku: 'channel_sku', customer: 'channel', chWh: 'location', pepWh: 'facility' }
+export const MASTER_LOG_TYPE_LABEL: Record<string, string> = {
+  pep_sku: 'PEP SKU', channel_sku: 'Channel SKU', channel: 'Channel', location: 'Channel location', facility: 'Warehouse',
+}
+export const MASTER_LOG_ACTION_LABEL: Record<string, string> = {
+  created: 'Added', field_changed: 'Updated', deactivated: 'Deactivated', activated: 'Activated', replaced: 'Reloaded the whole master from files',
+}
+export const MASTER_LOG_SOURCE_LABEL: Record<string, string> = {
+  screen: 'Masters page', script: 'Script (masters:replace)',
+  intransit_upload: 'In-transit master upload', intransit_split1_add: 'In-transit combo added',
+  intransit_variant_map: 'In-transit variant mapped', intransit_loader: 'In-transit first load',
+}
+/** Recent changes: how far back (days). */
+export const MASTER_HISTORY_DAYS = [7, 30, 90, 365] as const
+/** A logged DB column / form key as people read it ("intransit_location" -> "Intransit location"). */
+export const masterFieldLabel = (f: string) => {
+  const words = f.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+export const HISTORY_TEXT = {
+  NO_ROW: 'No history: this code is not a row of the facility master',
+  EMPTY_ROW: 'Nothing recorded for this row yet. Changes are recorded from 28 Oct 2026 on.',
+  EMPTY_ALL: 'No changes in this period.',
+  REMARK: 'Remark (optional)',
+  REMARK_HINT: "Kept in the row's History",
 } as const
 
 /*

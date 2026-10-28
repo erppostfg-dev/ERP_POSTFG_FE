@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, History, Layers, Pencil, Plus, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, Eye, History, Layers, Plus, RefreshCw, X } from 'lucide-react'
 import { ApiError } from '../api/client'
-import { listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSkus, listPepWarehouses, type ChannelCustomerItem, type ChannelSkuItem, type ChannelWarehouseItem, type PepSkuItem, type PepWarehouseItem } from '../api/masters'
-import { ADD_TEXT, MASTER_ADD_ROLES, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS } from '../constants/masters'
+import { getMasterChanges, getMasterHistory, listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSkus, listPepWarehouses, type ChannelCustomerItem, type ChannelSkuItem, type ChannelWarehouseItem, type MasterHistoryItem, type PepSkuItem, type PepWarehouseItem } from '../api/masters'
+import { ADD_TEXT, HISTORY_TEXT, MASTER_ADD_ROLES, MASTER_HISTORY_DAYS, MASTER_LOG_ACTION_LABEL, MASTER_LOG_SOURCE_LABEL, MASTER_LOG_TYPE, MASTER_LOG_TYPE_LABEL, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS, masterFieldLabel } from '../constants/masters'
+import { Timeline, type TimelineOptions } from './ops/ShipmentHistory'
 import { useAuth } from '../auth/AuthContext'
 import { MasterAddDrawer, type AddMaster } from '../components/MasterAddDrawer'
 import { MASTER_TABS } from '../lib/data'
 import { OPS_CHANNELS, type ColKind } from '../lib/ops'
 import { Badge, Button, Drawer, PageTitle } from '../components/ui'
 import { Reveal } from '../components/shell'
-import { DataGrid, FilterPanel, PrimaryBtn, SectionToolbar, exportRows, inputCls, useSection, type FilterDef } from '../components/kit'
+import { DataGrid, FilterPanel, PrimaryBtn, SectionToolbar, exportRows, exportRowsExcel, inputCls, useSection, type FilterDef } from '../components/kit'
 
 type Row = Record<string, string | number>
 type FieldDef = { key: string; label: string; options?: readonly string[]; type?: 'number' }
@@ -21,7 +22,7 @@ type FieldDef = { key: string; label: string; options?: readonly string[]; type?
    no Recipe column (user, 2026-10-15: not needed);
    a column that exists but is empty stays '' and the grid shows "—". */
 const pepRow = (s: PepSkuItem): Row => ({
-  code: s.pepCode, name: s.productName ?? '', brand: s.brand ?? '', type: s.productType ?? '',
+  rid: s.id, code: s.pepCode, name: s.productName ?? '', brand: s.brand ?? '', type: s.productType ?? '',
   category: NOT_IN_DB, sub: NOT_IN_DB, filling: NOT_IN_DB, mrp: s.mrp ?? '', gst: s.gstTaxType ? `${s.gstTaxType}%` : '',
   ean: s.eanCode ?? '', hsn: s.hsnCode ?? '',
   size: s.lengthMm !== null && s.widthMm !== null && s.heightMm !== null ? `${s.lengthMm} × ${s.widthMm} × ${s.heightMm}` : '',
@@ -33,7 +34,7 @@ const pepRow = (s: PepSkuItem): Row => ({
 /* Channel SKU master from the backend. A channel code is unique only within its channel, so the row key is the DB id.
    margin comes as a fraction (0.27) and is shown as a percent; the listing status has no column (NOT_IN_DB). */
 const channelSkuRow = (c: ChannelSkuItem): Row => ({
-  id: c.id, channel: c.channelName ?? '', channelSku: c.channelCode ?? '', pepCode: c.pepCode, name: c.productName ?? '', brand: c.brand ?? '',
+  id: c.id, rid: c.id, channel: c.channelName ?? '', channelSku: c.channelCode ?? '', pepCode: c.pepCode, name: c.productName ?? '', brand: c.brand ?? '',
   mrp: c.mrp ?? '', margin: c.margin !== null ? Math.round(c.margin * 10000) / 100 : '', rate: c.rateAfterMargin ?? '', ean: c.eanCode ?? '', status: NOT_IN_DB,
 })
 /* Channel / Customer master from the backend: one row per master_channels row, with its type and expiry days (2026-10-28).
@@ -41,14 +42,14 @@ const channelSkuRow = (c: ChannelSkuItem): Row => ({
 const list = (v: string[]) => v.join(', ')
 const expiryText = (min: number | null, max: number | null) => min === null && max === null ? '' : min === max || max === null ? `${min} days` : `${min ?? '?'} – ${max} days`
 const customerRow = (c: ChannelCustomerItem): Row => ({
-  id: c.id, channel: c.displayName, slug: c.slug, aliases: list(c.aliases), channelCodes: list(c.channelCodes), facilities: list(c.facilityCodes), locations: c.locationCount,
+  id: c.id, rid: c.id, channel: c.displayName, slug: c.slug, aliases: list(c.aliases), channelCodes: list(c.channelCodes), facilities: list(c.facilityCodes), locations: c.locationCount,
   legal: NOT_IN_DB, type: c.channelType ?? '', expiry: expiryText(c.expiryDaysMin, c.expiryDaysMax), gstin: NOT_IN_DB, terms: NOT_IN_DB, margin: NOT_IN_DB, poSource: NOT_IN_DB,
   status: c.isActive ? SKU_STATUS.ACTIVE : SKU_STATUS.INACTIVE,
 })
 /* PEP warehouses: every master_facilities row (2026-10-28: was only the 2 codes the locations use) with its columns and
    what it serves; only City has no column. */
 const pepWhRow = (w: PepWarehouseItem): Row => ({
-  facility: w.facilityCode, name: w.name ?? '', spellings: list(w.spellings), locations: w.locationCount, channels: list(w.channels),
+  rid: w.id ?? '', facility: w.facilityCode, name: w.name ?? '', spellings: list(w.spellings), locations: w.locationCount, channels: list(w.channels),
   entity: w.entity ?? '', location: w.pickupLocation ?? '', city: NOT_IN_DB, state: w.state ?? '', type: w.facilityType ?? '',
   billTo: w.billToGstin ?? '', shipTo: w.shipToGstin ?? '', remarks: w.remarks ?? '', main: w.mainFacilityCode ?? '',
   group: w.intransitGroup ?? '', itType: w.intransitType ?? '', uniwareExport: w.uniwareExport ? 'Yes' : 'No', source: w.source ?? '',
@@ -57,7 +58,7 @@ const pepWhRow = (w: PepWarehouseItem): Row => ({
 /* Channel warehouses = details_channels (one delivery location each), incl. city, appointment, status, drop and in-transit
    location (2026-10-28: the data was there, the page did not read it). */
 const chWhRow = (w: ChannelWarehouseItem): Row => ({
-  id: w.id, channel: w.channelName, code: w.locationCode ?? '', customer: w.uniwareCustomerCode ?? '', channelCode: w.channelCode ?? '', servedBy: w.facilityCode ?? '',
+  id: w.id, rid: w.id, channel: w.channelName, code: w.locationCode ?? '', customer: w.uniwareCustomerCode ?? '', channelCode: w.channelCode ?? '', servedBy: w.facilityCode ?? '',
   consignee: w.consigneeName ?? '', gstin: w.consigneeGstNumber ?? '', state: w.consigneeState ?? '', pincode: w.consigneePinCode ?? '', city: w.city ?? '',
   shipAddr: w.shippingAddress ?? '', billAddr: w.billingAddress ?? '', buyerType: w.buyerType ?? '', buyerGst: w.buyerGstNumber ?? '', buyerState: w.buyerState ?? '',
   buyerPin: w.buyerPinCode ?? '', ledger: w.tallyLedgerName ?? '', apptPortal: w.appointmentChannel ?? '', apptType: w.appointmentChannelType ?? '',
@@ -180,6 +181,7 @@ export default function Masters({ tab = MASTER_TABS[0] }: { tab?: string }) {
   const state = { loading: query.isPending, error: query.error ? (query.error instanceof ApiError ? query.error.message : String(query.error)) : undefined }
 
   const fromApi = CFG[id].readOnly
+  const [changesOpen, setChangesOpen] = useState(false)
   const box = 'rounded-[var(--radius)] border border-line bg-surface px-4 py-10 text-center text-[13px] text-ink-600'
   const save = (k: string, r: Row, prevKey?: string) => {
     const key = CFG[k].key
@@ -191,7 +193,8 @@ export default function Masters({ tab = MASTER_TABS[0] }: { tab?: string }) {
         title={CFG[id].title}
         sub={CFG[id].sub}
         right={fromApi
-          ? <span title={NOT_AVAILABLE_YET}><Button disabled icon={<RefreshCw className="size-3.5" />}>Sync now</Button></span>
+          ? <><Button icon={<History className="size-3.5" />} onClick={() => setChangesOpen(true)}>Recent changes</Button>
+            <span title={NOT_AVAILABLE_YET}><Button disabled icon={<RefreshCw className="size-3.5" />}>Sync now</Button></span></>
           : <><span className="hidden text-[11px] text-ink-400 sm:inline">Synced from Uniware · 2 min ago</span><Button icon={<RefreshCw className="size-3.5" />}>Sync now</Button></>}
       />
       {fromApi && state.error ? (
@@ -204,6 +207,7 @@ export default function Masters({ tab = MASTER_TABS[0] }: { tab?: string }) {
       ) : (
         <MasterTable key={id} id={id} rows={rowsOf(id)} onSave={(r, prev) => save(id, r, prev)} />
       )}
+      {changesOpen && <RecentChangesDrawer initialType={MASTER_LOG_TYPE[id]} onClose={() => setChangesOpen(false)} />}
     </div>
   )
 }
@@ -218,6 +222,8 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
   const isMasterAdmin = auth.status === 'signedIn' && auth.user.roles.some((r) => (MASTER_ADD_ROLES as readonly string[]).includes(r))
   const canAdd = ADDABLE.includes(id) && isMasterAdmin
   const [adding, setAdding] = useState(false)
+  const [historyOf, setHistoryOf] = useState<Row | null>(null)
+  const [listingsOf, setListingsOf] = useState<Row | null>(null)
   const [notice, setNotice] = useState('')
   const [channel, setChannel] = useState('All')
   const channels = useMemo(() => (c.readOnly ? distinct(rows, 'channel') : [...OPS_CHANNELS]), [c, rows])
@@ -258,11 +264,14 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
           ...(c.trailing ?? []),
           { label: 'Actions', render: (r) => (
             <span className="flex items-center gap-1 text-ink-600" onClick={(e) => e.stopPropagation()}>
-              <IconBtn title={c.readOnly ? 'View' : 'Edit'} onClick={() => setEdit({ row: r, prev: String(r[c.key]) })}><Pencil className="size-3.5" /></IconBtn>
-              {id === 'pep' && <><IconBtn title={`History · ${NOT_AVAILABLE_YET}`} disabled><History className="size-3.5" /></IconBtn><IconBtn title={`Channel listings · ${NOT_AVAILABLE_YET}`} disabled><Layers className="size-3.5" /></IconBtn></>}
+              <IconBtn title="View" onClick={() => setEdit({ row: r, prev: String(r[c.key]) })}><Eye className="size-3.5" /></IconBtn>
+              <IconBtn title={r.rid ? 'History: who changed what' : HISTORY_TEXT.NO_ROW} disabled={!r.rid} onClick={() => setHistoryOf(r)}><History className="size-3.5" /></IconBtn>
+              {id === 'pep' && <IconBtn title="Channel listings: how each channel lists this SKU" onClick={() => setListingsOf(r)}><Layers className="size-3.5" /></IconBtn>}
             </span>
           ) },
         ]} />
+      {historyOf && <RowHistoryDrawer type={MASTER_LOG_TYPE[id]} row={historyOf} title={String(historyOf[c.titleKey ?? c.key])} sub={c.title} onClose={() => setHistoryOf(null)} />}
+      {listingsOf && <ChannelListingsDrawer pepCode={String(listingsOf.code)} name={String(listingsOf.name ?? '')} onClose={() => setListingsOf(null)} />}
       {edit && <EditDrawer cfg={c} row={edit.row} isNew={edit.prev === undefined} onClose={() => setEdit(null)} onSave={(r) => { onSave(r, edit.prev); setEdit(null) }} />}
       {adding && (
         <MasterAddDrawer master={id as AddMaster} onClose={() => setAdding(false)}
@@ -311,3 +320,101 @@ function EditDrawer({ cfg, row, isNew, onClose, onSave }: { cfg: Cfg; row: Row; 
     </Drawer>
   )
 }
+
+// ---- History (2026-10-28) -----------------------------------------------------------------------------------------
+const HISTORY_OPTIONS: TimelineOptions = { actionLabel: MASTER_LOG_ACTION_LABEL, sourceLabel: MASTER_LOG_SOURCE_LABEL, notes: true }
+
+/** One row's history: who added / changed it, when, old -> new, remark (Masters pages + In-transit uploads). */
+function RowHistoryDrawer({ type, row, title, sub, onClose }: { type: string; row: Row; title: string; sub: string; onClose: () => void }) {
+  const rid = String(row.rid)
+  const q = useQuery({ queryKey: ['masters', 'history', type, rid], queryFn: ({ signal }) => getMasterHistory(type, rid, signal) })
+  return (
+    <Drawer open onClose={onClose}
+      title={<span className="inline-flex items-center gap-2"><History className="size-4 text-ink-600" />History · <span className="font-mono">{title}</span></span>}
+      sub={sub} footer={(close) => <Button onClick={close}>Close</Button>}>
+      <Timeline items={q.data} pending={q.isPending} error={q.isError} onRetry={() => void q.refetch()} labelOf={masterFieldLabel} empty={HISTORY_TEXT.EMPTY_ROW} options={HISTORY_OPTIONS} />
+    </Drawer>
+  )
+}
+
+type ChangeRow = Record<'at' | 'by' | 'master' | 'rowKey' | 'action' | 'field' | 'oldValue' | 'newValue' | 'remark' | 'source', string>
+const CHANGE_COLS: [string, keyof ChangeRow, ColKind][] = [['When', 'at', 'text'], ['Who', 'by', 'text'], ['Master', 'master', 'text'], ['Row', 'rowKey', 'mono'],
+  ['Action', 'action', 'text'], ['Field', 'field', 'text'], ['Old value', 'oldValue', 'text'], ['New value', 'newValue', 'text'], ['Remark', 'remark', 'text'], ['Source', 'source', 'text']]
+const changeRow = (h: MasterHistoryItem): ChangeRow => ({
+  at: new Date(h.at).toLocaleString(), by: h.byEmail ?? h.by ?? 'System', master: MASTER_LOG_TYPE_LABEL[h.type] ?? h.type, rowKey: h.rowKey,
+  action: MASTER_LOG_ACTION_LABEL[h.action] ?? h.action, field: h.field ? masterFieldLabel(h.field) : '', oldValue: h.oldValue ?? '', newValue: h.newValue ?? '',
+  remark: h.remark ?? '', source: MASTER_LOG_SOURCE_LABEL[h.source] ?? h.source,
+})
+
+/** Every master's changes of the last n days (filter by master), with an Excel download. */
+function RecentChangesDrawer({ initialType, onClose }: { initialType?: string; onClose: () => void }) {
+  const [type, setType] = useState(initialType ?? '')
+  const [days, setDays] = useState<number>(MASTER_HISTORY_DAYS[0])
+  const q = useQuery({ queryKey: ['masters', 'changes', type, days], queryFn: ({ signal }) => getMasterChanges({ type: type || undefined, days }, signal) })
+  const options = useMemo<TimelineOptions>(() => ({
+    ...HISTORY_OPTIONS,
+    tagOf: (h) => { const m = h as MasterHistoryItem; return `${MASTER_LOG_TYPE_LABEL[m.type] ?? m.type} · ${m.rowKey}` },
+  }), [])
+  return (
+    <Drawer open wide onClose={onClose}
+      title={<span className="inline-flex items-center gap-2"><History className="size-4 text-ink-600" />Recent changes · Masters</span>}
+      sub="Who added or changed what on the Masters pages and the In-transit master uploads"
+      footer={(close) => <>
+        <Button icon={<Download className="size-3.5" />} disabled={!q.data?.length}
+          onClick={() => exportRowsExcel(`masters-changes-${type || 'all'}-${days}d`, CHANGE_COLS, (q.data ?? []).map(changeRow))}>Excel</Button>
+        <Button onClick={close}>Close</Button>
+      </>}>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <select value={type} onChange={(e) => setType(e.target.value)} className={`${inputCls} w-auto`}>
+          <option value="">All masters</option>
+          {Object.entries(MASTER_LOG_TYPE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))} className={`${inputCls} w-auto`}>
+          {MASTER_HISTORY_DAYS.map((d) => <option key={d} value={d}>Last {d} days</option>)}
+        </select>
+        {q.data && <span className="self-center text-[12px] text-ink-400">{q.data.length} change{q.data.length === 1 ? '' : 's'}</span>}
+      </div>
+      <Timeline items={q.data} pending={q.isPending} error={q.isError} onRetry={() => void q.refetch()} labelOf={masterFieldLabel} empty={HISTORY_TEXT.EMPTY_ALL} options={options} />
+    </Drawer>
+  )
+}
+
+/** A PEP SKU's channel listings: every channel SKU mapped to it (the Channel SKU list, loaded once and cached). */
+function ChannelListingsDrawer({ pepCode, name, onClose }: { pepCode: string; name: string; onClose: () => void }) {
+  const q = useQuery({ queryKey: mastersKey('channelSku'), queryFn: ({ signal }) => LOADERS.channelSku(signal) })
+  const rows = useMemo(() => (q.data ?? []).filter((r) => String(r.pepCode).toLowerCase() === pepCode.toLowerCase()), [q.data, pepCode])
+  const th = 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400'
+  const td = 'px-3 py-2 text-[12.5px]'
+  return (
+    <Drawer open wide onClose={onClose}
+      title={<span className="inline-flex items-center gap-2"><Layers className="size-4 text-ink-600" />Channel listings · <span className="font-mono">{pepCode}</span></span>}
+      sub={name} footer={(close) => <Button onClick={close}>Close</Button>}>
+      {q.isPending ? <p className="px-2 py-3 text-[12.5px] text-ink-400">Loading channel SKUs…</p>
+        : q.isError ? (
+          <div className="px-2 py-3 text-[12.5px] text-crit">
+            Could not load the channel SKUs: {q.error instanceof ApiError ? q.error.message : String(q.error)}{' '}
+            <button onClick={() => void q.refetch()} className="font-semibold underline">Try again</button>
+          </div>
+        )
+        : !rows.length ? <p className="px-2 py-3 text-[12.5px] text-ink-400">No channel lists this SKU yet (no row in the Channel SKU master).</p>
+        : (
+          <div className="overflow-x-auto rounded-[var(--radius)] border border-line">
+            <table className="w-full">
+              <thead className="border-b border-line bg-canvas">
+                <tr><th className={th}>Channel</th><th className={th}>Channel SKU</th><th className={th}>Product name</th>
+                  <th className={`${th} text-right`}>MRP</th><th className={`${th} text-right`}>Margin %</th><th className={`${th} text-right`}>Rate after margin</th></tr>
+              </thead>
+              <tbody>{rows.map((r) => (
+                <tr key={String(r.id)} className="border-b border-line last:border-b-0">
+                  <td className={td}>{String(r.channel)}</td><td className={`${td} font-mono`}>{String(r.channelSku)}</td><td className={td}>{String(r.name)}</td>
+                  <td className={`${td} tnum text-right`}>{String(r.mrp)}</td><td className={`${td} tnum text-right`}>{String(r.margin)}</td><td className={`${td} tnum text-right`}>{String(r.rate)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      {!q.isPending && !q.isError && <p className="mt-2 text-[11.5px] text-ink-400">{rows.length} channel listing{rows.length === 1 ? '' : 's'}</p>}
+    </Drawer>
+  )
+}
+

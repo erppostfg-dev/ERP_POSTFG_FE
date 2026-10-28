@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle } from 'lucide-react'
 import { ApiError } from '../api/client'
 import { addChannel, addChannelLocation, addChannelSku, addPepSku, getMasterFormOptions, type FieldProblem, type MasterFormOptions } from '../api/masters'
-import { ADD_RULE, ADD_TEXT } from '../constants/masters'
+import { ADD_RULE, ADD_TEXT, HISTORY_TEXT } from '../constants/masters'
 import { Button, Drawer } from './ui'
 import { inputCls } from './kit'
 
@@ -123,6 +123,8 @@ export function MasterAddDrawer({ master, defaultChannelId, onClose, onAdded }: 
   const [saving, setSaving] = useState(false)
   const [slugEdited, setSlugEdited] = useState(false)
   const [rateEdited, setRateEdited] = useState(false)
+  // one optional remark per save (user, 2026-10-28), kept in the row's History
+  const [remark, setRemark] = useState('')
 
   const problems = useMemo(() => Object.fromEntries(form.fields.map((f) => [f.key, problemOf(f, v[f.key] ?? '')])), [form, v])
   const left = Object.values(problems).filter(Boolean).length
@@ -150,14 +152,17 @@ export function MasterAddDrawer({ master, defaultChannelId, onClose, onAdded }: 
     setServer((s) => ({ ...s, [key]: '' }))
   }
 
-  const body = () => Object.fromEntries(form.fields.map((f) => {
-    const raw = (v[f.key] ?? '').trim()
-    if (f.kind === 'number') return [f.key, Number(raw.replace(/,/g, ''))]
-    if (f.kind === 'active') return [f.key, raw === 'true']
-    if (f.kind === 'list') return [f.key, raw.split(',').map((x) => x.trim()).filter(Boolean)]
-    if (f.key === 'channelId') return [f.key, Number(raw)]
-    return [f.key, f.upper ? raw.toUpperCase() : raw]
-  }))
+  const body = () => ({
+    ...Object.fromEntries(form.fields.map((f) => {
+      const raw = (v[f.key] ?? '').trim()
+      if (f.kind === 'number') return [f.key, Number(raw.replace(/,/g, ''))]
+      if (f.kind === 'active') return [f.key, raw === 'true']
+      if (f.kind === 'list') return [f.key, raw.split(',').map((x) => x.trim()).filter(Boolean)]
+      if (f.key === 'channelId') return [f.key, Number(raw)]
+      return [f.key, f.upper ? raw.toUpperCase() : raw]
+    })),
+    ...(remark.trim() ? { remark: remark.trim() } : {}),
+  })
 
   const save = async () => {
     setTouched(Object.fromEntries(form.fields.map((f) => [f.key, true])))
@@ -227,6 +232,11 @@ export function MasterAddDrawer({ master, defaultChannelId, onClose, onAdded }: 
             </label>
           )
         })}
+        <label className="col-span-2">
+          <div className="mb-1 text-[12px] font-medium text-ink-600">{HISTORY_TEXT.REMARK}</div>
+          <textarea rows={2} maxLength={1000} value={remark} onChange={(e) => setRemark(e.target.value)} className={inputCls} />
+          {server.remark ? <div className="mt-1 text-[11px] text-crit">{server.remark}</div> : <div className="mt-1 text-[11px] text-ink-400">{HISTORY_TEXT.REMARK_HINT}</div>}
+        </label>
       </div>
     </Drawer>
   )

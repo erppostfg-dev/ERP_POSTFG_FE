@@ -1,9 +1,12 @@
 import { api } from './client'
 import { MASTERS_ENDPOINT } from '../constants/masters'
+import type { HistoryItem } from './poOverview'
 
 /* GET /masters/pep-skus: every PEP SKU (master_skus), sorted by pep_code. An empty column comes back as null. */
 
 export type PepSkuItem = {
+  /** master_skus.id (History). */
+  id: string
   pepCode: string
   productName: string | null
   brand: string | null
@@ -88,6 +91,8 @@ export function listChannelCustomers(signal?: AbortSignal) {
 /* Every facility of master_facilities (2026-10-28), with the locations / channels it serves; inMaster false = a code the
    locations use that the facility master lacks. */
 export type PepWarehouseItem = {
+  /** master_facilities.id; null = a code only locations use (no history). */
+  id: number | null
   facilityCode: string
   /** Location facility codes equal to it ignoring letter case, most used first. */
   spellings: string[]
@@ -174,3 +179,9 @@ export const addPepSku = (body: Record<string, unknown>) => post<{ id: string; p
 export const addChannelSku = (body: Record<string, unknown>) => post<{ id: string; channel: string }>(MASTERS_ENDPOINT.CHANNEL_SKUS, body)
 export const addChannel = (body: Record<string, unknown>) => post<{ id: number; displayName: string }>(MASTERS_ENDPOINT.CHANNELS, body)
 export const addChannelLocation = (body: Record<string, unknown>) => post<{ id: string; channel: string }>(MASTERS_ENDPOINT.CHANNEL_WAREHOUSES, body)
+
+/* Masters history (2026-10-28): the same entry shape as the PO Overview history, plus what row it is about. */
+export type MasterHistoryItem = HistoryItem & { type: string; recordId: string | null; rowKey: string; from: 'masters' | 'intransit' }
+export const getMasterHistory = (type: string, id: string, signal?: AbortSignal) => api<MasterHistoryItem[]>(MASTERS_ENDPOINT.HISTORY(type, id), { signal })
+export const getMasterChanges = (q: { type?: string; days: number }, signal?: AbortSignal) =>
+  api<MasterHistoryItem[]>(`${MASTERS_ENDPOINT.CHANGES}?${new URLSearchParams({ ...(q.type ? { type: q.type } : {}), days: String(q.days) })}`, { signal })
