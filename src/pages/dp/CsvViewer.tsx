@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Download, Search, X } from 'lucide-react'
 import { Button } from '../../components/ui'
-import { downloadCsvFile, previewCsv, type CsvTarget } from '../../api/intransit'
+import { downloadCsvFile, type CsvTarget } from '../../api/intransit'
+import { tablePage } from '../../lib/csvTable'
 import { CSV_VIEWER_PAGE, CSV_SEARCH_DELAY_MS } from '../../constants/intransit'
 import { istDateTime } from '../../lib/time'
 
 /*
  * Table viewer (In-transit Stock, user 2026-10-16 / 18): any input file, a file a connector run fetched (Uniware,
  * Amazon, Flipkart; also the ones refused by the column check), or a sheet of a built report (Sheet35(2),
- * Full_Shipment_Enhanced, Final Sheet35(2) on the Reports tab). Read page by page from the server with a search over
- * every column: the big tables are tens of MB, so only one page of rows ever reaches the browser.
+ * Full_Shipment_Enhanced, Final Sheet35(2) on the Reports tab), with a search over every column. Since 2026-10-27
+ * (user) the whole file is read once and kept in this browser (lib/csvTable.ts: IndexedDB by ETag, paged and searched
+ * in a Web Worker); the server holds no table in memory.
  *   <CsvTable>   the table itself (search, rows, pager, download), embedded in a page;
  *   <CsvViewer>  the same in a large window.
  */
@@ -30,7 +32,7 @@ export function CsvTable({ target, subtitle, onClose, maxHeight = '60vh', showNa
   const key = target.kind === 'input' ? ['input', target.name, target.date ?? ''] : [target.kind, target.runId, target.name]
   const page = useQuery({
     queryKey: ['intransit', 'csv', ...key, offset, search],
-    queryFn: ({ signal }) => previewCsv(target, { offset, limit: CSV_VIEWER_PAGE, q: search }, signal),
+    queryFn: ({ signal }) => tablePage(target, { offset, limit: CSV_VIEWER_PAGE, q: search }, signal),
     placeholderData: keepPreviousData,
   })
   const d = page.data
