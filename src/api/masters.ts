@@ -55,6 +55,8 @@ export type ChannelSkuItem = {
   margin: number | null
   rateAfterMargin: number | null
   eanCode: string | null
+  /** Switched off on the page = not used by the PO checks (2026-10-28). */
+  isActive: boolean
 }
 
 export function listChannelSkus(signal?: AbortSignal) {
@@ -185,3 +187,13 @@ export type MasterHistoryItem = HistoryItem & { type: string; recordId: string |
 export const getMasterHistory = (type: string, id: string, signal?: AbortSignal) => api<MasterHistoryItem[]>(MASTERS_ENDPOINT.HISTORY(type, id), { signal })
 export const getMasterChanges = (q: { type?: string; days: number }, signal?: AbortSignal) =>
   api<MasterHistoryItem[]>(`${MASTERS_ENDPOINT.CHANGES}?${new URLSearchParams({ ...(q.type ? { type: q.type } : {}), days: String(q.days) })}`, { signal })
+
+/* Edit + switch on / off (2026-10-28, admin / developer; keys locked; logged in the row's History). */
+export type EditBody = { changes: Record<string, unknown>; original: Record<string, unknown>; remark?: string }
+/** 409 MASTER_EDIT_CONFLICT details: what each field is now. */
+export type EditConflict = { field: string; now: string | number | null }
+export const editMasterRow = (type: string, id: string, body: EditBody) =>
+  api<{ changed: string[] }>(MASTERS_ENDPOINT.EDIT(type, id), { method: 'PATCH', body: JSON.stringify(body) })
+export const setMasterActive = (type: string, id: string, body: { active: boolean; remark?: string }) =>
+  post<{ active: boolean; changed: boolean }>(MASTERS_ENDPOINT.ACTIVE(type, id), body)
+

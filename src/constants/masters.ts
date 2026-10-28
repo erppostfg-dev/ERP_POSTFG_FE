@@ -14,6 +14,9 @@ export const MASTERS_ENDPOINT = {
   HISTORY: (type: string, id: string) => `/masters/history/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
   /** Every master's recent changes: ?type=&days=. */
   CHANGES: '/masters/changes',
+  /** Edit one row (PATCH) / switch it on or off (POST), 2026-10-28. */
+  EDIT: (type: string, id: string) => `/masters/edit/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
+  ACTIVE: (type: string, id: string) => `/masters/active/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
 } as const
 
 /*
@@ -79,3 +82,27 @@ export const NOT_AVAILABLE_YET = 'Not available yet: no backend for this'
 
 /** master_skus.is_active -> the status the page shows. */
 export const SKU_STATUS = { ACTIVE: 'Active', INACTIVE: 'Inactive' } as const
+
+/*
+ * Edit + switch on / off (2026-10-28): keys are locked (a wrong key = switch the row off and add a new one); what
+ * switching a row off does to new POs, per master.
+ */
+export const EDIT_TEXT = {
+  LOCKED: 'Key: cannot be edited. To fix a wrong key, switch the row off and add a new one.',
+  NO_CHANGES: 'Nothing changed yet',
+  CHANGED: (n: number) => `${n} field${n === 1 ? '' : 's'} changed`,
+  CONFLICT: 'Someone else changed this row while you were editing:',
+  USE_LATEST: 'Use the latest values',
+  SAVED: (what: string, n: number) => `${what} saved (${n} field${n === 1 ? '' : 's'}). It is in the row's History.`,
+  SWITCHED: (what: string, on: boolean) => `${what} switched ${on ? 'on' : 'off'}. It is in the row's History.`,
+} as const
+export const SWITCH_OFF_EFFECT: Record<string, string> = {
+  pep: 'New PO lines with this SKU will go to In Review (SKU inactive).',
+  channelSku: 'New PO lines with this channel SKU code will go to In Review (SKU not mapped). Add the right mapping afterwards if the key was wrong.',
+  customer: 'Shown as inactive on the Masters pages. PO intake per channel stays as set in Users & Roles → PO intake.',
+  chWh: 'New POs for this location will go to In Review (location not found).',
+  pepWh: 'New POs for locations served by this warehouse will go to In Review (warehouse inactive).',
+}
+/** Switching back on re-checks the POs in review against it. */
+export const SWITCH_ON_EFFECT = 'POs in review that were waiting on this row are re-checked.'
+

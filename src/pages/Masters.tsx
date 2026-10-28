@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, Download, Eye, History, Layers, Plus, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, Eye, History, Layers, Pencil, Plus, Power, RefreshCw, X } from 'lucide-react'
 import { ApiError } from '../api/client'
-import { getMasterChanges, getMasterHistory, listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSkus, listPepWarehouses, type ChannelCustomerItem, type ChannelSkuItem, type ChannelWarehouseItem, type MasterHistoryItem, type PepSkuItem, type PepWarehouseItem } from '../api/masters'
-import { ADD_TEXT, HISTORY_TEXT, MASTER_ADD_ROLES, MASTER_HISTORY_DAYS, MASTER_LOG_ACTION_LABEL, MASTER_LOG_SOURCE_LABEL, MASTER_LOG_TYPE, MASTER_LOG_TYPE_LABEL, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS, masterFieldLabel } from '../constants/masters'
+import { getMasterChanges, getMasterHistory, setMasterActive, listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSkus, listPepWarehouses, type ChannelCustomerItem, type ChannelSkuItem, type ChannelWarehouseItem, type MasterHistoryItem, type PepSkuItem, type PepWarehouseItem } from '../api/masters'
+import { ADD_TEXT, EDIT_TEXT, HISTORY_TEXT, MASTER_ADD_ROLES, SWITCH_OFF_EFFECT, SWITCH_ON_EFFECT, MASTER_HISTORY_DAYS, MASTER_LOG_ACTION_LABEL, MASTER_LOG_SOURCE_LABEL, MASTER_LOG_TYPE, MASTER_LOG_TYPE_LABEL, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS, masterFieldLabel } from '../constants/masters'
 import { Timeline, type TimelineOptions } from './ops/ShipmentHistory'
 import { useAuth } from '../auth/AuthContext'
-import { MasterAddDrawer, type AddMaster } from '../components/MasterAddDrawer'
+import { MasterAddDrawer, type AddMaster, type EditMaster } from '../components/MasterAddDrawer'
 import { MASTER_TABS } from '../lib/data'
 import { OPS_CHANNELS, type ColKind } from '../lib/ops'
 import { Badge, Button, Drawer, PageTitle } from '../components/ui'
@@ -18,10 +18,19 @@ type Row = Record<string, string | number>
 type FieldDef = { key: string; label: string; options?: readonly string[]; type?: 'number' }
 
 // ---- Seed data --------------------------------------------------------------
+/** The Edit form's values of each row ("<master>:<row id>" -> form key -> value as text), filled by the row builders. */
+const FORM_VALUES = new Map<string, Record<string, string>>()
+const sv = (x: unknown) => (x === null || x === undefined ? '' : Array.isArray(x) ? x.join(', ') : String(x))
+const remember = (master: string, rid: string | number | null, values: Record<string, unknown>) => {
+  if (rid !== null && rid !== '') FORM_VALUES.set(`${master}:${rid}`, Object.fromEntries(Object.entries(values).map(([k, x]) => [k, sv(x)])))
+}
 /* PEP SKU master from the backend. Category, sub-category and filling have no master_skus column (NOT_IN_DB);
    no Recipe column (user, 2026-10-15: not needed);
    a column that exists but is empty stays '' and the grid shows "—". */
-const pepRow = (s: PepSkuItem): Row => ({
+const pepRow = (s: PepSkuItem): Row => (remember('pep', s.id, {
+  pepCode: s.pepCode, productName: s.productName, brand: s.brand, productType: s.productType, mrp: s.mrp, gstTaxType: s.gstTaxType, eanCode: s.eanCode,
+  hsnCode: s.hsnCode, lengthMm: s.lengthMm, widthMm: s.widthMm, heightMm: s.heightMm, weightG: s.weightG, shelfLife: s.shelfLife,
+}), {
   rid: s.id, code: s.pepCode, name: s.productName ?? '', brand: s.brand ?? '', type: s.productType ?? '',
   category: NOT_IN_DB, sub: NOT_IN_DB, filling: NOT_IN_DB, mrp: s.mrp ?? '', gst: s.gstTaxType ? `${s.gstTaxType}%` : '',
   ean: s.eanCode ?? '', hsn: s.hsnCode ?? '',
@@ -33,22 +42,31 @@ const pepRow = (s: PepSkuItem): Row => ({
 })
 /* Channel SKU master from the backend. A channel code is unique only within its channel, so the row key is the DB id.
    margin comes as a fraction (0.27) and is shown as a percent; the listing status has no column (NOT_IN_DB). */
-const channelSkuRow = (c: ChannelSkuItem): Row => ({
+const channelSkuRow = (c: ChannelSkuItem): Row => (remember('channelSku', c.id, {
+  channelId: c.channelId, channelCode: c.channelCode, pepCode: c.pepCode, productName: c.productName, brand: c.brand, mrp: c.mrp,
+  marginPercent: c.margin !== null ? Math.round(c.margin * 10000) / 100 : null, rateAfterMargin: c.rateAfterMargin, eanCode: c.eanCode,
+}), {
   id: c.id, rid: c.id, channel: c.channelName ?? '', channelSku: c.channelCode ?? '', pepCode: c.pepCode, name: c.productName ?? '', brand: c.brand ?? '',
-  mrp: c.mrp ?? '', margin: c.margin !== null ? Math.round(c.margin * 10000) / 100 : '', rate: c.rateAfterMargin ?? '', ean: c.eanCode ?? '', status: NOT_IN_DB,
+  mrp: c.mrp ?? '', margin: c.margin !== null ? Math.round(c.margin * 10000) / 100 : '', rate: c.rateAfterMargin ?? '', ean: c.eanCode ?? '',
+  status: c.isActive ? SKU_STATUS.ACTIVE : SKU_STATUS.INACTIVE,
 })
 /* Channel / Customer master from the backend: one row per master_channels row, with its type and expiry days (2026-10-28).
    Legal name, billing GSTIN, payment terms, default margin and PO source have no column (NOT_IN_DB). */
 const list = (v: string[]) => v.join(', ')
 const expiryText = (min: number | null, max: number | null) => min === null && max === null ? '' : min === max || max === null ? `${min} days` : `${min ?? '?'} – ${max} days`
-const customerRow = (c: ChannelCustomerItem): Row => ({
+const customerRow = (c: ChannelCustomerItem): Row => (remember('customer', c.id, {
+  displayName: c.displayName, slug: c.slug, aliases: c.aliases, channelType: c.channelType, expiryDaysMin: c.expiryDaysMin, expiryDaysMax: c.expiryDaysMax,
+}), {
   id: c.id, rid: c.id, channel: c.displayName, slug: c.slug, aliases: list(c.aliases), channelCodes: list(c.channelCodes), facilities: list(c.facilityCodes), locations: c.locationCount,
   legal: NOT_IN_DB, type: c.channelType ?? '', expiry: expiryText(c.expiryDaysMin, c.expiryDaysMax), gstin: NOT_IN_DB, terms: NOT_IN_DB, margin: NOT_IN_DB, poSource: NOT_IN_DB,
   status: c.isActive ? SKU_STATUS.ACTIVE : SKU_STATUS.INACTIVE,
 })
 /* PEP warehouses: every master_facilities row (2026-10-28: was only the 2 codes the locations use) with its columns and
    what it serves; only City has no column. */
-const pepWhRow = (w: PepWarehouseItem): Row => ({
+const pepWhRow = (w: PepWarehouseItem): Row => (remember('pepWh', w.id, {
+  code: w.facilityCode, name: w.name, entity: w.entity, pickupLocation: w.pickupLocation, state: w.state, facilityType: w.facilityType,
+  billToGstin: w.billToGstin, shipToGstin: w.shipToGstin, remarks: w.remarks,
+}), {
   rid: w.id ?? '', facility: w.facilityCode, name: w.name ?? '', spellings: list(w.spellings), locations: w.locationCount, channels: list(w.channels),
   entity: w.entity ?? '', location: w.pickupLocation ?? '', city: NOT_IN_DB, state: w.state ?? '', type: w.facilityType ?? '',
   billTo: w.billToGstin ?? '', shipTo: w.shipToGstin ?? '', remarks: w.remarks ?? '', main: w.mainFacilityCode ?? '',
@@ -57,7 +75,13 @@ const pepWhRow = (w: PepWarehouseItem): Row => ({
 })
 /* Channel warehouses = details_channels (one delivery location each), incl. city, appointment, status, drop and in-transit
    location (2026-10-28: the data was there, the page did not read it). */
-const chWhRow = (w: ChannelWarehouseItem): Row => ({
+const chWhRow = (w: ChannelWarehouseItem): Row => (remember('chWh', w.id, {
+  channelId: w.channelId, locationCode: w.locationCode, uniwareCustomerCode: w.uniwareCustomerCode, uniwareChannelCode: w.channelCode,
+  facilityCode: w.facilityCode, consigneeName: w.consigneeName, consigneeGstNumber: w.consigneeGstNumber, consigneeState: w.consigneeState,
+  consigneePinCode: w.consigneePinCode, shippingAddress: w.shippingAddress, billingAddress: w.billingAddress, buyerType: w.buyerType,
+  buyerGstNumber: w.buyerGstNumber, buyerState: w.buyerState, buyerPinCode: w.buyerPinCode, tallyLedgerName: w.tallyLedgerName,
+  appointmentChannel: w.appointmentChannel, city: w.city,
+}), {
   id: w.id, rid: w.id, channel: w.channelName, code: w.locationCode ?? '', customer: w.uniwareCustomerCode ?? '', channelCode: w.channelCode ?? '', servedBy: w.facilityCode ?? '',
   consignee: w.consigneeName ?? '', gstin: w.consigneeGstNumber ?? '', state: w.consigneeState ?? '', pincode: w.consigneePinCode ?? '', city: w.city ?? '',
   shipAddr: w.shippingAddress ?? '', billAddr: w.billingAddress ?? '', buyerType: w.buyerType ?? '', buyerGst: w.buyerGstNumber ?? '', buyerState: w.buyerState ?? '',
@@ -223,8 +247,18 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
   const canAdd = ADDABLE.includes(id) && isMasterAdmin
   const [adding, setAdding] = useState(false)
   const [historyOf, setHistoryOf] = useState<Row | null>(null)
+  const [editing, setEditing] = useState<Row | null>(null)
+  const [switching, setSwitching] = useState<Row | null>(null)
   const [listingsOf, setListingsOf] = useState<Row | null>(null)
   const [notice, setNotice] = useState('')
+  /** After an edit / switch: this list, the channel list, the Add forms' lists and every history reload. */
+  const refreshAfterChange = () => {
+    void queryClient.invalidateQueries({ queryKey: mastersKey(id) })
+    void queryClient.invalidateQueries({ queryKey: ['masters', 'form-options'] })
+    void queryClient.invalidateQueries({ queryKey: ['masters', 'history'] })
+    void queryClient.invalidateQueries({ queryKey: ['masters', 'changes'] })
+    if (id !== 'customer') void queryClient.invalidateQueries({ queryKey: mastersKey('customer') })
+  }
   const [channel, setChannel] = useState('All')
   const channels = useMemo(() => (c.readOnly ? distinct(rows, 'channel') : [...OPS_CHANNELS]), [c, rows])
   const counts = useMemo(() => Object.fromEntries(channels.map((ch) => [ch, rows.filter((r) => r.channel === ch).length])), [channels, rows])
@@ -265,11 +299,22 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
           { label: 'Actions', render: (r) => (
             <span className="flex items-center gap-1 text-ink-600" onClick={(e) => e.stopPropagation()}>
               <IconBtn title="View" onClick={() => setEdit({ row: r, prev: String(r[c.key]) })}><Eye className="size-3.5" /></IconBtn>
+              {isMasterAdmin && <IconBtn title={r.rid ? 'Edit (keys locked)' : HISTORY_TEXT.NO_ROW} disabled={!r.rid} onClick={() => setEditing(r)}><Pencil className="size-3.5" /></IconBtn>}
+              {isMasterAdmin && <IconBtn title={!r.rid ? HISTORY_TEXT.NO_ROW : r.status === SKU_STATUS.INACTIVE ? 'Switch on' : 'Switch off'} disabled={!r.rid} onClick={() => setSwitching(r)}>
+                <Power className={`size-3.5 ${r.status === SKU_STATUS.INACTIVE ? 'text-ink-400' : 'text-ok'}`} /></IconBtn>}
               <IconBtn title={r.rid ? 'History: who changed what' : HISTORY_TEXT.NO_ROW} disabled={!r.rid} onClick={() => setHistoryOf(r)}><History className="size-3.5" /></IconBtn>
               {id === 'pep' && <IconBtn title="Channel listings: how each channel lists this SKU" onClick={() => setListingsOf(r)}><Layers className="size-3.5" /></IconBtn>}
             </span>
           ) },
         ]} />
+      {editing && (
+        <MasterAddDrawer master={id as EditMaster} edit={{ id: String(editing.rid), values: FORM_VALUES.get(`${id}:${editing.rid}`) ?? {} }}
+          onClose={() => setEditing(null)} onAdded={(message) => { setEditing(null); setNotice(message); refreshAfterChange() }} />
+      )}
+      {switching && (
+        <SwitchDrawer master={id} row={switching} title={String(switching[c.titleKey ?? c.key])} onClose={() => setSwitching(null)}
+          onDone={(message) => { setSwitching(null); setNotice(message); refreshAfterChange() }} />
+      )}
       {historyOf && <RowHistoryDrawer type={MASTER_LOG_TYPE[id]} row={historyOf} title={String(historyOf[c.titleKey ?? c.key])} sub={c.title} onClose={() => setHistoryOf(null)} />}
       {listingsOf && <ChannelListingsDrawer pepCode={String(listingsOf.code)} name={String(listingsOf.name ?? '')} onClose={() => setListingsOf(null)} />}
       {edit && <EditDrawer cfg={c} row={edit.row} isNew={edit.prev === undefined} onClose={() => setEdit(null)} onSave={(r) => { onSave(r, edit.prev); setEdit(null) }} />}
@@ -414,6 +459,43 @@ function ChannelListingsDrawer({ pepCode, name, onClose }: { pepCode: string; na
           </div>
         )}
       {!q.isPending && !q.isError && <p className="mt-2 text-[11.5px] text-ink-400">{rows.length} channel listing{rows.length === 1 ? '' : 's'}</p>}
+    </Drawer>
+  )
+}
+
+/** Switch a row on / off (never deleted): what it does to new POs, an optional remark, logged in the row's History. */
+function SwitchDrawer({ master, row, title, onClose, onDone }: { master: string; row: Row; title: string; onClose: () => void; onDone: (message: string) => void }) {
+  const on = row.status === SKU_STATUS.INACTIVE
+  const [remark, setRemark] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [failed, setFailed] = useState('')
+  const go = async () => {
+    setSaving(true)
+    setFailed('')
+    try {
+      await setMasterActive(MASTER_LOG_TYPE[master], String(row.rid), { active: on, ...(remark.trim() ? { remark: remark.trim() } : {}) })
+      onDone(EDIT_TEXT.SWITCHED(title, on))
+    } catch (e) {
+      setFailed(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <Drawer open onClose={onClose}
+      title={<span className="inline-flex items-center gap-2"><Power className="size-4 text-ink-600" />{on ? 'Switch on' : 'Switch off'} · <span className="font-mono">{title}</span></span>}
+      sub={CFG[master].title}
+      footer={(close) => <><Button onClick={close}>Cancel</Button><Button variant="primary" onClick={() => void go()} disabled={saving}>{saving ? 'Saving…' : on ? 'Switch on' : 'Switch off'}</Button></>}>
+      <div className="space-y-3 text-[13px]">
+        <p className="rounded-md border border-line bg-canvas px-3 py-2 text-ink-600">{on ? SWITCH_ON_EFFECT : SWITCH_OFF_EFFECT[master]}</p>
+        <p className="text-[12px] text-ink-400">The row is never deleted: it can be switched {on ? 'off' : 'on'} again at any time.</p>
+        {failed && <div className="flex items-center gap-2 rounded-md border border-crit/30 bg-crit-soft px-3 py-2 text-[12px] text-crit"><AlertTriangle className="size-4" />{failed}</div>}
+        <label className="block">
+          <div className="mb-1 text-[12px] font-medium text-ink-600">{HISTORY_TEXT.REMARK}</div>
+          <textarea rows={2} maxLength={1000} value={remark} onChange={(e) => setRemark(e.target.value)} className={inputCls} />
+          <div className="mt-1 text-[11px] text-ink-400">{HISTORY_TEXT.REMARK_HINT}</div>
+        </label>
+      </div>
     </Drawer>
   )
 }
