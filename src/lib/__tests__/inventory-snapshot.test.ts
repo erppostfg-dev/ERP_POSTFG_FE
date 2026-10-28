@@ -59,13 +59,13 @@ describe('browser cache', () => {
     expect(await getCached('k1')).toEqual({ etag: 'e1', text: 'a,b\n' })
   })
 
-  it('drops the least recently used past 18 files', async () => {
-    for (let i = 0; i < 20; i++) {
+  it('drops the least recently used past 30 files', async () => {
+    for (let i = 0; i < 32; i++) {
       await putCached(`k${i}`, 'e', 'x')
       await new Promise((r) => setTimeout(r, 2))
     }
     const keys = await cachedKeys()
-    expect(keys).toHaveLength(18)
+    expect(keys).toHaveLength(30)
     expect(keys).not.toContain('k0')
     expect(keys).not.toContain('k1')
   })

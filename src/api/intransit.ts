@@ -276,7 +276,7 @@ export const downloadLog = (id: string) => saveFrom(`${E}/runs/${id}/log`, `intr
 
 // ---- CSV viewer ----------------------------------------------------------------------------------------------------
 
-/** A page of a CSV on the server (GET .../preview). */
+/** A page of a table in the viewer (worked out in this browser from the whole file, lib/csvTable.ts). */
 export interface CsvPage {
   name: string
   size: number
@@ -306,10 +306,49 @@ const csvBase = (t: CsvTarget) =>
 
 const dateQs = (t: CsvTarget): Record<string, string> => (t.kind === 'input' && t.date ? { date: t.date } : {})
 
-export function previewCsv(t: CsvTarget, page: { offset: number; limit: number; q: string }, signal?: AbortSignal): Promise<CsvPage> {
-  if (pv()) return P.previewCsv(t.name, page)
-  const qs = new URLSearchParams({ offset: String(page.offset), limit: String(page.limit), ...(page.q ? { q: page.q } : {}), ...dateQs(t) })
-  return api<CsvPage>(`${csvBase(t)}/preview?${qs}`, { signal })
+/** Preview mode only: the made-up page (the real viewer pages the whole file here, lib/csvTable.ts). */
+export const isPreview = (): boolean => pv()
+export const previewCsvPage = (t: CsvTarget, page: { offset: number; limit: number; q: string }): Promise<CsvPage> => P.previewCsv(t.name, page)
+
+/** Where a table's whole file is read from (GET .../table): also its key in this browser's cache. */
+export const csvTableUrl = (t: CsvTarget): string => {
+  const qs = new URLSearchParams(dateQs(t)).toString()
+  return `${csvBase(t)}/table${qs ? `?${qs}` : ''}`
+}
+
+/** UTF-8, else cp1252 (Sheet35(2) and Shipment_Status come in cp1252), as the server reads them. */
+const decodeCsv = (buf: ArrayBuffer): string => {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf)
+  } catch {
+    return new TextDecoder('windows-1252').decode(buf)
+  }
+}
+
+/**
+ * GET .../table: the whole file (gzip on the wire), or 'not-modified' when `etag` is still its version (the browser's
+ * copy is current: nothing is downloaded).
+ */
+export async function getCsvTable(t: CsvTarget, etag: string | null, signal?: AbortSignal): Promise<{ text: string; etag: string; size: number; modified: string } | 'not-modified'> {
+  let res: Response
+  try {
+    res = await fetch(apiUrl(csvTableUrl(t)), { credentials: 'include', signal, headers: etag ? { 'If-None-Match': `"${etag}"` } : {} })
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw err
+    throw new ApiError(0, ERROR_CODE.NETWORK, 'Cannot reach the server')
+  }
+  if (res.status === 304) return 'not-modified'
+  if (!res.ok) {
+    const e = (await res.json().catch(() => null))?.error
+    throw new ApiError(res.status, e?.code ?? `HTTP_${res.status}`, e?.message ?? res.statusText, e?.details)
+  }
+  const text = decodeCsv(await res.arrayBuffer())
+  return {
+    text,
+    etag: (res.headers.get('ETag') ?? '').replace(/"/g, ''),
+    size: Number(res.headers.get('X-File-Size') ?? text.length),
+    modified: new Date(res.headers.get('Last-Modified') ?? Date.now()).toISOString(),
+  }
 }
 
 /** POST /intransit/final-sku/variants: map combo variants to their base in Final SKU Mapping (a base not in Split1 is added there). */
