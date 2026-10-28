@@ -26,6 +26,9 @@ const pepRow = (s: PepSkuItem): Row => ({
   ean: s.eanCode ?? '', hsn: s.hsnCode ?? '',
   size: s.lengthMm !== null && s.widthMm !== null && s.heightMm !== null ? `${s.lengthMm} × ${s.widthMm} × ${s.heightMm}` : '',
   weight: s.weightG ?? '', shelfLife: s.shelfLife ?? '', status: s.isActive ? SKU_STATUS.ACTIVE : SKU_STATUS.INACTIVE,
+  // shown since 2026-10-28 (the data was in the DB): base SKU, expiry basis, the In-transit report's fields
+  baseSku: s.finalPepCode ?? '', expiryFrom: s.determineExpiryFrom ?? '', itName: s.intransitName ?? '', itType: s.intransitType ?? '',
+  itCount: s.intransitCategory ?? '', itMrp: s.intransitMrp ?? '', itCogs: s.intransitCogs ?? '', itConsider: s.intransitConsider ? 'Yes' : 'No',
 })
 /* Channel SKU master from the backend. A channel code is unique only within its channel, so the row key is the DB id.
    margin comes as a fraction (0.27) and is shown as a percent; the listing status has no column (NOT_IN_DB). */
@@ -33,25 +36,32 @@ const channelSkuRow = (c: ChannelSkuItem): Row => ({
   id: c.id, channel: c.channelName ?? '', channelSku: c.channelCode ?? '', pepCode: c.pepCode, name: c.productName ?? '', brand: c.brand ?? '',
   mrp: c.mrp ?? '', margin: c.margin !== null ? Math.round(c.margin * 10000) / 100 : '', rate: c.rateAfterMargin ?? '', ean: c.eanCode ?? '', status: NOT_IN_DB,
 })
-/* Channel / Customer master from the backend: one row per master_channels row. Legal name, type, billing GSTIN, payment
-   terms, default margin and PO source have no column (billing details exist only per location, see channel warehouses). */
+/* Channel / Customer master from the backend: one row per master_channels row, with its type and expiry days (2026-10-28).
+   Legal name, billing GSTIN, payment terms, default margin and PO source have no column (NOT_IN_DB). */
 const list = (v: string[]) => v.join(', ')
+const expiryText = (min: number | null, max: number | null) => min === null && max === null ? '' : min === max || max === null ? `${min} days` : `${min ?? '?'} – ${max} days`
 const customerRow = (c: ChannelCustomerItem): Row => ({
   id: c.id, channel: c.displayName, slug: c.slug, aliases: list(c.aliases), channelCodes: list(c.channelCodes), facilities: list(c.facilityCodes), locations: c.locationCount,
-  legal: NOT_IN_DB, type: NOT_IN_DB, gstin: NOT_IN_DB, terms: NOT_IN_DB, margin: NOT_IN_DB, poSource: NOT_IN_DB, status: c.isActive ? SKU_STATUS.ACTIVE : SKU_STATUS.INACTIVE,
+  legal: NOT_IN_DB, type: c.channelType ?? '', expiry: expiryText(c.expiryDaysMin, c.expiryDaysMax), gstin: NOT_IN_DB, terms: NOT_IN_DB, margin: NOT_IN_DB, poSource: NOT_IN_DB,
+  status: c.isActive ? SKU_STATUS.ACTIVE : SKU_STATUS.INACTIVE,
 })
-/* PEP warehouses: there is no warehouse table, so the backend lists the facility codes of details_channels; only the
-   code, its spellings and what it serves come from the DB. */
+/* PEP warehouses: every master_facilities row (2026-10-28: was only the 2 codes the locations use) with its columns and
+   what it serves; only City has no column. */
 const pepWhRow = (w: PepWarehouseItem): Row => ({
-  facility: w.facilityCode, spellings: list(w.spellings), locations: w.locationCount, channels: list(w.channels),
-  entity: NOT_IN_DB, location: NOT_IN_DB, region: NOT_IN_DB, type: NOT_IN_DB, billTo: NOT_IN_DB, shipTo: NOT_IN_DB, status: NOT_IN_DB, remarks: NOT_IN_DB,
+  facility: w.facilityCode, name: w.name ?? '', spellings: list(w.spellings), locations: w.locationCount, channels: list(w.channels),
+  entity: w.entity ?? '', location: w.pickupLocation ?? '', city: NOT_IN_DB, state: w.state ?? '', type: w.facilityType ?? '',
+  billTo: w.billToGstin ?? '', shipTo: w.shipToGstin ?? '', remarks: w.remarks ?? '', main: w.mainFacilityCode ?? '',
+  group: w.intransitGroup ?? '', itType: w.intransitType ?? '', uniwareExport: w.uniwareExport ? 'Yes' : 'No', source: w.source ?? '',
+  status: !w.inMaster ? 'Not in facility master' : w.isActive ? SKU_STATUS.ACTIVE : SKU_STATUS.INACTIVE,
 })
-/* Channel warehouses = details_channels (one delivery location each). City, appointment channel and status have no column. */
+/* Channel warehouses = details_channels (one delivery location each), incl. city, appointment, status, drop and in-transit
+   location (2026-10-28: the data was there, the page did not read it). */
 const chWhRow = (w: ChannelWarehouseItem): Row => ({
   id: w.id, channel: w.channelName, code: w.locationCode ?? '', customer: w.uniwareCustomerCode ?? '', channelCode: w.channelCode ?? '', servedBy: w.facilityCode ?? '',
-  consignee: w.consigneeName ?? '', gstin: w.consigneeGstNumber ?? '', state: w.consigneeState ?? '', pincode: w.consigneePinCode ?? '', city: NOT_IN_DB,
+  consignee: w.consigneeName ?? '', gstin: w.consigneeGstNumber ?? '', state: w.consigneeState ?? '', pincode: w.consigneePinCode ?? '', city: w.city ?? '',
   shipAddr: w.shippingAddress ?? '', billAddr: w.billingAddress ?? '', buyerType: w.buyerType ?? '', buyerGst: w.buyerGstNumber ?? '', buyerState: w.buyerState ?? '',
-  buyerPin: w.buyerPinCode ?? '', ledger: w.tallyLedgerName ?? '', apptPortal: NOT_IN_DB, status: NOT_IN_DB,
+  buyerPin: w.buyerPinCode ?? '', ledger: w.tallyLedgerName ?? '', apptPortal: w.appointmentChannel ?? '', apptType: w.appointmentChannelType ?? '',
+  drop: w.dropLocation ?? '', itLocation: w.intransitLocation ?? '', status: w.isActive ? SKU_STATUS.ACTIVE : SKU_STATUS.INACTIVE,
 })
 /** Masters read from the backend, by config id. */
 const LOADERS: Record<string, (signal: AbortSignal) => Promise<Row[]>> = {
@@ -86,13 +96,16 @@ const CFG: Record<string, Cfg> = {
   pep: {
     title: 'PEP SKU Master', sub: 'Every sellable PEP SKU with its Uniware name, classification, MRP and GST', key: 'code', entity: 'PEP SKUs', addLabel: 'Add SKU',
     search: ['code', 'name', 'category', 'sub'], placeholder: 'Search SKU code, Uniware name, category…',
-    cols: [['SKU Code', 'code', 'mono'], ['Uniware Name', 'name', 'text'], ['Brand', 'brand', 'text'], ['SKU Type', 'type', 'text'], ['Category', 'category', 'text'], ['Sub-Category', 'sub', 'text'], ['Filling', 'filling', 'text'], ['MRP', 'mrp', 'money'], ['GST', 'gst', 'text']],
+    cols: [['SKU Code', 'code', 'mono'], ['Uniware Name', 'name', 'text'], ['Brand', 'brand', 'text'], ['SKU Type', 'type', 'text'], ['Category', 'category', 'text'], ['Sub-Category', 'sub', 'text'], ['Filling', 'filling', 'text'], ['MRP', 'mrp', 'money'], ['GST', 'gst', 'text'], ['Base SKU', 'baseSku', 'mono']],
     fields: [{ key: 'code', label: 'SKU code' }, { key: 'name', label: 'Uniware name' }, { key: 'brand', label: 'Brand' }, { key: 'type', label: 'SKU type' },
       { key: 'category', label: 'Category' }, { key: 'sub', label: 'Sub-category' }, { key: 'filling', label: 'Filling' }, { key: 'mrp', label: 'MRP (₹)' },
       { key: 'gst', label: 'GST' }, { key: 'ean', label: 'EAN' }, { key: 'hsn', label: 'HSN code' },
-      { key: 'size', label: 'Size L × W × H (mm)' }, { key: 'weight', label: 'Weight (g)' }, { key: 'shelfLife', label: 'Shelf life' }, { key: 'status', label: 'Status' }],
+      { key: 'size', label: 'Size L × W × H (mm)' }, { key: 'weight', label: 'Weight (g)' }, { key: 'shelfLife', label: 'Shelf life' }, { key: 'status', label: 'Status' },
+      { key: 'baseSku', label: 'Base SKU (counted as)' }, { key: 'expiryFrom', label: 'Expiry counted from' },
+      { key: 'itName', label: 'In-transit name' }, { key: 'itType', label: 'In-transit type' }, { key: 'itCount', label: 'In-transit count' },
+      { key: 'itMrp', label: 'In-transit MRP (₹)' }, { key: 'itCogs', label: 'In-transit COGS (₹)' }, { key: 'itConsider', label: 'Counted in in-transit stock' }],
     filters: [],
-    filterKeys: [['brand', 'Brand'], ['type', 'SKU Type'], ['gst', 'GST'], ['status', 'Status']],
+    filterKeys: [['brand', 'Brand'], ['type', 'SKU Type'], ['gst', 'GST'], ['status', 'Status'], ['itConsider', 'In-transit stock']],
     readOnly: true,
     trailing: [
       { label: 'Status', render: status },
@@ -112,37 +125,40 @@ const CFG: Record<string, Cfg> = {
   customer: {
     title: 'Channel Master', sub: 'Every sales channel, with the Uniware channels and PEP facilities its delivery locations use', key: 'id', titleKey: 'channel', entity: 'Channels', addLabel: 'Add channel',
     search: ['channel', 'slug', 'aliases', 'channelCodes'], placeholder: 'Search channel, slug, other name, Uniware channel…',
-    cols: [['Channel', 'channel', 'text'], ['Slug', 'slug', 'mono'], ['Uniware Channel', 'channelCodes', 'mono'], ['Locations', 'locations', 'num'], ['Legal Name', 'legal', 'text'], ['Type', 'type', 'text'], ['Billing GSTIN', 'gstin', 'mono'], ['Payment Terms', 'terms', 'text'], ['Default Margin %', 'margin', 'num'], ['PO Source', 'poSource', 'text']],
+    cols: [['Channel', 'channel', 'text'], ['Slug', 'slug', 'mono'], ['Uniware Channel', 'channelCodes', 'mono'], ['Locations', 'locations', 'num'], ['Legal Name', 'legal', 'text'], ['Type', 'type', 'text'], ['Billing GSTIN', 'gstin', 'mono'], ['Payment Terms', 'terms', 'text'], ['Expiry Days', 'expiry', 'text'], ['Default Margin %', 'margin', 'num'], ['PO Source', 'poSource', 'text']],
     fields: [{ key: 'channel', label: 'Channel' }, { key: 'slug', label: 'Slug' }, { key: 'aliases', label: 'Other names (PO intake)' }, { key: 'channelCodes', label: 'Uniware channel code(s)' },
-      { key: 'facilities', label: 'Served from (PEP facility)' }, { key: 'locations', label: 'Delivery locations' }, { key: 'legal', label: 'Legal name' }, { key: 'type', label: 'Type' },
+      { key: 'facilities', label: 'Served from (PEP facility)' }, { key: 'locations', label: 'Delivery locations' }, { key: 'legal', label: 'Legal name' }, { key: 'type', label: 'Type' }, { key: 'expiry', label: 'Expiry days accepted' },
       { key: 'gstin', label: 'Billing GSTIN' }, { key: 'terms', label: 'Payment terms' }, { key: 'margin', label: 'Default margin %' }, { key: 'poSource', label: 'PO source' }, { key: 'status', label: 'Status' }],
     filters: [],
-    filterKeys: [['status', 'Status']],
+    filterKeys: [['type', 'Type'], ['status', 'Status']],
     readOnly: true,
     trailing: [{ label: 'Status', render: status }],
   },
   pepWh: {
     title: 'Warehouses', sub: 'Our dispatch facilities (the Uniware facility codes the channel locations use)', key: 'facility', entity: 'warehouses', addLabel: 'Add warehouse',
-    search: ['facility', 'spellings', 'channels'], placeholder: 'Search facility or channel…',
-    cols: [['Facility', 'facility', 'mono'], ['Spellings in DB', 'spellings', 'mono'], ['Locations Served', 'locations', 'num'], ['Channels', 'channels', 'text'], ['Entity', 'entity', 'text'], ['Location', 'location', 'text'], ['Type', 'type', 'text'], ['Bill-To GSTIN', 'billTo', 'mono'], ['Ship-To GSTIN', 'shipTo', 'mono']],
-    fields: [{ key: 'facility', label: 'Facility code (Unicommerce)' }, { key: 'spellings', label: 'Spellings in DB' }, { key: 'locations', label: 'Channel locations served' }, { key: 'channels', label: 'Channels served' },
-      { key: 'entity', label: 'Entity' }, { key: 'location', label: 'Location' }, { key: 'region', label: 'City, State' }, { key: 'type', label: 'Type' },
-      { key: 'billTo', label: 'Bill-to GSTIN' }, { key: 'shipTo', label: 'Ship-to GSTIN' }, { key: 'status', label: 'Status' }, { key: 'remarks', label: 'Remarks' }],
+    search: ['facility', 'name', 'location', 'channels', 'group'], placeholder: 'Search facility, location, channel, group…',
+    cols: [['Facility', 'facility', 'mono'], ['Location', 'location', 'text'], ['Locations Served', 'locations', 'num'], ['Channels', 'channels', 'text'], ['In-transit Group', 'group', 'text'], ['Uniware Export', 'uniwareExport', 'text'], ['Main Warehouse', 'main', 'mono'], ['Entity', 'entity', 'text'], ['State', 'state', 'text'], ['Type', 'type', 'text'], ['Bill-To GSTIN', 'billTo', 'mono'], ['Ship-To GSTIN', 'shipTo', 'mono']],
+    fields: [{ key: 'facility', label: 'Facility code (Unicommerce)' }, { key: 'name', label: 'Name' }, { key: 'spellings', label: 'Codes used by locations' }, { key: 'locations', label: 'Channel locations served' }, { key: 'channels', label: 'Channels served' },
+      { key: 'entity', label: 'Entity' }, { key: 'location', label: 'Location' }, { key: 'city', label: 'City' }, { key: 'state', label: 'State' }, { key: 'type', label: 'Type' },
+      { key: 'billTo', label: 'Bill-to GSTIN' }, { key: 'shipTo', label: 'Ship-to GSTIN' }, { key: 'main', label: 'Main warehouse (of a child)' }, { key: 'group', label: 'In-transit group' },
+      { key: 'itType', label: 'In-transit type' }, { key: 'uniwareExport', label: 'Uniware export' }, { key: 'source', label: 'Loaded from' }, { key: 'status', label: 'Status' }, { key: 'remarks', label: 'Remarks' }],
     filters: [],
+    filterKeys: [['group', 'In-transit Group'], ['uniwareExport', 'Uniware Export'], ['status', 'Status']],
     readOnly: true,
     trailing: [{ label: 'Status', render: status }],
   },
   chWh: {
     title: 'Channel Location Master', sub: 'Every channel delivery location (DC / FC) and the PEP facility that serves it', key: 'id', titleKey: 'code', entity: 'channel locations', addLabel: 'Add channel location',
     search: ['code', 'channel', 'customer', 'state', 'pincode', 'gstin'], placeholder: 'Search location code, channel, Uniware customer, state, pincode, GSTIN…',
-    cols: [['Location Code', 'code', 'mono'], ['Channel', 'channel', 'text'], ['Uniware Customer', 'customer', 'mono'], ['City', 'city', 'text'], ['State', 'state', 'text'], ['Pincode', 'pincode', 'mono'], ['Consignee GSTIN', 'gstin', 'mono'], ['Served By', 'servedBy', 'mono'], ['Appointment Via', 'apptPortal', 'text']],
+    cols: [['Location Code', 'code', 'mono'], ['Channel', 'channel', 'text'], ['Uniware Customer', 'customer', 'mono'], ['City', 'city', 'text'], ['State', 'state', 'text'], ['Pincode', 'pincode', 'mono'], ['Consignee GSTIN', 'gstin', 'mono'], ['Served By', 'servedBy', 'mono'], ['Appointment', 'apptPortal', 'text'], ['Drop Location', 'drop', 'text']],
     fields: [{ key: 'channel', label: 'Channel' }, { key: 'code', label: 'Location code' }, { key: 'customer', label: 'Uniware customer code' }, { key: 'channelCode', label: 'Uniware channel code' },
       { key: 'servedBy', label: 'Served by (PEP facility)' }, { key: 'consignee', label: 'Consignee name' }, { key: 'gstin', label: 'Consignee GSTIN' }, { key: 'state', label: 'State' },
       { key: 'pincode', label: 'Pincode' }, { key: 'city', label: 'City' }, { key: 'shipAddr', label: 'Shipping address' }, { key: 'billAddr', label: 'Billing address' },
       { key: 'buyerType', label: 'Buyer type' }, { key: 'buyerGst', label: 'Buyer GSTIN' }, { key: 'buyerState', label: 'Buyer state' }, { key: 'buyerPin', label: 'Buyer pincode' },
-      { key: 'ledger', label: 'Tally ledger' }, { key: 'apptPortal', label: 'Appointment via' }, { key: 'status', label: 'Status' }],
+      { key: 'ledger', label: 'Tally ledger' }, { key: 'apptPortal', label: 'Appointment needed' }, { key: 'apptType', label: 'Appointment type' },
+      { key: 'drop', label: 'Drop location' }, { key: 'itLocation', label: 'In-transit location' }, { key: 'status', label: 'Status' }],
     filters: [],
-    filterKeys: [['channel', 'Channel'], ['servedBy', 'Served By'], ['state', 'State']],
+    filterKeys: [['channel', 'Channel'], ['servedBy', 'Served By'], ['state', 'State'], ['city', 'City'], ['status', 'Status']],
     readOnly: true, channelChips: true,
     trailing: [{ label: 'Status', render: status }],
   },

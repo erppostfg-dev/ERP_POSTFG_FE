@@ -19,6 +19,17 @@ export type PepSkuItem = {
   weightG: number | null
   shelfLife: number | null
   isActive: boolean
+  /** The base SKU a variant / combo is counted as (null = itself). */
+  finalPepCode: string | null
+  /** MANUFACTURING_DATE or EXPIRY_DATE. */
+  determineExpiryFrom: string | null
+  /** In-transit report fields. */
+  intransitName: string | null
+  intransitType: string | null
+  intransitCategory: string | null
+  intransitMrp: number | null
+  intransitCogs: number | null
+  intransitConsider: boolean
 }
 
 export function listPepSkus(signal?: AbortSignal) {
@@ -61,6 +72,11 @@ export type ChannelCustomerItem = {
   channelCodes: string[]
   /** PEP facilities that serve its locations. */
   facilityCodes: string[]
+  /** B2B / B2C. */
+  channelType: string | null
+  /** Expiry the channel accepts, in days. */
+  expiryDaysMin: number | null
+  expiryDaysMax: number | null
 }
 
 export function listChannelCustomers(signal?: AbortSignal) {
@@ -69,12 +85,30 @@ export function listChannelCustomers(signal?: AbortSignal) {
 
 /* GET /masters/warehouses/pep: our facilities, built from details_channels.facility_code (there is no warehouse table). */
 
+/* Every facility of master_facilities (2026-10-28), with the locations / channels it serves; inMaster false = a code the
+   locations use that the facility master lacks. */
 export type PepWarehouseItem = {
   facilityCode: string
-  /** Every spelling in the DB, most used first (more than one = a data problem). */
+  /** Location facility codes equal to it ignoring letter case, most used first. */
   spellings: string[]
   locationCount: number
   channels: string[]
+  inMaster: boolean
+  name: string | null
+  entity: string | null
+  pickupLocation: string | null
+  state: string | null
+  facilityType: string | null
+  billToGstin: string | null
+  shipToGstin: string | null
+  remarks: string | null
+  isActive: boolean
+  source: string | null
+  /** The main warehouse of a child one. */
+  mainFacilityCode: string | null
+  intransitGroup: string | null
+  intransitType: string | null
+  uniwareExport: boolean
 }
 
 export function listPepWarehouses(signal?: AbortSignal) {
@@ -103,6 +137,13 @@ export type ChannelWarehouseItem = {
   buyerPinCode: string | null
   tallyLedgerName: string | null
   updatedAt: string | null
+  city: string | null
+  dropLocation: string | null
+  intransitLocation: string | null
+  /** Yes / No, and B2B / B2C. */
+  appointmentChannel: string | null
+  appointmentChannelType: string | null
+  isActive: boolean
 }
 
 export function listChannelWarehouses(signal?: AbortSignal) {
