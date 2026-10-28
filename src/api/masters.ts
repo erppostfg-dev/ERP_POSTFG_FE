@@ -108,3 +108,28 @@ export type ChannelWarehouseItem = {
 export function listChannelWarehouses(signal?: AbortSignal) {
   return api<ChannelWarehouseItem[]>(MASTERS_ENDPOINT.CHANNEL_WAREHOUSES, { signal })
 }
+
+/* Add forms (2026-10-27): GET /masters/form-options + one POST per master; admin / developer only. A refused add is an
+   ApiError VALIDATION_FAILED whose details are [{ field, code, message }] (every problem at once). */
+
+export type MasterFormOptions = {
+  channels: { id: number; name: string; active: boolean }[]
+  facilities: { code: string; name: string | null }[]
+  pepSkus: { code: string; name: string | null; brand: string | null; mrp: number | null; ean: string | null }[]
+  productTypes: string[]
+  gstRates: string[]
+  appointment: string[]
+  buyerTypes: string[]
+  states: string[]
+}
+export type FieldProblem = { field: string; code: string; message: string }
+
+export function getMasterFormOptions(signal?: AbortSignal) {
+  return api<MasterFormOptions>(MASTERS_ENDPOINT.FORM_OPTIONS, { signal })
+}
+
+const post = <T>(path: string, body: unknown) => api<T>(path, { method: 'POST', body: JSON.stringify(body) })
+export const addPepSku = (body: Record<string, unknown>) => post<{ id: string; pepCode: string }>(MASTERS_ENDPOINT.PEP_SKUS, body)
+export const addChannelSku = (body: Record<string, unknown>) => post<{ id: string; channel: string }>(MASTERS_ENDPOINT.CHANNEL_SKUS, body)
+export const addChannel = (body: Record<string, unknown>) => post<{ id: number; displayName: string }>(MASTERS_ENDPOINT.CHANNELS, body)
+export const addChannelLocation = (body: Record<string, unknown>) => post<{ id: string; channel: string }>(MASTERS_ENDPOINT.CHANNEL_WAREHOUSES, body)

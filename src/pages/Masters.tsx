@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { AlertTriangle, History, Layers, Pencil, Plus, RefreshCw } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, History, Layers, Pencil, Plus, RefreshCw, X } from 'lucide-react'
 import { ApiError } from '../api/client'
 import { listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSkus, listPepWarehouses, type ChannelCustomerItem, type ChannelSkuItem, type ChannelWarehouseItem, type PepSkuItem, type PepWarehouseItem } from '../api/masters'
-import { NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS } from '../constants/masters'
+import { ADD_TEXT, MASTER_ADD_ROLES, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS } from '../constants/masters'
+import { useAuth } from '../auth/AuthContext'
+import { MasterAddDrawer, type AddMaster } from '../components/MasterAddDrawer'
 import { MASTER_TABS } from '../lib/data'
 import { OPS_CHANNELS, type ColKind } from '../lib/ops'
 import { Badge, Button, Drawer, PageTitle } from '../components/ui'
@@ -59,6 +61,8 @@ const LOADERS: Record<string, (signal: AbortSignal) => Promise<Row[]>> = {
   pepWh: (signal) => listPepWarehouses(signal).then((items) => items.map(pepWhRow)),
   chWh: (signal) => listChannelWarehouses(signal).then((items) => items.map(chWhRow)),
 }
+/** Masters with an Add form (2026-10-27); Warehouses has no table yet. */
+const ADDABLE: readonly string[] = ['pep', 'channelSku', 'customer', 'chWh'] satisfies AddMaster[]
 const distinct = (rows: Row[], k: string) => [...new Set(rows.map((r) => String(r[k] ?? '')).filter(Boolean))].sort()
 
 // ---- Config per master ------------------------------------------------------
@@ -192,6 +196,13 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
   const c = CFG[id]
   const s = useSection<Row>(rows, c.search)
   const [edit, setEdit] = useState<{ row: Row; prev?: string } | null>(null)
+  // Add forms: admin / developer only for now (user, 2026-10-27); the backend checks the role too
+  const auth = useAuth()
+  const queryClient = useQueryClient()
+  const isMasterAdmin = auth.status === 'signedIn' && auth.user.roles.some((r) => (MASTER_ADD_ROLES as readonly string[]).includes(r))
+  const canAdd = ADDABLE.includes(id) && isMasterAdmin
+  const [adding, setAdding] = useState(false)
+  const [notice, setNotice] = useState('')
   const [channel, setChannel] = useState('All')
   const channels = useMemo(() => (c.readOnly ? distinct(rows, 'channel') : [...OPS_CHANNELS]), [c, rows])
   const counts = useMemo(() => Object.fromEntries(channels.map((ch) => [ch, rows.filter((r) => r.channel === ch).length])), [channels, rows])
@@ -213,9 +224,17 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
       )}
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder={c.placeholder} filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
         entity={c.entity} onExport={(e) => exportRows(id, e, c.fields.map((f) => [f.label, f.key, 'text'] as [string, string, ColKind]), view)}
-        primary={c.readOnly
-          ? <span title={NOT_AVAILABLE_YET}><Button disabled icon={<Plus className="size-4" />}>{c.addLabel}</Button></span>
-          : <PrimaryBtn icon={<Plus className="size-4" />} onClick={() => setEdit({ row: blank() })}>{c.addLabel}</PrimaryBtn>} />
+        primary={canAdd
+          ? <PrimaryBtn icon={<Plus className="size-4" />} onClick={() => setAdding(true)}>{c.addLabel}</PrimaryBtn>
+          : c.readOnly
+            ? <span title={ADDABLE.includes(id) ? ADD_TEXT.ADMIN_ONLY : NOT_AVAILABLE_YET}><Button disabled icon={<Plus className="size-4" />}>{c.addLabel}</Button></span>
+            : <PrimaryBtn icon={<Plus className="size-4" />} onClick={() => setEdit({ row: blank() })}>{c.addLabel}</PrimaryBtn>} />
+      {notice && (
+        <div className="flex items-start gap-2 rounded-[var(--radius)] border border-ok/30 bg-ok-soft px-3 py-2 text-[12.5px] text-ok">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0" /><span className="flex-1">{notice}</span>
+          <button onClick={() => setNotice('')} title="Close"><X className="size-3.5" /></button>
+        </div>
+      )}
       <Reveal open={s.open}><FilterPanel defs={filters} value={s.filters} onApply={(f) => { s.setFilters(f); s.setOpen(false) }} onClose={() => s.setOpen(false)} /></Reveal>
       <DataGrid cols={c.cols} rows={view} rowKey={(r) => String(r[c.key])} sticky={1}
         onRowClick={(r) => setEdit({ row: r, prev: String(r[c.key]) })}
@@ -229,6 +248,17 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
           ) },
         ]} />
       {edit && <EditDrawer cfg={c} row={edit.row} isNew={edit.prev === undefined} onClose={() => setEdit(null)} onSave={(r) => { onSave(r, edit.prev); setEdit(null) }} />}
+      {adding && (
+        <MasterAddDrawer master={id as AddMaster} onClose={() => setAdding(false)}
+          onAdded={(message) => {
+            setAdding(false)
+            setNotice(message)
+            // the new row shows at once: this list, the channel list (location counts) and the form's dropdowns reload
+            void queryClient.invalidateQueries({ queryKey: mastersKey(id) })
+            void queryClient.invalidateQueries({ queryKey: ['masters', 'form-options'] })
+            if (id !== 'customer') void queryClient.invalidateQueries({ queryKey: mastersKey('customer') })
+          }} />
+      )}
     </div>
   )
 }
