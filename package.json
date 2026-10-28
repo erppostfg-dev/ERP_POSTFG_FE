@@ -9,7 +9,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint src --max-warnings 0",
+    "lint:fix": "eslint src --fix",
+    "lint:prune": "eslint src --prune-suppressions",
+    "deps": "depcruise src --config .dependency-cruiser.cjs --ignore-known --output-type err",
+    "knip": "knip",
+    "test:related": "vitest related --run",
+    "check": "npm run typecheck && npm run lint && npm run deps && npm run knip && npm test",
+    "prepare": "node -e \"import('./.husky/install.mjs').catch(() => {})\""
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.2",
@@ -22,15 +30,28 @@
     "xlsx": "file:vendor/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.0",
+    "dependency-cruiser": "^16.10.4",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
     "fake-indexeddb": "6.2.5",
+    "globals": "^16.5.0",
+    "husky": "^9.1.7",
+    "knip": "^5.88.1",
+    "lint-staged": "^15.5.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.72.1",
     "vite": "^8.0.5",
     "vitest": "5.0.3"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,tsx}": "eslint --max-warnings 0 --no-warn-ignored"
   }
 }
