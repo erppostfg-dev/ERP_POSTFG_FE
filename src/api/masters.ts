@@ -1,9 +1,12 @@
 import { api } from './client'
 import { MASTERS_ENDPOINT } from '../constants/masters'
+import type { HistoryItem } from './poOverview'
 
 /* GET /masters/pep-skus: every PEP SKU (master_skus), sorted by pep_code. An empty column comes back as null. */
 
 export type PepSkuItem = {
+  /** master_skus.id (History). */
+  id: string
   pepCode: string
   productName: string | null
   brand: string | null
@@ -19,6 +22,17 @@ export type PepSkuItem = {
   weightG: number | null
   shelfLife: number | null
   isActive: boolean
+  /** The base SKU a variant / combo is counted as (null = itself). */
+  finalPepCode: string | null
+  /** MANUFACTURING_DATE or EXPIRY_DATE. */
+  determineExpiryFrom: string | null
+  /** In-transit report fields. */
+  intransitName: string | null
+  intransitType: string | null
+  intransitCategory: string | null
+  intransitMrp: number | null
+  intransitCogs: number | null
+  intransitConsider: boolean
 }
 
 export function listPepSkus(signal?: AbortSignal) {
@@ -41,6 +55,8 @@ export type ChannelSkuItem = {
   margin: number | null
   rateAfterMargin: number | null
   eanCode: string | null
+  /** Switched off on the page = not used by the PO checks (2026-10-28). */
+  isActive: boolean
 }
 
 export function listChannelSkus(signal?: AbortSignal) {
@@ -61,6 +77,11 @@ export type ChannelCustomerItem = {
   channelCodes: string[]
   /** PEP facilities that serve its locations. */
   facilityCodes: string[]
+  /** B2B / B2C. */
+  channelType: string | null
+  /** Expiry the channel accepts, in days. */
+  expiryDaysMin: number | null
+  expiryDaysMax: number | null
 }
 
 export function listChannelCustomers(signal?: AbortSignal) {
@@ -69,12 +90,32 @@ export function listChannelCustomers(signal?: AbortSignal) {
 
 /* GET /masters/warehouses/pep: our facilities, built from details_channels.facility_code (there is no warehouse table). */
 
+/* Every facility of master_facilities (2026-10-28), with the locations / channels it serves; inMaster false = a code the
+   locations use that the facility master lacks. */
 export type PepWarehouseItem = {
+  /** master_facilities.id; null = a code only locations use (no history). */
+  id: number | null
   facilityCode: string
-  /** Every spelling in the DB, most used first (more than one = a data problem). */
+  /** Location facility codes equal to it ignoring letter case, most used first. */
   spellings: string[]
   locationCount: number
   channels: string[]
+  inMaster: boolean
+  name: string | null
+  entity: string | null
+  pickupLocation: string | null
+  state: string | null
+  facilityType: string | null
+  billToGstin: string | null
+  shipToGstin: string | null
+  remarks: string | null
+  isActive: boolean
+  source: string | null
+  /** The main warehouse of a child one. */
+  mainFacilityCode: string | null
+  intransitGroup: string | null
+  intransitType: string | null
+  uniwareExport: boolean
 }
 
 export function listPepWarehouses(signal?: AbortSignal) {
@@ -103,8 +144,56 @@ export type ChannelWarehouseItem = {
   buyerPinCode: string | null
   tallyLedgerName: string | null
   updatedAt: string | null
+  city: string | null
+  dropLocation: string | null
+  intransitLocation: string | null
+  /** Yes / No, and B2B / B2C. */
+  appointmentChannel: string | null
+  appointmentChannelType: string | null
+  isActive: boolean
 }
 
 export function listChannelWarehouses(signal?: AbortSignal) {
   return api<ChannelWarehouseItem[]>(MASTERS_ENDPOINT.CHANNEL_WAREHOUSES, { signal })
 }
+
+/* Add forms (2026-10-27): GET /masters/form-options + one POST per master; admin / developer only. A refused add is an
+   ApiError VALIDATION_FAILED whose details are [{ field, code, message }] (every problem at once). */
+
+export type MasterFormOptions = {
+  channels: { id: number; name: string; active: boolean }[]
+  facilities: { code: string; name: string | null }[]
+  pepSkus: { code: string; name: string | null; brand: string | null; mrp: number | null; ean: string | null }[]
+  productTypes: string[]
+  gstRates: string[]
+  appointment: string[]
+  buyerTypes: string[]
+  states: string[]
+}
+export type FieldProblem = { field: string; code: string; message: string }
+
+export function getMasterFormOptions(signal?: AbortSignal) {
+  return api<MasterFormOptions>(MASTERS_ENDPOINT.FORM_OPTIONS, { signal })
+}
+
+const post = <T>(path: string, body: unknown) => api<T>(path, { method: 'POST', body: JSON.stringify(body) })
+export const addPepSku = (body: Record<string, unknown>) => post<{ id: string; pepCode: string }>(MASTERS_ENDPOINT.PEP_SKUS, body)
+export const addChannelSku = (body: Record<string, unknown>) => post<{ id: string; channel: string }>(MASTERS_ENDPOINT.CHANNEL_SKUS, body)
+export const addChannel = (body: Record<string, unknown>) => post<{ id: number; displayName: string }>(MASTERS_ENDPOINT.CHANNELS, body)
+export const addChannelLocation = (body: Record<string, unknown>) => post<{ id: string; channel: string }>(MASTERS_ENDPOINT.CHANNEL_WAREHOUSES, body)
+
+/* Masters history (2026-10-28): the same entry shape as the PO Overview history, plus what row it is about. */
+export type MasterHistoryItem = HistoryItem & { type: string; recordId: string | null; rowKey: string; from: 'masters' | 'intransit' }
+export const getMasterHistory = (type: string, id: string, signal?: AbortSignal) => api<MasterHistoryItem[]>(MASTERS_ENDPOINT.HISTORY(type, id), { signal })
+export const getMasterChanges = (q: { type?: string; days: number }, signal?: AbortSignal) =>
+  api<MasterHistoryItem[]>(`${MASTERS_ENDPOINT.CHANGES}?${new URLSearchParams({ ...(q.type ? { type: q.type } : {}), days: String(q.days) })}`, { signal })
+
+/* Edit + switch on / off (2026-10-28, admin / developer; keys locked; logged in the row's History). */
+export type EditBody = { changes: Record<string, unknown>; original: Record<string, unknown>; remark?: string }
+/** 409 MASTER_EDIT_CONFLICT details: what each field is now. */
+export type EditConflict = { field: string; now: string | number | null }
+export const editMasterRow = (type: string, id: string, body: EditBody) =>
+  api<{ changed: string[] }>(MASTERS_ENDPOINT.EDIT(type, id), { method: 'PATCH', body: JSON.stringify(body) })
+export const setMasterActive = (type: string, id: string, body: { active: boolean; remark?: string }) =>
+  post<{ active: boolean; changed: boolean }>(MASTERS_ENDPOINT.ACTIVE(type, id), body)
+

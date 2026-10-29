@@ -1,0 +1,39 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/main.tsx"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}"
+  ],
+  "ignore": [
+    "src/pages/dp/**",
+    "src/api/intransit.ts",
+    "src/constants/intransit.ts",
+    "src/dev/intransitPreview.ts",
+    "src/lib/csvTable*.ts",
+    "src/lib/folderFiles.ts",
+    "src/lib/sheet35*.ts",
+    "src/lib/snapshotCache.ts",
+    "src/pages/Inventory.tsx",
+    "src/pages/Orders.tsx"
+  ],
+  "rules": {
+    "files": "error",
+    "dependencies": "error",
+    "devDependencies": "error",
+    "unlisted": "error",
+    "unresolved": "error",
+    "binaries": "error",
+    "exports": "warn",
+    "nsExports": "warn",
+    "types": "off",
+    "nsTypes": "off",
+    "enumMembers": "off",
+    "duplicates": "warn"
+  },
+  "ignoreDependencies": [
+    "tailwindcss",
+    "husky"
+  ]
+}
