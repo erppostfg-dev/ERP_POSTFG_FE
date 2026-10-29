@@ -32,6 +32,8 @@ export const PATHS = {
   APPROVALS: '/approvals',
   /** Users & Roles (2026-10-15): backend page key /admin (admin / developer). */
   ADMIN: '/admin',
+  /** Feedback (2026-10-29): open to every signed-in person (backend OPEN_PAGES). */
+  FEEDBACK: '/feedback',
 } as const
 
 /**
@@ -51,6 +53,7 @@ export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
   PATHS.AMAZON_INBOUND, // GET /amazon/inbound/* (inbound plans + shipments)
   PATHS.INVENTORY, // GET /intransit/snapshot (the Daily Snapshot's Sheet35(2), worked out in the browser); DRR / aging / WoW not available yet
   PATHS.INTRANSIT_STOCK, // /intransit: input files, API fetches, report builds
+  PATHS.FEEDBACK, // GET /feedback (2026-10-29)
 ])
 
 /**
@@ -60,7 +63,7 @@ export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
 export const SHOW_DUMMY_MARK = import.meta.env.DEV || import.meta.env.VITE_SHOW_DUMMY_MARK === 'true'
 
 /** Query parameters that keep a page's tab / view in the address (lib/urlState.ts): kept on refresh, shareable. */
-export const URL_PARAM = { TAB: 'tab', SECTION: 'section', VIEW: 'view', DAYS: 'days', TEAM: 'team' } as const
+export const URL_PARAM = { TAB: 'tab', SECTION: 'section', VIEW: 'view', DAYS: 'days', TEAM: 'team', ITEM: 'item' } as const
 
 export const isDummyPage = (path: string) => SHOW_DUMMY_MARK && !LIVE_PAGES.has(path)
 
@@ -113,4 +116,5 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   { key: PATHS.APPROVALS, label: 'Approvals', items: [] },
   { key: PATHS.ADMIN, label: 'Users & Roles', items: [] },
+  { key: PATHS.FEEDBACK, label: 'Feedback', items: [] },
 ]

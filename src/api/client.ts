@@ -1,4 +1,5 @@
 import { API_BASE_URL, ERROR_CODE } from '../constants/auth'
+import { rememberError } from '../lib/lastError'
 
 /*
  * Every backend call goes through here: the session cookie is sent (credentials: 'include'), success bodies are
@@ -34,6 +35,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const body = await res.json().catch(() => null)
   if (!res.ok) {
     const err = body?.error
+    // kept for "Report a problem" (lib/lastError.ts); a signed-out check is not an error the person saw
+    if (res.status !== 401) rememberError({ status: res.status, code: err?.code ?? `HTTP_${res.status}`, message: err?.message ?? res.statusText, requestId: err?.requestId ?? res.headers.get('X-Request-Id') ?? undefined, path })
     throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? res.statusText, err?.details)
   }
   return body?.data as T
@@ -50,6 +53,8 @@ export async function apiWithMeta<T, M>(path: string, init: RequestInit = {}): P
   const body = await res.json().catch(() => null)
   if (!res.ok) {
     const err = body?.error
+    // kept for "Report a problem" (lib/lastError.ts); a signed-out check is not an error the person saw
+    if (res.status !== 401) rememberError({ status: res.status, code: err?.code ?? `HTTP_${res.status}`, message: err?.message ?? res.statusText, requestId: err?.requestId ?? res.headers.get('X-Request-Id') ?? undefined, path })
     throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? res.statusText, err?.details)
   }
   return { data: body?.data as T, meta: body?.meta as M }

@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, ChevronDown, UsersRound, ChevronsLeft, ChevronsRight, Database, LineChart, LogOut, Search, Truck } from 'lucide-react'
+import { BadgeCheck, ChevronDown, MessagesSquare, UsersRound, ChevronsLeft, ChevronsRight, Database, LineChart, LogOut, Search, Truck } from 'lucide-react'
 import Analytics from './pages/Analytics'
 import Masters from './pages/Masters'
 import Approvals from './pages/Approvals'
 import Admin from './pages/Admin'
+import Feedback from './pages/Feedback'
+import { ReportProblemButton } from './components/ReportProblem'
 import POOverview from './pages/ops/POOverview'
 import POProcessing from './pages/ops/POProcessing'
 import POWorking from './pages/ops/POWorking'
@@ -40,6 +42,7 @@ const GROUP_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   [PATHS.PLANNING]: LineChart,
   [PATHS.APPROVALS]: BadgeCheck,
   [PATHS.ADMIN]: UsersRound,
+  [PATHS.FEEDBACK]: MessagesSquare,
 }
 
 const BRANDS = ['All', 'mCaffeine', 'Hyphen'] as const
@@ -110,6 +113,7 @@ export default function App() {
     [PATHS.PLANNING_ANALYTICS, <DPAnalytics />],
     [PATHS.APPROVALS, <Approvals />],
     [PATHS.ADMIN, <Admin />],
+    [PATHS.FEEDBACK, <Feedback />],
   ]
 
   // Pages stay alive once opened (hidden when not shown), so switching back keeps their filters, tabs and scroll;
@@ -221,6 +225,8 @@ export default function App() {
           </label>
 
           <div className="ml-auto flex items-center gap-3">
+            {/* Report a problem from any page (2026-10-29): the page and the last error go along */}
+            {auth.status === 'signedIn' && <ReportProblemButton />}
             {/* Who am I: the team when the person has one (e.g. "Warehouse"), else their role(s) (e.g. "Admin") */}
             {auth.status === 'signedIn' && (
               <span className="hidden whitespace-nowrap rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary sm:inline" title={auth.user.email}>
