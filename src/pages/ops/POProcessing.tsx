@@ -14,7 +14,8 @@ import { LINE_ITEMS, LINE_ITEMS_TEXT, UNIWARE_STATE, UNIWARE_STATE_LABEL, UNIWAR
 import { downloadLineItemsCsv, downloadLineItemsExcel } from '../../lib/lineItemsExport'
 import { useAuth } from '../../auth/AuthContext'
 import { ACCESS } from '../../constants/auth'
-import { PATHS } from '../../constants/pages'
+import { PATHS, URL_PARAM } from '../../constants/pages'
+import { oneOf, useUrlParam } from '../../lib/urlState'
 import { Check, Download as DownloadIcon, Upload as UploadIcon, X as XIcon } from 'lucide-react'
 import { listAllPoReview, type PoReviewItem } from '../../api/poReview'
 import { ApiError } from '../../api/client'
@@ -26,12 +27,17 @@ import { getVerifyStates, type VerifyStateItem } from '../../api/poVerify'
 import { VERIFY_STATE, VERIFY_TEXT, type VerifyState } from '../../constants/poVerify'
 import { VerifyPanel } from './VerifyPanel'
 import { ManualUpload } from './ManualUpload'
+import { PoIssues } from './PoIssues'
+import { PO_ISSUES_TEXT } from '../../constants/poIssues'
 
-type Tab = 'processed' | 'review' | 'manual'
+// PO issues (2026-10-29): moved here from Users & Roles, for everyone who can open this page
+const TABS = ['processed', 'review', 'manual', 'issues'] as const
+type Tab = (typeof TABS)[number]
 const SRC_ICON = { API: Zap, Webhook: Webhook, Email: Mail, Manual: FileUp } as const
 
 export default function POProcessing() {
-  const [tab, setTab] = useState<Tab>('processed')
+  // the tab is in the address (?tab=), so a refresh stays on it
+  const [tab, setTab] = useUrlParam<Tab>(PATHS.PO_REVIEW, URL_PARAM.TAB, oneOf(TABS), 'processed')
   const [processedCount, setProcessedCount] = useState<number | undefined>()
   const [reviewCount, setReviewCount] = useState<number | undefined>()
   // Live (2026-10-15): when anyone submits, approves, rejects, or a new PO arrives, both lists reload quietly.
@@ -45,10 +51,12 @@ export default function POProcessing() {
         { key: 'processed', label: 'Processed', count: processedCount },
         { key: 'review', label: 'In Review', count: reviewCount, danger: !!reviewCount },
         { key: 'manual', label: 'Manual Upload' },
+        { key: 'issues', label: PO_ISSUES_TEXT.TAB },
       ]} />
       {tab === 'processed' && <Processed onCount={setProcessedCount} liveTick={liveTick} />}
       {tab === 'review' && <InReview srcIcon={SRC_ICON} onCount={setReviewCount} liveTick={liveTick} />}
       {tab === 'manual' && <ManualUpload canEdit={canEditRoot} liveTick={liveTick} />}
+      {tab === 'issues' && <PoIssues />}
     </div>
   )
 }
@@ -56,7 +64,7 @@ export default function POProcessing() {
 // ---- Processed: completed POs from GET /po-review?status=completed ------------------------------
 
 type ProcessedRow = {
-  id: string; poNumber: string; channel: string; brand: string; processedAt: string
+  id: string; poNumber: string; channel: string; brand: string; poDate: string; processedAt: string
   lines: number | null; units: number | null; value: number | null; saleOrder: string; source: string; file: string
   /** Raw source value (api / email / manual) for the icon, and the subject the Source cell copies. */
   sourceKey: string; subject: string | null
@@ -71,7 +79,8 @@ type ProcessedRow = {
 const PCOLS: [string, keyof ProcessedRow, ColKind][] = [
   // Ingest ID left out of the screen and the download (user, 2026-10-16); rows still use it as their key.
   ['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['Brand', 'brand', 'text'],
-  ['Processed At', 'processedAt', 'mono'], ['Lines', 'lines', 'num'], ['Units', 'units', 'num'], ['Value', 'value', 'money'], ['Sale order', 'saleOrder', 'mono'],
+  // PO Date next to Processed At (user, 2026-10-29)
+  ['PO Date', 'poDate', 'date'], ['Processed At', 'processedAt', 'mono'], ['Lines', 'lines', 'num'], ['Units', 'units', 'num'], ['Value', 'value', 'money'], ['Sale order', 'saleOrder', 'mono'],
 ]
 /** The download (CSV / Excel of the table) also says where each PO stands with Uniware. */
 const PEXPORT: [string, keyof ProcessedRow, ColKind][] = [...PCOLS, ['Check', 'check', 'text'], ['Uniware', 'uniware', 'text']]
@@ -88,7 +97,7 @@ const handoffOf = (r: PoReviewItem): Handoff => ({
 
 const toRow = (r: PoReviewItem): ProcessedRow => ({
   handoff: handoffOf(r), uniware: UNIWARE_STATE_LABEL[stateOf(handoffOf(r))], waitingDays: daysWaiting(handoffOf(r)),
-  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', brand: r.brand ?? '', processedAt: istDateTime(r.completedAt), processedDay: r.completedAt ? istDay(new Date(r.completedAt)) : '',
+  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', brand: r.brand ?? '', poDate: r.poDate ?? '', processedAt: istDateTime(r.completedAt), processedDay: r.completedAt ? istDay(new Date(r.completedAt)) : '',
   lines: r.lines, units: r.units, value: r.poValue, saleOrder: r.saleOrderCode ?? '', source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, sourceKey: r.source, subject: r.subject,
   check: '',
 })

@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, Loader2 } from 'lucide-react'
 import { Badge, Modal } from '../../components/ui'
-import { getPoIssuePos, type ChannelIssues, type IssueGroup, type IssueItem } from '../../api/poIssues'
+import { getPoIssuePos, getPoIssues, poIssuesKey, type ChannelIssues, type IssueGroup, type IssueItem } from '../../api/poIssues'
 import { ISSUE_ITEM_LABEL, ISSUE_KIND_LABEL, PO_ISSUES_TEXT as T, PO_STATUS_LABEL, PO_STATUS_TONE } from '../../constants/poIssues'
 import { downloadExcel } from '../../lib/excelExport'
 import { istDateTime } from '../../lib/time'
 
 /*
- * Users & Roles -> PO issues -> By category (user, 2026-10-23; the default view): the kinds of problems across every
+ * PO Processing & Review -> PO issues -> By category (user, 2026-10-23; the default view): the kinds of problems across every
  * channel as tabs (most POs first); a kind -> one table per channel: the SKU / location / reason, how many POs had it
  * (times) and whether it is still a problem. Excel per channel or for all channels (one sheet each): the SKU and the
  * times only (+ "Now" when fixed ones are included); open ones by default. Same data as By channel, no extra call.
@@ -38,6 +38,9 @@ export function PoIssuesByCategory({ channels, days }: { channels: ChannelIssues
   const [withFixed, setWithFixed] = useState(false)
   const [open, setOpen] = useState<{ channel: string; item: string } | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  // download state (hooks before the early return below)
+  const queryClient = useQueryClient()
+  const [downloading, setDownloading] = useState(false)
   useEffect(() => setNote(null), [kind, withFixed])
 
   if (!categories.length) return <div className="rounded-[var(--radius)] bg-ok-soft px-4 py-8 text-center text-[13px] text-ok">{T.NO_ISSUES}</div>
@@ -59,11 +62,28 @@ export function PoIssuesByCategory({ channels, days }: { channels: ChannelIssues
       rows: rows.map((i) => (withFixed && !outcome ? [i.item, i.pos, T.STATE_LABEL[i.state] ?? i.state] : [i.item, i.pos])),
     }
   }
-  const download = (who: string, list: { channel: string; g: IssueGroup }[]) => {
-    const sheets = list.map((x) => sheetOf(x.channel, x.g.items)).filter((s) => s.rows.length)
-    if (!sheets.length) { setNote(T.EXCEL_NONE); return }
-    setNote(null)
-    void downloadExcel(T.EXCEL_FILE(label, who, days), sheets)
+  // Never a stale file (user, 2026-10-29): every download asks the server for the numbers NOW (fresh=1), builds the
+  // file from that answer and puts it on the screen too, so the screen and the file match.
+  const download = async (who: string, onlyChannel: string | null) => {
+    setDownloading(true)
+    setNote(T.DOWNLOAD_FRESH)
+    try {
+      const fresh = await getPoIssues(days, undefined, true)
+      queryClient.setQueryData(poIssuesKey(days), fresh)
+      const list = fresh.channels
+        .filter((c) => onlyChannel === null || c.channel === onlyChannel)
+        .map((c) => ({ channel: c.channel, g: c.groups.find((g) => g.kind === current.kind) }))
+        .filter((x): x is { channel: string; g: IssueGroup } => !!x.g)
+        .sort((a, b) => b.g.pos - a.g.pos)
+      const sheets = list.map((x) => sheetOf(x.channel, x.g.items)).filter((s) => s.rows.length)
+      if (!sheets.length) { setNote(T.EXCEL_NONE); return }
+      setNote(null)
+      await downloadExcel(T.EXCEL_FILE(label, who, days), sheets)
+    } catch (e) {
+      setNote(T.DOWNLOAD_FAILED(e instanceof Error ? e.message : String(e)))
+    } finally {
+      setDownloading(false)
+    }
   }
 
   return (
@@ -91,7 +111,7 @@ export function PoIssuesByCategory({ channels, days }: { channels: ChannelIssues
               <input type="checkbox" checked={withFixed} onChange={(e) => setWithFixed(e.target.checked)} className="size-4 accent-[var(--color-primary)]" />{T.EXCEL_INCLUDE_FIXED}
             </label>
           )}
-          <button type="button" onClick={() => download(T.ALL_CHANNELS, perChannel)}
+          <button type="button" onClick={() => void download(T.ALL_CHANNELS, null)} disabled={downloading}
             className="pf-press inline-flex h-8 items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3 text-[12.5px] font-semibold text-white hover:opacity-90">
             <Download className="size-3.5" />{T.EXCEL_ALL}
           </button>
@@ -109,7 +129,7 @@ export function PoIssuesByCategory({ channels, days }: { channels: ChannelIssues
                 <div className="text-[13.5px] font-semibold text-ink-900">{channel}</div>
                 <div className="text-[11.5px] text-ink-600">{outcome ? T.POS(g.pos) : T.CHANNEL_HEAD(g.pos, g.open, g.items.length)}</div>
               </div>
-              <button type="button" onClick={() => download(channel, [{ channel, g }])}
+              <button type="button" onClick={() => void download(channel, channel)} disabled={downloading}
                 className="pf-press inline-flex h-7 items-center gap-1 rounded-[var(--radius)] border border-primary/40 px-2.5 text-[12px] font-semibold text-primary hover:bg-primary-soft">
                 <Download className="size-3.5" />{T.EXCEL}
               </button>
@@ -147,7 +167,7 @@ export function PoIssuesByCategory({ channels, days }: { channels: ChannelIssues
 
 /** The POs behind one item (same call as By channel). */
 function ItemPos({ channel, kind, item, days }: { channel: string; kind: string; item: string; days: number }) {
-  const q = useQuery({ queryKey: ['admin', 'po-issues', 'pos', channel, kind, item, days], queryFn: ({ signal }) => getPoIssuePos(channel, kind, item, days, signal) })
+  const q = useQuery({ queryKey: ['po-review', 'issues', 'pos', channel, kind, item, days], queryFn: ({ signal }) => getPoIssuePos(channel, kind, item, days, signal) })
   if (!q.data) return <div className="flex justify-center py-8"><Loader2 className="size-5 animate-spin text-ink-400" /></div>
   return (
     <div className="max-h-[420px] overflow-auto rounded-[var(--radius)] border border-line">

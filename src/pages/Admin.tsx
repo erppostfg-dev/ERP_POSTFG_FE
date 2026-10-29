@@ -11,10 +11,10 @@ import {
 } from '../api/admin'
 import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT, SETTINGS_SECTIONS, type SettingsSection } from '../constants/admin'
 import { istDateTime } from '../lib/time'
+import { PATHS, URL_PARAM } from '../constants/pages'
+import { oneOf, useUrlParam } from '../lib/urlState'
 import type { ColKind } from '../lib/ops'
 import { Toggle, VerifySettings } from './ops/VerifySettings'
-import { PoIssues } from './ops/PoIssues'
-import { PO_ISSUES_TEXT } from '../constants/poIssues'
 import { NotificationsDummy, ReviewRulesDummy } from './SettingsDummy'
 import { IntakeSettings } from './ops/IntakeSettings'
 import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
@@ -25,21 +25,23 @@ import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
  * of roles (user, 2026-10-16: no creating or renaming on the screen; new roles are added by the developer); an admin
  * can change a role's page access (Hidden / View / Edit). Built-in roles (admin, developer) are read-only. Nobody is
  * deleted: people are switched off. Settings tab (2026-10-22): the verify-before-Uniware switch per channel (VerifySettings).
+ * PO issues moved to PO Processing & Review (2026-10-29: for everyone with that page).
  */
 
-type Tab = 'users' | 'roles' | 'issues' | 'settings'
+const TABS = ['users', 'roles', 'settings'] as const
+type Tab = (typeof TABS)[number]
 type Notice = { tone: 'ok' | 'err'; text: string } | null
 const errText = (e: unknown) => (e instanceof ApiError ? (Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message) : String(e))
 
 export default function Admin() {
-  const [tab, setTab] = useState<Tab>('users')
+  const [tab, setTab] = useUrlParam<Tab>(PATHS.ADMIN, URL_PARAM.TAB, oneOf(TABS), 'users')
   const users = useQuery({ queryKey: ['admin', 'users'], queryFn: ({ signal }) => listUsers(signal) })
   const roles = useQuery({ queryKey: ['admin', 'roles'], queryFn: ({ signal }) => listRoles(signal) })
   return (
     <div className="space-y-5">
       <PageTitle title={ADMIN_TEXT.TITLE} sub={ADMIN_TEXT.SUB} />
-      <SubTabs value={tab} onChange={setTab} tabs={[{ key: 'users', label: 'Users', count: users.data?.length }, { key: 'roles', label: 'Roles', count: roles.data?.length }, { key: 'issues', label: PO_ISSUES_TEXT.TAB }, { key: 'settings', label: VERIFY_SETTINGS_TEXT.TAB }]} />
-      <div key={tab} className="pf-tab-in">{tab === 'users' ? <UsersTab /> : tab === 'roles' ? <RolesTab /> : tab === 'issues' ? <PoIssues /> : <SettingsTab />}</div>
+      <SubTabs value={tab} onChange={setTab} tabs={[{ key: 'users', label: 'Users', count: users.data?.length }, { key: 'roles', label: 'Roles', count: roles.data?.length }, { key: 'settings', label: VERIFY_SETTINGS_TEXT.TAB }]} />
+      <div key={tab} className="pf-tab-in">{tab === 'users' ? <UsersTab /> : tab === 'roles' ? <RolesTab /> : <SettingsTab />}</div>
     </div>
   )
 }
@@ -47,7 +49,7 @@ export default function Admin() {
 // ---- Settings: one inner tab per group (SETTINGS_SECTIONS), so more settings can be added later ----------------------
 
 function SettingsTab() {
-  const [section, setSection] = useState<SettingsSection>(SETTINGS_SECTIONS[0].key)
+  const [section, setSection] = useUrlParam<SettingsSection>(PATHS.ADMIN, URL_PARAM.SECTION, oneOf(SETTINGS_SECTIONS.map((s) => s.key)), SETTINGS_SECTIONS[0].key)
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-1 rounded-[var(--radius)] bg-alt/70 p-1">
