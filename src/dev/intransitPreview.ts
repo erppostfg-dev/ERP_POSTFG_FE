@@ -1,5 +1,5 @@
 import type { DailyItem, DayPlan, DaySummary, FetchStep, IntransitRun, InventoryRow, InventoryView, MasterItem, MasterVersion, SavedInput } from '../api/intransit'
-import { PEPIMS_CONNECTOR, type Source } from '../constants/intransit'
+import { PEPIMS_CONNECTOR, SOURCES, type Source } from '../constants/intransit'
 import { PATHS } from '../constants/pages'
 
 /*
@@ -46,10 +46,10 @@ const MASTERS: [string, string, 'daily' | 'on-change'][] = [
 const DAILY: [string, 'upload' | 'api', string, Source | typeof PEPIMS_CONNECTOR | null, 'any-date' | 'today-only' | null][] = [
   ['Shipment_Status.csv', 'api', 'PEPIMS shipment tracker (shipment_orders), last 90 days, read at build', PEPIMS_CONNECTOR, 'today-only'],
   ['PO_Format.csv', 'api', 'PEPIMS PO lines (sku_orders) of those POs, read at build', PEPIMS_CONNECTOR, 'today-only'],
-  ['FK_SOH.csv', 'upload', 'Flipkart Seller Hub - inventory', 'flipkart', 'today-only'],
-  ['FK_GRN.csv', 'upload', 'Flipkart Seller Hub - consignment GRN', null, null],
-  ['Myntra_SOH.csv', 'upload', 'Myntra Partner Portal - inventory', null, null],
-  ['Myntra_GRN.csv', 'upload', 'Myntra Partner Portal - STR inward', null, null],
+  ['FK_SOH.csv', 'upload', 'Flipkart Seller Hub - inventory (or the Seller Hub robot / Flipkart API)', 'flipkart', 'today-only'],
+  ['FK_GRN.csv', 'upload', 'Flipkart Seller Hub - consignment GRN (or the Seller Hub robot)', 'flipkart', 'today-only'],
+  ['Myntra_SOH.csv', 'upload', 'Myntra Partner Portal - inventory (or the Partner Portal robot)', 'myntra', 'today-only'],
+  ['Myntra_GRN.csv', 'upload', 'Myntra Partner Portal - STR inward (or the Partner Portal robot)', 'myntra', 'today-only'],
   ['Amazon_SOH.csv', 'api', 'Amazon SP-API (inventory ledger)', 'amazon', 'any-date'],
   ['Amazon_GRN.csv', 'api', 'Amazon SP-API (inbound shipments)', 'amazon', 'today-only'],
   ['Export-B2B Sale Orders.csv', 'api', 'Uniware export: B2B Sale Orders', 'uniware', 'any-date'],
@@ -57,10 +57,14 @@ const DAILY: [string, 'upload' | 'api', string, Source | typeof PEPIMS_CONNECTOR
   ['Export-Inventory Snapshot.csv', 'api', 'Uniware export: Inventory Snapshot', 'uniware', 'today-only'],
 ]
 const FETCH_KEY: Record<string, string> = {
-  'FK_SOH.csv': 'soh', 'Amazon_SOH.csv': 'soh', 'Amazon_GRN.csv': 'grn', 'Export-B2B Sale Orders.csv': 'b2b', 'Purchase_Order.csv': 'po', 'Export-Inventory Snapshot.csv': 'inventory',
+  'FK_SOH.csv': 'soh', 'FK_GRN.csv': 'grn', 'Myntra_SOH.csv': 'soh', 'Myntra_GRN.csv': 'grn', 'Amazon_SOH.csv': 'soh', 'Amazon_GRN.csv': 'grn', 'Export-B2B Sale Orders.csv': 'b2b', 'Purchase_Order.csv': 'po', 'Export-Inventory Snapshot.csv': 'inventory',
 }
-/** Flipkart has no login in the preview, like the real setup today. */
-const CONFIGURED: Record<Source, boolean> = { amazon: true, uniware: true, flipkart: false }
+/** Like the real setup on 2026-10-28: the Flipkart robot works, the Myntra robot's login is not proven yet. */
+const CONFIGURED: Record<Source, boolean> = { amazon: true, uniware: true, flipkart: true, myntra: false }
+const KEYS: Record<Source, string[]> = {
+  amazon: ['SPAPI_CLIENT_ID', 'SPAPI_CLIENT_SECRET', 'SPAPI_REFRESH_TOKEN'], uniware: ['UNIWARE_TENANT', 'UNIWARE_USERNAME', 'UNIWARE_PASSWORD'],
+  flipkart: ['FLIPKART_SELLER_USER', 'FLIPKART_SELLER_PASSWORD'], myntra: ['MYNTRA_PARTNER_USER', 'MYNTRA_PARTNER_PASSWORD'],
+}
 
 // ---- stored files -----------------------------------------------------------------------------------------------
 
@@ -201,10 +205,10 @@ const plan = (date: string): DayPlan => {
     date, today: t, days,
     masters: { ok: masterItems.filter((m) => m.present && !m.stale).length, total: masterItems.length, items: masterItems },
     daily: { ok: dailyItems.filter((d) => d.on === 'date').length, total: dailyItems.length, items: dailyItems },
-    sources: (['amazon', 'uniware', 'flipkart'] as Source[]).map((source) => {
+    sources: SOURCES.map((source) => {
       const own = DAILY.filter((d) => d[3] === source)
       return {
-        source, configured: CONFIGURED[source], missingKeys: CONFIGURED[source] ? [] : ['FLIPKART_APP_ID', 'FLIPKART_APP_SECRET'],
+        source, configured: CONFIGURED[source], missingKeys: CONFIGURED[source] ? [] : KEYS[source],
         files: own.map((d) => d[0]), fetchable: CONFIGURED[source] ? own.filter((d) => d[4] === 'any-date' || date === t).map((d) => d[0]) : [],
       }
     }),

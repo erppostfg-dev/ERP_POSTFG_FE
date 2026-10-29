@@ -86,7 +86,7 @@ export default function ReportPanel({ run, canEdit, onNotice }: { run: Intransit
             )}
             {r.hasReport && (
               <p className="text-[12px] text-ink-600">
-                Its tables (Sheet35(2), Full_Shipment_Enhanced, Final Sheet35(2)) are in{' '}
+                Its tables (SKU × Location, Full_Shipment_Enhanced, Final Stock) are in{' '}
                 <Link to={PATHS.INVENTORY} className="font-medium text-primary hover:underline">Inventory Calculation</Link>, for the latest report.
               </p>
             )}

@@ -200,8 +200,11 @@ function StepFiles({ plan, canEdit, up, openCsv, onNotice, onFolder, sourceRunni
   plan: DayPlan; canEdit: boolean; up: Uploader; openCsv: OpenCsv; onNotice: OnNotice; onFolder: (l: FolderFile[]) => void
   sourceRunning: (s: Source) => IntransitRun | undefined; onChanged: () => void
 }) {
-  const uploads = plan.daily.items.filter((d) => d.group === 'upload')
-  const apis = plan.daily.items.filter((d) => d.group === 'api')
+  // A portal file its connector can fetch now (FK_SOH / FK_GRN once the Seller Hub robot is set up, 2026-10-28) is listed
+  // with the APIs, keeping its upload button; otherwise (not set up, or a past day of a today-only file) it stays a portal upload.
+  const viaApi = (d: DailyItem): boolean => d.group === 'api' || (d.fetchable && !!d.connector && d.connector !== PEPIMS_CONNECTOR)
+  const uploads = plan.daily.items.filter((d) => !viaApi(d))
+  const apis = plan.daily.items.filter(viaApi)
   const pepims = apis.filter((d) => d.connector === PEPIMS_CONNECTOR)
   const done = plan.daily.ok === plan.daily.total
   const [open, setOpen] = useState<boolean | null>(null)
@@ -302,9 +305,14 @@ function StepFiles({ plan, canEdit, up, openCsv, onNotice, onFolder, sourceRunni
               return <SourceRow key={s} source={s} files={own} plan={plan} canEdit={canEdit} running={sourceRunning(s)} fileRow={fileRow} onNotice={onNotice} onChanged={onChanged} />
             })}
           </div>
-          {uploads.some((d) => d.connector) && (
-            <p className="mt-2 text-[11.5px] text-ink-400">FK_SOH is uploaded by hand until the Flipkart API login is set up.</p>
-          )}
+          {/* portal files a robot could fetch but cannot now: one line per portal saying why */}
+          {SOURCES.map((s) => {
+            const own = uploads.filter((d) => d.connector === s)
+            if (!own.length) return null
+            const names = own.map((d) => d.name.replace(/\.csv$/, ''))
+            const why = own.some((d) => d.notFetchable?.includes('not set up')) ? `until the ${SOURCE_INFO[s].label} login is set up` : 'for this day'
+            return <p key={s} className="mt-2 text-[11.5px] text-ink-400">{names.join(' and ')} {names.length > 1 ? 'are' : 'is'} uploaded by hand {why}.</p>
+          })}
         </div>
       </div>
     </Step>
@@ -345,7 +353,8 @@ function SourceRow({ source, files, plan, canEdit, running, fileRow, onNotice, o
           </Button>
         )}
       </div>
-      <ul>{files.map((d) => fileRow(d, false))}</ul>
+      {/* a portal file fetched by a robot can still be uploaded by hand */}
+      <ul>{files.map((d) => fileRow(d, d.group === 'upload'))}</ul>
     </div>
   )
 }
