@@ -4,9 +4,10 @@ import { Link } from 'react-router'
 import { PATHS } from '../../../constants/pages'
 import { AlertTriangle, Check, Download, FileText } from 'lucide-react'
 import { Button, Card } from '../../../components/ui'
-import { downloadCsvFile, downloadLog, downloadReport, getRun, type IntransitRun } from '../../../api/intransit'
+import { downloadCsvFile, downloadReport, getRun, type IntransitRun } from '../../../api/intransit'
 import { COMBO_FILES, COMBO_TAB, INTRANSIT_POLL_MS } from '../../../constants/intransit'
 import { ComboTable, pendingCombos, useAddToSplit1, useMapVariants } from '../ComboSplit1'
+import RunLog from './RunLog'
 import { dayLabel, errText, isActive, shortDay, StatusBadge, took, whenOn, type OnNotice } from './shared'
 
 /*
@@ -19,6 +20,7 @@ import { dayLabel, errText, isActive, shortDay, StatusBadge, took, whenOn, type 
 export default function ReportPanel({ run, canEdit, onNotice }: { run: IntransitRun; canEdit: boolean; onNotice: OnNotice }) {
   // 'summary' or the combos
   const [view, setView] = useState<string>('summary')
+  const [logOpen, setLogOpen] = useState(false)
   const live = useQuery({
     queryKey: ['intransit', 'run', run.id],
     queryFn: ({ signal }) => getRun(run.id, signal),
@@ -53,7 +55,7 @@ export default function ReportPanel({ run, canEdit, onNotice }: { run: Intransit
         </div>
         <div className="flex gap-2">
           {r.hasReport && <Button variant="primary" icon={<Download className="size-3.5" />} onClick={() => void downloadReport(r.id).catch(fail)}>Download workbook</Button>}
-          <Button icon={<FileText className="size-3.5" />} onClick={() => void downloadLog(r.id).catch(fail)}>Log</Button>
+          {!isActive(r) && <Button icon={<FileText className="size-3.5" />} onClick={() => setLogOpen((o) => !o)}>{logOpen ? 'Hide log' : 'Log'}</Button>}
         </div>
       </div>
 
@@ -64,8 +66,8 @@ export default function ReportPanel({ run, canEdit, onNotice }: { run: Intransit
             The {f.source} fetch failed ({f.error}), so earlier copies of {f.files.join(', ')} were used.
           </div>
         ))}
-        {isActive(r) && (
-          <pre className="max-h-56 overflow-auto rounded-[var(--radius)] bg-canvas px-3 py-2 font-mono text-[11.5px] text-ink-600">{(r.logTail ?? []).join('\n') || 'Waiting to start…'}</pre>
+        {(isActive(r) || logOpen) && (
+          <RunLog runId={r.id} live={isActive(r)} title={`Report #${r.id} log`} onClose={isActive(r) ? undefined : () => setLogOpen(false)} onFail={fail} />
         )}
         {r.summary && (
           <>

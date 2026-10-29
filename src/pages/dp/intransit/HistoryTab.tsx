@@ -3,11 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, Trash2 } from 'lucide-react'
 import { DataGrid } from '../../../components/kit'
 import { PillToggle } from '../../../components/ui'
-import { deleteRun, downloadLog, downloadPeriod, downloadReport, listPeriods, listRuns, type IntransitRun, type PeriodCopy } from '../../../api/intransit'
+import { deleteRun, downloadPeriod, downloadReport, listPeriods, listRuns, type IntransitRun, type PeriodCopy } from '../../../api/intransit'
 import { INTRANSIT_POLL_MS, SOURCE_INFO, type Source } from '../../../constants/intransit'
 import { istDateTime } from '../../../lib/time'
 import type { ColKind } from '../../../lib/ops'
 import ReportPanel from './ReportPanel'
+import RunLog from './RunLog'
 import { errText, isActive, shortDay, StatusBadge, took, type OnNotice, type OpenCsv } from './shared'
 
 /*
@@ -26,6 +27,8 @@ export default function HistoryTab({ canEdit, onNotice, openCsv }: { canEdit: bo
   const qc = useQueryClient()
   const [kind, setKind] = useState<Kind>('all')
   const [open, setOpen] = useState<string | null>(null)
+  // the run whose log is shown above the list ("Log" on its row)
+  const [logOf, setLogOf] = useState<string | null>(null)
   const runs = useQuery({
     queryKey: ['intransit', 'runs'],
     queryFn: ({ signal }) => listRuns(undefined, signal),
@@ -34,6 +37,7 @@ export default function HistoryTab({ canEdit, onNotice, openCsv }: { canEdit: bo
   const all = runs.data ?? []
   const shown = all.filter((r) => kind === 'all' || (kind === 'report') === (r.kind === 'report'))
   const opened = all.find((r) => r.id === open && r.kind === 'report')
+  const logRun = all.find((r) => r.id === logOf)
   const fail = (err: unknown) => onNotice('warn', errText(err))
 
   const remove = async (id: string) => {
@@ -60,6 +64,10 @@ export default function HistoryTab({ canEdit, onNotice, openCsv }: { canEdit: bo
   return (
     <div className="space-y-4">
       {opened && kind !== 'periods' && <ReportPanel key={opened.id} run={opened} canEdit={canEdit} onNotice={onNotice} />}
+      {logRun && kind !== 'periods' && (
+        <RunLog key={logRun.id} runId={logRun.id} live={isActive(logRun)} onClose={() => setLogOf(null)} onFail={fail}
+          title={`${logRun.kind === 'report' ? 'Report' : `${SOURCE_INFO[logRun.kind as Source]?.label ?? logRun.kind} fetch`} #${logRun.id} log`} />
+      )}
       <div className="flex items-center justify-between gap-3">
         <PillToggle value={kind} onChange={setKind} options={[
           { key: 'all', label: 'All' }, { key: 'report', label: 'Reports' }, { key: 'fetch', label: 'Fetches' }, { key: 'periods', label: 'Weekly / Monthly' },
@@ -83,7 +91,7 @@ export default function HistoryTab({ canEdit, onNotice, openCsv }: { canEdit: bo
                         Expired · see {r.run.report.weekly}
                       </span>
                     )}
-                    <button onClick={() => void downloadLog(r.id).catch(fail)} className="text-primary hover:underline">Log</button>
+                    <button onClick={() => setLogOf(r.id)} className="text-primary hover:underline">Log</button>
                     {canEdit && !isActive(r.run) && <button onClick={() => void remove(r.id)} title="Delete" aria-label={`Delete report ${r.id}`} className="text-ink-400 hover:text-crit"><Trash2 className="size-3.5" /></button>}
                   </span>
                 )
@@ -99,7 +107,7 @@ export default function HistoryTab({ canEdit, onNotice, openCsv }: { canEdit: bo
                       <Eye className="size-3" /> {n.replace(/\.csv$/i, '')}
                     </button>
                   ))}
-                  <button onClick={() => void downloadLog(r.id).catch(fail)} className="ml-1 text-primary hover:underline">Log</button>
+                  <button onClick={() => setLogOf(r.id)} className="ml-1 text-primary hover:underline">Log</button>
                 </span>
               )
             },
