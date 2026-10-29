@@ -14,7 +14,8 @@ import {
 } from '../../constants/amazonInbound'
 import { useAuth } from '../../auth/AuthContext'
 import { ACCESS } from '../../constants/auth'
-import { PATHS } from '../../constants/pages'
+import { PATHS, URL_PARAM } from '../../constants/pages'
+import { oneOf, useUrlParam } from '../../lib/urlState'
 import { fmtDate, type ColKind } from '../../lib/ops'
 import { istDateTime } from '../../lib/time'
 
@@ -25,7 +26,8 @@ import { istDateTime } from '../../lib/time'
  * (editors change them). Reads only POST_FG (GET /amazon/inbound/*); only Refresh asks Amazon.
  */
 
-type Tab = 'plans' | 'shipments' | 'limits'
+const TABS = ['plans', 'shipments', 'limits'] as const
+type Tab = (typeof TABS)[number]
 const label = (s: string) => STATUS_LABEL[s] ?? s
 const n = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v.toLocaleString('en-IN'))
 const short = (planId: string | null) => (planId ? `${planId.slice(0, 10)}…` : INBOUND_TEXT.NO_PLAN)
@@ -351,7 +353,7 @@ function Limits({ canEdit }: { canEdit: boolean }) {
 }
 
 export default function AmazonInbound() {
-  const [tab, setTab] = useState<Tab>('plans')
+  const [tab, setTab] = useUrlParam<Tab>(PATHS.AMAZON_INBOUND, URL_PARAM.TAB, oneOf(TABS), 'plans')
   const [plan, setPlan] = useState<string | null>(null)
   const [ship, setShip] = useState<string | null>(null)
   const { accessFor } = useAuth()

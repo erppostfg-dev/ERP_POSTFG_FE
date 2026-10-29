@@ -11,6 +11,8 @@ import {
 } from '../api/admin'
 import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT, SETTINGS_SECTIONS, type SettingsSection } from '../constants/admin'
 import { istDateTime } from '../lib/time'
+import { PATHS, URL_PARAM } from '../constants/pages'
+import { oneOf, useUrlParam } from '../lib/urlState'
 import type { ColKind } from '../lib/ops'
 import { Toggle, VerifySettings } from './ops/VerifySettings'
 import { NotificationsDummy, ReviewRulesDummy } from './SettingsDummy'
@@ -26,12 +28,13 @@ import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
  * PO issues moved to PO Processing & Review (2026-10-29: for everyone with that page).
  */
 
-type Tab = 'users' | 'roles' | 'settings'
+const TABS = ['users', 'roles', 'settings'] as const
+type Tab = (typeof TABS)[number]
 type Notice = { tone: 'ok' | 'err'; text: string } | null
 const errText = (e: unknown) => (e instanceof ApiError ? (Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message) : String(e))
 
 export default function Admin() {
-  const [tab, setTab] = useState<Tab>('users')
+  const [tab, setTab] = useUrlParam<Tab>(PATHS.ADMIN, URL_PARAM.TAB, oneOf(TABS), 'users')
   const users = useQuery({ queryKey: ['admin', 'users'], queryFn: ({ signal }) => listUsers(signal) })
   const roles = useQuery({ queryKey: ['admin', 'roles'], queryFn: ({ signal }) => listRoles(signal) })
   return (
@@ -46,7 +49,7 @@ export default function Admin() {
 // ---- Settings: one inner tab per group (SETTINGS_SECTIONS), so more settings can be added later ----------------------
 
 function SettingsTab() {
-  const [section, setSection] = useState<SettingsSection>(SETTINGS_SECTIONS[0].key)
+  const [section, setSection] = useUrlParam<SettingsSection>(PATHS.ADMIN, URL_PARAM.SECTION, oneOf(SETTINGS_SECTIONS.map((s) => s.key)), SETTINGS_SECTIONS[0].key)
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-1 rounded-[var(--radius)] bg-alt/70 p-1">

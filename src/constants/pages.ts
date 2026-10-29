@@ -53,8 +53,14 @@ export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
   PATHS.INTRANSIT_STOCK, // /intransit: input files, API fetches, report builds
 ])
 
-/** Dev builds only: mark pages that still show sample data. */
-export const SHOW_DUMMY_MARK = import.meta.env.DEV
+/**
+ * Mark pages that still show sample data: on the laptop (npm run dev) and in builds with VITE_SHOW_DUMMY_MARK=true (the
+ * dev deploy sets it, user 2026-10-29: "show the dummy part in dev too"); never in prod.
+ */
+export const SHOW_DUMMY_MARK = import.meta.env.DEV || import.meta.env.VITE_SHOW_DUMMY_MARK === 'true'
+
+/** Query parameters that keep a page's tab / view in the address (lib/urlState.ts): kept on refresh, shareable. */
+export const URL_PARAM = { TAB: 'tab', SECTION: 'section', VIEW: 'view', DAYS: 'days', TEAM: 'team' } as const
 
 export const isDummyPage = (path: string) => SHOW_DUMMY_MARK && !LIVE_PAGES.has(path)
 

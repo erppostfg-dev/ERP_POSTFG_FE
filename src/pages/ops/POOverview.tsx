@@ -14,6 +14,8 @@ import { LiveDot } from '../../components/LiveDot'
 import { ShipmentDrawer } from './ShipmentDrawer'
 import { HistoryDrawer } from './ShipmentHistory'
 import { NOT_AVAILABLE_YET } from '../../constants/masters'
+import { PATHS, URL_PARAM } from '../../constants/pages'
+import { oneOf, useUrlParam } from '../../lib/urlState'
 
 /*
  * PO Overview from the backend (GET /po-overview/shipments, /lines, /filter-options, /columns): our POs, filtered and
@@ -99,9 +101,10 @@ function useServerList<I, R>(
 }
 
 export default function POOverview() {
-  const [tab, setTab] = useState<'shipment' | 'lines'>('lines')
+  // PO Format Data / Shipment Status and the team tab are in the address (?tab=, ?team=), so a refresh keeps them
+  const [tab, setTab] = useUrlParam<'shipment' | 'lines'>(PATHS.PO_OVERVIEW, URL_PARAM.TAB, oneOf(['shipment', 'lines']), 'lines')
   // Both tabs stay mounted once opened, so switching keeps each one's filters and rows.
-  const [seen, setSeen] = useState<Record<string, boolean>>({ lines: true })
+  const [seen, setSeen] = useState<Record<string, boolean>>({ lines: true, [tab]: true })
   const [full, setFull] = useState(false)
   // Live updates for the whole page (SSE, automatic 60 s polling fallback): rows changed by others swap in place.
   const live = useLiveShipments()
@@ -139,7 +142,7 @@ export default function POOverview() {
         ))}
       </div>
       <div hidden={tab !== 'shipment'} className="pf-slide-from-right"><ShipmentTab options={options} columns={columns} onTotal={shipmentTotal} tableHeight={tableHeight} flash={live.flash} /></div>
-      {seen.lines && <div hidden={tab !== 'lines'} className="pf-slide-from-left"><LinesTab options={options} columns={columns} onTotal={linesTotal} tableHeight={tableHeight} /></div>}
+      {(seen.lines || tab === 'lines') && <div hidden={tab !== 'lines'} className="pf-slide-from-left"><LinesTab options={options} columns={columns} onTotal={linesTotal} tableHeight={tableHeight} /></div>}
     </div>
   )
 }
@@ -252,9 +255,10 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
   const s = useServerList('po-overview-shipments', listShipments, shipmentToRow)
   const [sel, setSel] = useState<Row | null>(null)
   const [historyOf, setHistoryOf] = useState<Row | null>(null)
-  const [tab, setTab] = useState<string>(OVERVIEW_TAB.KEY)
-  const defs = useMemo(() => shipFilters(options), [options])
   const teams = useMemo(() => (columns ? orderedTeams(columns.teams) : []), [columns])
+  // a team from the address counts once the person's teams are loaded (an unknown one shows Overview)
+  const [tab, setTab] = useUrlParam<string>(PATHS.PO_OVERVIEW, URL_PARAM.TEAM, (v) => !columns || v === OVERVIEW_TAB.KEY || teams.some((t) => t.key === v), OVERVIEW_TAB.KEY)
+  const defs = useMemo(() => shipFilters(options), [options])
   const parts = useMemo(() => (columns ? partsOf(columns, tab) : []), [columns, tab])
   const cols = useMemo(() => parts.flatMap((p) => asCols(p.cols)), [parts])
   const groups = useMemo(() => parts.filter((p) => p.cols.length).map((p) => ({ label: p.label, span: p.cols.length, edit: p.edit })), [parts])

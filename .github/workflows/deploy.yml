@@ -61,6 +61,8 @@ jobs:
       S3_BUCKET: ${{ vars.S3_BUCKET }}
       CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
       VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      # Dummy-data tint + strip (2026-10-29, user): shown on dev like on the laptop, never on prod.
+      VITE_SHOW_DUMMY_MARK: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
     steps:
       - name: Check the Environment's settings
         run: |

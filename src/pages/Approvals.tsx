@@ -13,6 +13,8 @@ import { REVIEW_LIVE } from '../constants/poReview'
 import { useLiveReview } from '../lib/liveReview'
 import { LiveDot } from '../components/LiveDot'
 import { istDateTime } from '../lib/time'
+import { PATHS, URL_PARAM } from '../constants/pages'
+import { oneOf, useUrlParam } from '../lib/urlState'
 import { fmtDate, type ColKind } from '../lib/ops'
 
 /*
@@ -47,7 +49,7 @@ const shown = (v: unknown) => (v === null || v === undefined || v === '' ? '' : 
 
 export default function Approvals() {
   const qc = useQueryClient()
-  const [tab, setTab] = useState<ApprovalStatus>(APPROVAL_STATUS.PENDING)
+  const [tab, setTab] = useUrlParam<ApprovalStatus>(PATHS.APPROVALS, URL_PARAM.TAB, oneOf(Object.values(APPROVAL_STATUS)), APPROVAL_STATUS.PENDING)
   const [q, setQ] = useState('')
   const [search, setSearch] = useState('')
   const [sel, setSel] = useState<string | null>(null)

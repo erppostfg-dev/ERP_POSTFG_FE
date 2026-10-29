@@ -14,7 +14,8 @@ import { LINE_ITEMS, LINE_ITEMS_TEXT, UNIWARE_STATE, UNIWARE_STATE_LABEL, UNIWAR
 import { downloadLineItemsCsv, downloadLineItemsExcel } from '../../lib/lineItemsExport'
 import { useAuth } from '../../auth/AuthContext'
 import { ACCESS } from '../../constants/auth'
-import { PATHS } from '../../constants/pages'
+import { PATHS, URL_PARAM } from '../../constants/pages'
+import { oneOf, useUrlParam } from '../../lib/urlState'
 import { Check, Download as DownloadIcon, Upload as UploadIcon, X as XIcon } from 'lucide-react'
 import { listAllPoReview, type PoReviewItem } from '../../api/poReview'
 import { ApiError } from '../../api/client'
@@ -30,11 +31,13 @@ import { PoIssues } from './PoIssues'
 import { PO_ISSUES_TEXT } from '../../constants/poIssues'
 
 // PO issues (2026-10-29): moved here from Users & Roles, for everyone who can open this page
-type Tab = 'processed' | 'review' | 'manual' | 'issues'
+const TABS = ['processed', 'review', 'manual', 'issues'] as const
+type Tab = (typeof TABS)[number]
 const SRC_ICON = { API: Zap, Webhook: Webhook, Email: Mail, Manual: FileUp } as const
 
 export default function POProcessing() {
-  const [tab, setTab] = useState<Tab>('processed')
+  // the tab is in the address (?tab=), so a refresh stays on it
+  const [tab, setTab] = useUrlParam<Tab>(PATHS.PO_REVIEW, URL_PARAM.TAB, oneOf(TABS), 'processed')
   const [processedCount, setProcessedCount] = useState<number | undefined>()
   const [reviewCount, setReviewCount] = useState<number | undefined>()
   // Live (2026-10-15): when anyone submits, approves, rejects, or a new PO arrives, both lists reload quietly.

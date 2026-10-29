@@ -9,6 +9,8 @@ import {
 } from '../../constants/poIssues'
 import { istDateTime } from '../../lib/time'
 import { PoIssuesByCategory } from './PoIssuesByCategory'
+import { PATHS, URL_PARAM } from '../../constants/pages'
+import { oneOf, useUrlParam } from '../../lib/urlState'
 
 /*
  * PO Processing & Review -> PO issues (user, 2026-10-22: channel based; channels on the left with only "n of m with issues",
@@ -20,16 +22,20 @@ import { PoIssuesByCategory } from './PoIssuesByCategory'
  */
 
 type View = { kind?: string; item?: string }
-type Mode = 'category' | 'channel'
+const MODES = ['category', 'channel'] as const
+type Mode = (typeof MODES)[number]
 
 const money = (n: number) => `${n > 0 ? '+' : ''}₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 const th = 'sticky top-0 z-10 border-b border-primary/20 bg-primary-soft px-3 py-2 text-left text-[11.5px] font-semibold text-primary whitespace-nowrap'
 const td = 'border-b border-line/70 px-3 py-2 text-[12.5px]'
 
 export function PoIssues() {
-  const [days, setDays] = useState<number>(PO_ISSUES_DEFAULT_DAYS)
+  // days and By category / By channel are in the address (?days=, ?view=), so a refresh keeps them
+  const [daysText, setDaysText] = useUrlParam(PATHS.PO_REVIEW, URL_PARAM.DAYS, oneOf(PO_ISSUES_DAYS), String(PO_ISSUES_DEFAULT_DAYS))
+  const days = Number(daysText)
+  const setDays = (d: number) => setDaysText(String(d))
   // By category first (user, 2026-10-23); By channel kept.
-  const [mode, setMode] = useState<Mode>('category')
+  const [mode, setMode] = useUrlParam<Mode>(PATHS.PO_REVIEW, URL_PARAM.VIEW, oneOf(MODES), 'category')
   const q = useQuery({ queryKey: poIssuesKey(days), queryFn: ({ signal }) => getPoIssues(days, signal) })
   // Refresh = computed now on the server (not the shared answer), shown at once
   const queryClient = useQueryClient()
