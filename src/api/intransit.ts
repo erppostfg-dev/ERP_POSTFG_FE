@@ -196,6 +196,22 @@ export const restoreMaster = (name: string, version: string) =>
 
 export const listRuns = (kind?: string, signal?: AbortSignal) => pv() ? P.previewListRuns(kind) : api<IntransitRun[]>(`${E}/runs${kind ? `?kind=${kind}` : ''}`, { signal })
 export const getRun = (id: string, signal?: AbortSignal) => pv() ? P.previewGetRun(id) : api<IntransitRun>(`${E}/runs/${id}`, { signal })
+/** GET /intransit/runs/:id/log: the whole log as text (read again while the run goes on, for the live view). */
+export async function getRunLog(id: string, signal?: AbortSignal): Promise<string> {
+  if (pv()) return ((await P.previewGetRun(id)).logTail ?? []).join('\n')
+  let res: Response
+  try {
+    res = await fetch(apiUrl(`${E}/runs/${id}/log`), { credentials: 'include', signal })
+  } catch (err) {
+    if (signal?.aborted) throw err
+    throw new ApiError(0, ERROR_CODE.NETWORK, 'Cannot reach the server')
+  }
+  if (!res.ok) {
+    const err = (await res.json().catch(() => null))?.error
+    throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? res.statusText)
+  }
+  return res.text()
+}
 /** POST /intransit/runs: build the report of a day; fetchFirst fetches the API files not of that day first. */
 export const startReport = (opts: { asOf: string; fetchFirst: boolean }) =>
   pv() ? P.previewStartReport(opts) : api<IntransitRun>(`${E}/runs`, { method: 'POST', body: JSON.stringify(opts) })

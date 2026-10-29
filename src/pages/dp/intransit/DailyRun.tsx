@@ -3,11 +3,12 @@ import type { ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronDown, CloudDownload, Eye, FolderOpen, Loader2, Play, Trash2, Upload, UploadCloud } from 'lucide-react'
 import { Button, Card } from '../../../components/ui'
-import { deleteInput, getRun, startConnector, startReport, type DailyItem, type DayPlan, type IntransitRun, type MasterItem } from '../../../api/intransit'
+import { deleteInput, getRun, listRuns, startConnector, startReport, type DailyItem, type DayPlan, type IntransitRun, type MasterItem } from '../../../api/intransit'
 import { INTRANSIT_POLL_MS, PEPIMS_CONNECTOR, PEPIMS_TEXT, SOURCE_INFO, SOURCES, type Source } from '../../../constants/intransit'
 import { dropEntries, filesFromEntries, filesFromInput, matchFolder, type FolderFile, type FolderMatch } from '../../../lib/folderFiles'
 import FolderReview, { type Batch } from './FolderReview'
 import ReportPanel from './ReportPanel'
+import RunLog from './RunLog'
 import { clock, dayLabel, errText, FileGlyph, isActive, isCsv, shortDay, whenOn, type FileState, type OnNotice, type OpenCsv, useUploader } from './shared'
 
 /*
@@ -324,6 +325,8 @@ function SourceRow({ source, files, plan, canEdit, running, fileRow, onNotice, o
   fileRow: (d: DailyItem, withActions: boolean) => ReactNode; onNotice: OnNotice; onChanged: () => void
 }) {
   const [busy, setBusy] = useState(false)
+  // the log of the source's latest fetch: open by itself while one runs, else on "Log" (closed with its X)
+  const [logOpen, setLogOpen] = useState<boolean | null>(null)
   const info = plan.sources.find((x) => x.source === source)
   const step = plan.build.toFetch.find((x) => x.source === source)
   const live = useQuery({
@@ -332,6 +335,13 @@ function SourceRow({ source, files, plan, canEdit, running, fileRow, onNotice, o
     enabled: !!running,
     refetchInterval: running ? INTRANSIT_POLL_MS : false,
   })
+  const latest = useQuery({
+    queryKey: ['intransit', 'runs', source, running?.id ?? null],
+    queryFn: ({ signal }) => listRuns(source, signal),
+    select: (runs) => runs[0],
+  })
+  const last = running ?? latest.data
+  const showLog = !!last && (logOpen ?? !!running)
   const fetchNow = async () => {
     setBusy(true)
     try { await startConnector(source, { date: plan.date, only: step?.only }); onChanged() } catch (err) { onNotice('warn', errText(err)) } finally { setBusy(false) }
@@ -342,6 +352,14 @@ function SourceRow({ source, files, plan, canEdit, running, fileRow, onNotice, o
     <div className="py-2 first:pt-1">
       <div className="flex items-center gap-2">
         <span className="text-[12px] font-medium text-ink-600">{SOURCE_INFO[source].label}</span>
+        {last && !running && (
+          <span className={`text-[11.5px] ${last.status === 'failed' ? 'text-crit' : 'text-ink-400'}`}>
+            last fetch {last.status === 'failed' ? 'failed' : 'done'}{last.finishedAt ? ` ${clock(last.finishedAt)}` : ''}
+          </span>
+        )}
+        {last && !showLog && (
+          <button onClick={() => setLogOpen(true)} className="text-[11.5px] text-primary hover:underline">Log</button>
+        )}
         <span className="flex-1" />
         {running ? (
           <span className="flex items-center gap-1.5 text-[12px] text-primary"><Loader2 className="size-3.5 animate-spin" />{live.data?.logTail?.at(-1)?.trim() || 'Fetching…'}</span>
@@ -353,6 +371,10 @@ function SourceRow({ source, files, plan, canEdit, running, fileRow, onNotice, o
           </Button>
         )}
       </div>
+      {showLog && last && (
+        <RunLog runId={last.id} live={!!running} title={`${SOURCE_INFO[source].label} fetch #${last.id}`}
+          onClose={() => setLogOpen(false)} onFail={(err) => onNotice('warn', errText(err))} />
+      )}
       {/* a portal file fetched by a robot can still be uploaded by hand */}
       <ul>{files.map((d) => fileRow(d, d.group === 'upload'))}</ul>
     </div>
