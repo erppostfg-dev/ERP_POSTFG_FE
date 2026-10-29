@@ -12,6 +12,7 @@ import DayRibbon from './intransit/DayRibbon'
 import DailyRun from './intransit/DailyRun'
 import HistoryTab from './intransit/HistoryTab'
 import MastersTab from './intransit/MastersTab'
+import RunAlerts, { useRunAlerts } from './intransit/RunAlerts'
 import { NoticeBar, type Notice, type OpenCsv } from './intransit/shared'
 
 /*
@@ -41,6 +42,8 @@ export default function IntransitStock() {
     refetchInterval: (q) => (q.state.data?.running.length ? INTRANSIT_POLL_MS : false),
   })
   const plan = day.data
+  // a build or fetch that ends badly pops up (with its log) instead of passing unnoticed
+  const { alerts, dismiss } = useRunAlerts(plan?.running ?? [])
 
   // When a build or fetch ends, the files and figures changed: reload the runs and Inventory Calculation too.
   const activeIds = (plan?.running ?? []).map((r) => r.id).join(',')
@@ -77,6 +80,7 @@ export default function IntransitStock() {
       {tab === 'history' && <HistoryTab canEdit={canEdit} onNotice={onNotice} openCsv={openCsv} />}
       {plan && tab === 'masters' && <MastersTab plan={plan} canEdit={canEdit} onNotice={onNotice} openCsv={openCsv} />}
 
+      <RunAlerts alerts={alerts} onClose={dismiss} onNotice={onNotice} />
       {viewing && <CsvViewer target={viewing.target} subtitle={viewing.subtitle} onClose={() => setViewing(null)} />}
     </div>
   )
