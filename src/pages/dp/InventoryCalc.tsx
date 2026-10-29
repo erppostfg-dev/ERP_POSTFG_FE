@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Badge, Button, Card, downloadCsv, PageTitle, SubTabs, Td, Th, Toolbar, type Density } from '../../components/ui'
 import { DataGrid, FilterPanel, SectionToolbar, applyFilters, countActive, exportRows, useSection, type FilterDef, type FilterValues } from '../../components/kit'
 import { Reveal } from '../../components/shell'
-import { FACILITY_COLUMNS, INTRANSIT_TEXT, REPORT_TABLES } from '../../constants/intransit'
+import { FACILITY_COLUMNS, INTRANSIT_TEXT, REPORT_TABLE_LABEL, REPORT_TABLES } from '../../constants/intransit'
 import { PATHS } from '../../constants/pages'
 import type { InventoryLine } from '../../lib/sheet35'
 import { istDateTime } from '../../lib/time'
@@ -71,7 +71,7 @@ export default function InventoryCalc() {
         {isReportTable(view) && (
           <div className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
             <CsvTable key={`${shown.runId}|${view}`} target={{ kind: 'sheet', runId: shown.runId, name: view }} showName={false}
-              subtitle={`${view}, in-transit report #${shown.runId} as of ${shown.day}`} maxHeight="65vh" />
+              subtitle={`${REPORT_TABLE_LABEL[view]}, in-transit report #${shown.runId} as of ${shown.day}`} maxHeight="65vh" />
           </div>
         )}
       </>
@@ -101,7 +101,7 @@ export default function InventoryCalc() {
       <SubTabs value={view} onChange={setView} tabs={[
         { key: 'overview', label: 'Overview' }, { key: 'channel', label: 'Channel-wise' }, { key: 'sku', label: 'SKU-wise' },
         { key: 'skuFacility', label: 'SKU × Facility' }, { key: 'type', label: 'B2C vs D2C' },
-        ...REPORT_TABLES.map((t) => ({ key: t, label: t })),
+        ...REPORT_TABLES.map((t) => ({ key: t, label: REPORT_TABLE_LABEL[t] })),
       ]} />
       {shown && !isReportTable(view) && (
         <p className="text-[12px] text-ink-400">
