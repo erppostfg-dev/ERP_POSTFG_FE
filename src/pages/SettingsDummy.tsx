@@ -51,8 +51,8 @@ export function ReviewRulesDummy() {
   return (
     <DummySection what="PO review rules">
       {card(<>
-        <Row title="Price tolerance per SKU (₹)" hint="A line's rate may differ from the master by this much"><input className={input} defaultValue={2} /></Row>
-        <Row title="Price tolerance per PO (₹)" hint="The PO total may differ by this much"><input className={input} defaultValue={10} /></Row>
+        <Row title="Price tolerance per SKU (₹)" hint="A line's MRP and rate may differ from the master by this much"><input className={input} defaultValue={1} /></Row>
+        <Row title="Price tolerance per PO (₹)" hint="The PO total may differ by 0.02% of its value, at least this much"><input className={input} defaultValue={10} /></Row>
         <Row title="Accept expired POs" hint="Expired POs still go to review instead of being rejected"><Switch start /></Row>
         <Row title="Approval needed after review" hint="Reviewed POs go to the Approvals page before the sale order"><Switch start /></Row>
       </>)}
