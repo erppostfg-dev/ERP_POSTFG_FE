@@ -27,6 +27,22 @@ const toLocal = (iso: string | null) => {
 }
 const toIso = (local: string) => (local ? new Date(local).toISOString() : null)
 
+const CATCH_UP_REFRESH_MS = 10_000
+const CATCH_UP_TONE = { waiting: 'neutral', running: 'info', done: 'ok', failed: 'warn' } as const
+
+/** The channel's last Gmail catch-up: status, what it took, or when it is tried again (and why it failed). */
+function CatchUpCell({ c }: { c: IntakeChannel }) {
+  const u = c.catchUp
+  if (!u) return <span className="text-ink-400">—</span>
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5" title={u.lastError ?? `${T.FROM}: ${istDateTime(u.from)}`}>
+      <Badge tone={CATCH_UP_TONE[u.status]}>{T.CATCH_UP_STATUS[u.status] ?? u.status}</Badge>
+      {u.status === 'done' && u.sent !== null && <span className="tnum text-ink-600">{T.CATCH_UP_DONE(u.sent)}</span>}
+      {u.status === 'failed' && u.nextTryAt && <span className="tnum text-warn">{T.CATCH_UP_RETRY(istDateTime(u.nextTryAt), u.attempts)}</span>}
+    </span>
+  )
+}
+
 const fieldCls = 'h-8 rounded-[var(--radius)] border border-line bg-surface px-2 text-[13px] outline-none focus:border-primary disabled:opacity-60'
 
 /** The limit field: saved on Enter or when the field is left, only when it changed. */
@@ -59,7 +75,11 @@ function FromField({ value, busy, onSave }: { value: string | null; busy: boolea
 
 export function IntakeSettings() {
   const qc = useQueryClient()
-  const q = useQuery({ queryKey: KEY, queryFn: ({ signal }) => listIntake(signal) })
+  // while a catch-up is waiting / running, look again every 10 s (it runs in the background)
+  const q = useQuery({
+    queryKey: KEY, queryFn: ({ signal }) => listIntake(signal),
+    refetchInterval: (query) => (query.state.data?.channels.some((c) => c.catchUp && ['waiting', 'running'].includes(c.catchUp.status)) ? CATCH_UP_REFRESH_MS : false),
+  })
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
   const [universal, setUniversal] = useState('')
@@ -145,6 +165,7 @@ export function IntakeSettings() {
                 <th className={`${th} text-right`}>{T.TODAY}</th>
                 <th className={`${th} text-right`} title={T.HELD_HINT}>{T.HELD}</th>
                 <th className={`${th} text-right`} title={T.BEFORE_START_HINT}>{T.BEFORE_START}</th>
+                <th className={th} title={T.CATCH_UP_HINT}>{T.CATCH_UP}</th>
                 <th className={th}>{T.CHANGED}</th>
               </tr>
             </thead>
@@ -168,6 +189,7 @@ export function IntakeSettings() {
                     <td className={`${td} tnum text-right ${full ? 'font-semibold text-warn' : ''}`}>{c.dailyLimit === null ? c.today : `${c.today} / ${c.dailyLimit}`}</td>
                     <td className={`${td} tnum text-right ${c.held ? 'font-semibold text-warn' : 'text-ink-400'}`}>{c.held}</td>
                     <td className={`${td} tnum text-right text-ink-400`}>{c.heldBeforeStart}</td>
+                    <td className={`${td} text-[12px]`}><CatchUpCell c={c} /></td>
                     <td className={`${td} text-[12px] text-ink-600`}>{c.updatedAt ? `${c.updatedBy ?? '—'} · ${istDateTime(c.updatedAt)}` : <span className="text-ink-400">{T.NEVER}</span>}</td>
                   </tr>
                 )
