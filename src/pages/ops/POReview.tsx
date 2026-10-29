@@ -31,19 +31,21 @@ import { CAPABILITY, REVIEW_EDIT_TEXT, editRules, fieldOpen, type LineField } fr
  */
 
 type ReviewRow = {
-  id: string; poNumber: string; channel: string; receivedAt: string; lines: number | null; value: number | null
+  id: string; poNumber: string; channel: string; poDate: string; receivedAt: string; processedAt: string; lines: number | null; value: number | null
   openIssues: number; issueTypes: string[]; source: string; file: string
   subject: string | null
 }
 
 const RCOLS: [string, keyof ReviewRow, ColKind][] = [
   // Ingest ID left out of the screen and the download (user, 2026-10-16); rows still use it as their key.
-  ['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['Received At', 'receivedAt', 'mono'],
+  // PO Date before Received At, Processed At after it (user, 2026-10-29)
+  ['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['PO Date', 'poDate', 'date'], ['Received At', 'receivedAt', 'mono'],
+  ['Processed At', 'processedAt', 'mono'],
   ['Lines', 'lines', 'num'], ['Value', 'value', 'money'],
 ]
 
 const toRow = (r: PoReviewItem): ReviewRow => ({
-  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', receivedAt: istDateTime(r.receivedAt), lines: r.lines, value: r.poValue,
+  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', poDate: r.poDate ?? '', receivedAt: istDateTime(r.receivedAt), processedAt: istDateTime(r.processedAt), lines: r.lines, value: r.poValue,
   openIssues: r.openIssues, issueTypes: r.issueTypes, source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, subject: r.subject,
 })
 

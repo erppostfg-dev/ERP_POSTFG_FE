@@ -64,7 +64,7 @@ export default function POProcessing() {
 // ---- Processed: completed POs from GET /po-review?status=completed ------------------------------
 
 type ProcessedRow = {
-  id: string; poNumber: string; channel: string; brand: string; processedAt: string
+  id: string; poNumber: string; channel: string; brand: string; poDate: string; processedAt: string
   lines: number | null; units: number | null; value: number | null; saleOrder: string; source: string; file: string
   /** Raw source value (api / email / manual) for the icon, and the subject the Source cell copies. */
   sourceKey: string; subject: string | null
@@ -79,7 +79,8 @@ type ProcessedRow = {
 const PCOLS: [string, keyof ProcessedRow, ColKind][] = [
   // Ingest ID left out of the screen and the download (user, 2026-10-16); rows still use it as their key.
   ['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['Brand', 'brand', 'text'],
-  ['Processed At', 'processedAt', 'mono'], ['Lines', 'lines', 'num'], ['Units', 'units', 'num'], ['Value', 'value', 'money'], ['Sale order', 'saleOrder', 'mono'],
+  // PO Date next to Processed At (user, 2026-10-29)
+  ['PO Date', 'poDate', 'date'], ['Processed At', 'processedAt', 'mono'], ['Lines', 'lines', 'num'], ['Units', 'units', 'num'], ['Value', 'value', 'money'], ['Sale order', 'saleOrder', 'mono'],
 ]
 /** The download (CSV / Excel of the table) also says where each PO stands with Uniware. */
 const PEXPORT: [string, keyof ProcessedRow, ColKind][] = [...PCOLS, ['Check', 'check', 'text'], ['Uniware', 'uniware', 'text']]
@@ -96,7 +97,7 @@ const handoffOf = (r: PoReviewItem): Handoff => ({
 
 const toRow = (r: PoReviewItem): ProcessedRow => ({
   handoff: handoffOf(r), uniware: UNIWARE_STATE_LABEL[stateOf(handoffOf(r))], waitingDays: daysWaiting(handoffOf(r)),
-  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', brand: r.brand ?? '', processedAt: istDateTime(r.completedAt), processedDay: r.completedAt ? istDay(new Date(r.completedAt)) : '',
+  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', brand: r.brand ?? '', poDate: r.poDate ?? '', processedAt: istDateTime(r.completedAt), processedDay: r.completedAt ? istDay(new Date(r.completedAt)) : '',
   lines: r.lines, units: r.units, value: r.poValue, saleOrder: r.saleOrderCode ?? '', source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, sourceKey: r.source, subject: r.subject,
   check: '',
 })

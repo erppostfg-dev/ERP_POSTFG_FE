@@ -19,9 +19,12 @@ export type PoReviewItem = {
   uniwareUploadedAt: string | null
   uniwareUploadedBy: string | null
   fileName: string
+  /** The PO's own date (YYYY-MM-DD): the saved PO's, else as read from the PO (In Review). */
   poDate: string | null
   receivedAt: string | null
   completedAt: string | null
+  /** When the system processed it: completed = completedAt; else when the PO was read (OCR done) or the row was made. */
+  processedAt: string | null
   brand: string | null
   saleOrderCode: string | null
   lines: number | null
