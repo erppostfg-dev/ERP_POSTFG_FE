@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ChevronRight, Loader2 } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, ChevronRight, Loader2, RefreshCw } from 'lucide-react'
 import { Badge } from '../../components/ui'
 import { ApiError } from '../../api/client'
-import { getPoIssuePos, getPoIssues, type ChannelIssues, type IssueGroup } from '../../api/poIssues'
+import { getPoIssuePos, getPoIssues, poIssuesKey, type ChannelIssues, type IssueGroup } from '../../api/poIssues'
 import {
   ISSUE_ITEM_LABEL, ISSUE_KIND_LABEL, PO_ISSUES_DAYS, PO_ISSUES_DEFAULT_DAYS, PO_ISSUES_TEXT as T, PO_STATUS_LABEL, PO_STATUS_TONE,
 } from '../../constants/poIssues'
@@ -11,7 +11,7 @@ import { istDateTime } from '../../lib/time'
 import { PoIssuesByCategory } from './PoIssuesByCategory'
 
 /*
- * Users & Roles -> PO issues (user, 2026-10-22: channel based; channels on the left with only "n of m with issues",
+ * PO Processing & Review -> PO issues (user, 2026-10-22: channel based; channels on the left with only "n of m with issues",
  * everything about the picked channel on the right, going INTO a level rather than expanding):
  *   left   every channel (most POs with issues first) + "6 of 23 with issues"
  *   right  the channel: its PO count + the kinds of problems (no status tags: user, 2026-10-22)  ->  a kind: every SKU / location / value /
@@ -30,7 +30,14 @@ export function PoIssues() {
   const [days, setDays] = useState<number>(PO_ISSUES_DEFAULT_DAYS)
   // By category first (user, 2026-10-23); By channel kept.
   const [mode, setMode] = useState<Mode>('category')
-  const q = useQuery({ queryKey: ['admin', 'po-issues', days], queryFn: ({ signal }) => getPoIssues(days, signal) })
+  const q = useQuery({ queryKey: poIssuesKey(days), queryFn: ({ signal }) => getPoIssues(days, signal) })
+  // Refresh = computed now on the server (not the shared answer), shown at once
+  const queryClient = useQueryClient()
+  const [refreshing, setRefreshing] = useState(false)
+  const refresh = () => {
+    setRefreshing(true)
+    getPoIssues(days, undefined, true).then((d) => queryClient.setQueryData(poIssuesKey(days), d)).catch(() => undefined).finally(() => setRefreshing(false))
+  }
   const [channel, setChannel] = useState<string | null>(null)
   const [view, setView] = useState<View>({})
   const channels = q.data?.channels ?? []
@@ -48,6 +55,13 @@ export function PoIssues() {
           <p className="mt-1 max-w-3xl text-[12.5px] text-ink-600">{mode === 'category' ? T.SUB_CATEGORY : T.SUB}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+        {q.data && (
+          <span className="text-[11.5px] text-ink-400" title={istDateTime(q.data.computedAt)}>{T.UPDATED(new Date(q.data.computedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }))}</span>
+        )}
+        <button type="button" onClick={refresh} disabled={refreshing}
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[12.5px] font-semibold text-ink-600 hover:bg-alt hover:text-ink-900 disabled:opacity-50">
+          <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />{refreshing ? T.REFRESHING : T.REFRESH}
+        </button>
         <div className="flex items-center gap-1 rounded-[var(--radius)] bg-alt/70 p-1">
           {(['category', 'channel'] as const).map((m) => (
             <button key={m} type="button" onClick={() => setMode(m)}
@@ -215,7 +229,7 @@ function KindItems({ g, onItem }: { g: IssueGroup | undefined; onItem: (item: st
 
 /** Level 3: the POs behind one item. */
 function PoList({ channel, kind, item, days }: { channel: string; kind: string; item: string; days: number }) {
-  const q = useQuery({ queryKey: ['admin', 'po-issues', 'pos', channel, kind, item, days], queryFn: ({ signal }) => getPoIssuePos(channel, kind, item, days, signal) })
+  const q = useQuery({ queryKey: ['po-review', 'issues', 'pos', channel, kind, item, days], queryFn: ({ signal }) => getPoIssuePos(channel, kind, item, days, signal) })
   if (!q.data) return <div className="flex justify-center py-8"><Loader2 className="size-5 animate-spin text-ink-400" /></div>
   return (
     <div className="max-h-[560px] overflow-auto rounded-[var(--radius)] border border-line">

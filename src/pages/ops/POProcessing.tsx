@@ -26,8 +26,11 @@ import { getVerifyStates, type VerifyStateItem } from '../../api/poVerify'
 import { VERIFY_STATE, VERIFY_TEXT, type VerifyState } from '../../constants/poVerify'
 import { VerifyPanel } from './VerifyPanel'
 import { ManualUpload } from './ManualUpload'
+import { PoIssues } from './PoIssues'
+import { PO_ISSUES_TEXT } from '../../constants/poIssues'
 
-type Tab = 'processed' | 'review' | 'manual'
+// PO issues (2026-10-29): moved here from Users & Roles, for everyone who can open this page
+type Tab = 'processed' | 'review' | 'manual' | 'issues'
 const SRC_ICON = { API: Zap, Webhook: Webhook, Email: Mail, Manual: FileUp } as const
 
 export default function POProcessing() {
@@ -45,10 +48,12 @@ export default function POProcessing() {
         { key: 'processed', label: 'Processed', count: processedCount },
         { key: 'review', label: 'In Review', count: reviewCount, danger: !!reviewCount },
         { key: 'manual', label: 'Manual Upload' },
+        { key: 'issues', label: PO_ISSUES_TEXT.TAB },
       ]} />
       {tab === 'processed' && <Processed onCount={setProcessedCount} liveTick={liveTick} />}
       {tab === 'review' && <InReview srcIcon={SRC_ICON} onCount={setReviewCount} liveTick={liveTick} />}
       {tab === 'manual' && <ManualUpload canEdit={canEditRoot} liveTick={liveTick} />}
+      {tab === 'issues' && <PoIssues />}
     </div>
   )
 }

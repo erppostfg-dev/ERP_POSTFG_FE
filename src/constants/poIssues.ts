@@ -1,10 +1,11 @@
 /*
- * Users & Roles -> PO issues (user, 2026-10-22): per channel, the kinds of problems its POs had and, inside each kind,
- * every item (SKU, location, value, reason), counted once per PO. Backend: GET /admin/po-issues (admin / developer).
+ * PO Processing & Review -> PO issues (user, 2026-10-22; moved from Users & Roles 2026-10-29 for everyone with this
+ * page): per channel, the kinds of problems its POs had and, inside each kind, every item (SKU, location, value,
+ * reason), counted once per PO. Backend: GET /po-review/issues (viewer on /operations/po-review).
  */
 import { ISSUE_LABELS } from './poReview'
 
-export const PO_ISSUES_ENDPOINT = '/admin/po-issues'
+export const PO_ISSUES_ENDPOINT = '/po-review/issues'
 export const PO_ISSUES_DAYS = [7, 30, 90, 365] as const
 export const PO_ISSUES_DEFAULT_DAYS = 30
 
@@ -36,6 +37,12 @@ export const PO_ISSUES_TEXT = {
   TITLE: 'PO issues',
   SUB: 'Pick a channel to see the kinds of problems its POs had; open a kind to see every SKU / location / reason, and one of those to see its POs. Counted once per PO, by when the PO came in.',
   LOADING: 'Counting…',
+  /** 2026-10-29: the screen may be up to a minute old; every download is fetched fresh first. */
+  UPDATED: (time: string) => `Updated ${time}`,
+  REFRESH: 'Refresh',
+  REFRESHING: 'Refreshing…',
+  DOWNLOAD_FRESH: 'Getting the latest numbers for the download…',
+  DOWNLOAD_FAILED: (why: string) => `Download failed: ${why}`,
   EMPTY: 'No POs in this period.',
   DAYS: (d: number) => (d === 365 ? '1 year' : `${d} days`),
   POS: (n: number) => `${n} PO${n === 1 ? '' : 's'}`,
