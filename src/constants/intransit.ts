@@ -14,7 +14,7 @@ export type RunStatus = (typeof RUN_STATUS)[keyof typeof RUN_STATUS]
 export const RUN_STATUS_LABEL: Record<RunStatus, string> = { queued: 'Queued', running: 'Running', succeeded: 'Done', failed: 'Failed' }
 export const RUN_STATUS_TONE: Record<RunStatus, 'info' | 'warn' | 'ok' | 'crit'> = { queued: 'info', running: 'warn', succeeded: 'ok', failed: 'crit' }
 
-export const SOURCES = ['amazon', 'uniware', 'flipkart'] as const
+export const SOURCES = ['amazon', 'uniware', 'flipkart', 'myntra'] as const
 export type Source = (typeof SOURCES)[number]
 
 /** Shipment_Status / PO_Format: read from PEPIMS's tracker when the report is built (POST_FG PEPIMS_CONNECTOR). */
@@ -38,10 +38,17 @@ export const SOURCE_INFO: Record<Source, { label: string; sub: string; only: { k
     sub: 'Export-B2B Sale Orders, Purchase_Order and Export-Inventory Snapshot, one export per facility. Can take up to an hour.',
     only: [{ key: 'b2b', label: 'B2B Sale Orders only' }, { key: 'po', label: 'Purchase Orders only' }, { key: 'inventory', label: 'Inventory Snapshot only' }],
   },
+  // the Seller Hub robot (POST_FG sources/flipkart-seller-hub.ts, 2026-10-28): a headless browser, OTP read from the intake mailbox
   flipkart: {
-    label: 'Flipkart Seller API',
-    sub: 'FK_SOH.csv from the current inventory report. FK_GRN has no API and stays a manual upload.',
-    only: [],
+    label: 'Flipkart Seller Hub',
+    sub: 'FK_SOH.csv (Current Inventory) and FK_GRN.csv (Bulk Consignment File), downloaded from Seller Hub by a robot. About 2 minutes.',
+    only: [{ key: 'soh', label: 'SOH only' }, { key: 'grn', label: 'GRN only' }],
+  },
+  // the Partner Portal robot (POST_FG sources/myntra-partner-portal.ts, 2026-10-28): email + password login, team PARTNER_SELLER
+  myntra: {
+    label: 'Myntra Partner Portal',
+    sub: 'Myntra_GRN.csv (Lot View, last year) and Myntra_SOH.csv (Seller_Inventory_Report, prepared by Myntra), downloaded by a robot. About 5 minutes.',
+    only: [{ key: 'soh', label: 'SOH only' }, { key: 'grn', label: 'GRN only' }],
   },
 }
 
@@ -53,6 +60,12 @@ export const SPLIT1_MAX_QTY = 50
 
 /** Report sheets shown as tables on the Reports tab (exact sheet names in the workbook), after the Summary. */
 export const REPORT_TABLES = ['Sheet35(2)', 'Full_Shipment_Enhanced', 'Final Sheet35(2)'] as const
+/** The names the page shows for them (user, 2026-10-28); the sheet names above stay as the workbook has them. */
+export const REPORT_TABLE_LABEL: Record<(typeof REPORT_TABLES)[number], string> = {
+  'Sheet35(2)': 'SKU × Location',
+  Full_Shipment_Enhanced: 'Full_Shipment_Enhanced',
+  'Final Sheet35(2)': 'Final Stock',
+}
 
 export const INTRANSIT_TABS = [
   { key: 'run', label: 'Daily run' },
