@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChannelOptions } from '../../lib/channels'
 import { AlertTriangle, FileUp, Webhook, Zap, Mail } from 'lucide-react'
 import { Badge, PageTitle, SubTabs } from '../../components/ui'
-import { DataGrid, DownloadMenu, FilterChips, FilterPanel, SectionToolbar, exportRows, exportRowsExcel, useSection, type DownloadItem, type FilterDef } from '../../components/kit'
+import { DataGrid, DownloadMenu, FilterChips, FilterPanel, ColumnSort, SectionToolbar, exportRows, exportRowsExcel, useSection, type DownloadItem, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
 import type { ColKind } from '../../lib/ops'
-import { istDateTime, istDay } from '../../lib/time'
+import { DATE_SORT_KEY, SORT_FILTER_KEY, orderRows } from '../../lib/listOrder'
+import { istDateTime } from '../../lib/time'
 import { InReview } from './POReview'
 import { FileCell, SourceCell } from './SourceCells'
 import { UniwareCell, ageTone, daysWaiting, downloadCombinedCsv, downloadOneCsv, stateOf, type Handoff } from './UniwareHandoff'
@@ -19,7 +20,7 @@ import { oneOf, useUrlParam } from '../../lib/urlState'
 import { Check, Download as DownloadIcon, Upload as UploadIcon, X as XIcon } from 'lucide-react'
 import { listAllPoReview, type PoReviewItem } from '../../api/poReview'
 import { ApiError } from '../../api/client'
-import { LIST_PAGE_SIZE, PO_STATUS, PROCESSED_FILTER, REVIEW_LIVE, SOURCE_LABELS } from '../../constants/poReview'
+import { LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_STATUS, PROCESSED_FILTER, REVIEW_LIVE, SOURCE_LABELS } from '../../constants/poReview'
 import { useLiveReview } from '../../lib/liveReview'
 import { LiveDot } from '../../components/LiveDot'
 import { ShieldCheck } from 'lucide-react'
@@ -68,8 +69,8 @@ type ProcessedRow = {
   lines: number | null; units: number | null; value: number | null; saleOrder: string; source: string; file: string
   /** Raw source value (api / email / manual) for the icon, and the subject the Source cell copies. */
   sourceKey: string; subject: string | null
-  /** YYYY-MM-DD (Indian time) it was processed: the Filters panel's Processed from / to compare this. */
-  processedDay: string
+  /** When it was processed (ISO): the Processed At header's Newest / Oldest sorts by this. */
+  processedIso: string
   /** Uniware hand-off: the raw dates / names, its state label (filter + export) and days waiting. */
   handoff: Handoff; uniware: string; waitingDays: number
   /** Verification before Uniware (2026-10-22): state from GET /po-verify and its label (filter + export). */
@@ -97,7 +98,7 @@ const handoffOf = (r: PoReviewItem): Handoff => ({
 
 const toRow = (r: PoReviewItem): ProcessedRow => ({
   handoff: handoffOf(r), uniware: UNIWARE_STATE_LABEL[stateOf(handoffOf(r))], waitingDays: daysWaiting(handoffOf(r)),
-  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', brand: r.brand ?? '', poDate: r.poDate ?? '', processedAt: istDateTime(r.completedAt), processedDay: r.completedAt ? istDay(new Date(r.completedAt)) : '',
+  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', brand: r.brand ?? '', poDate: r.poDate ?? '', processedAt: istDateTime(r.completedAt), processedIso: r.completedAt ?? '',
   lines: r.lines, units: r.units, value: r.poValue, saleOrder: r.saleOrderCode ?? '', source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, sourceKey: r.source, subject: r.subject,
   check: '',
 })
@@ -159,8 +160,9 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   const picked = rows.filter((r) => selected.has(r.id))
   const channelOptions = useChannelOptions(distinct(rows, 'channel'))
   const defs: FilterDef[] = [
-    { key: 'processedDayFrom', label: PROCESSED_FILTER.FROM, type: 'date' },
-    { key: 'processedDayTo', label: PROCESSED_FILTER.TO, type: 'date' },
+    { key: SORT_FILTER_KEY, label: LIST_FILTER.SORT, type: 'sort', options: [{ value: LIST_SORT.CHANNEL, label: LIST_FILTER.SORT_CHANNEL }], placeholder: LIST_FILTER.SORT_DEFAULT_PROCESSED },
+    // the PO Date / Processed At header sort: only its chip here
+    { key: DATE_SORT_KEY, label: LIST_FILTER.DATE_SORT, type: 'sort', options: LIST_FILTER.DATE_SORT_OPTIONS, inPanel: false },
     { key: 'channel', label: 'Channel', type: 'multi', options: channelOptions },
     { key: 'brand', label: 'Brand', type: 'multi', options: distinct(rows, 'brand') },
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows, 'source') },
@@ -188,7 +190,9 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   // One Download button (user, 2026-10-26): the main click is the POs (this table) as Excel, the ticked ones or, with
   // none ticked, every PO shown (search + filters); the arrow gives CSV and the POs' line items. Read only.
   const T = LINE_ITEMS_TEXT
-  const linePos = picked.length ? picked : s.filtered
+  // Header Newest / Oldest + Sort by channel (Filters panel): the table, the downloads and the line items follow this order.
+  const ordered = useMemo(() => orderRows(s.filtered, s.filters, { poDate: (r) => r.poDate, processedAt: (r) => r.processedIso }), [s.filtered, s.filters])
+  const linePos = picked.length ? picked : ordered
   const tooManyLines = linePos.length > LINE_ITEMS.MAX
   const downloadLines = async (kind: 'csv' | 'excel') => {
     setBulkBusy(true)
@@ -268,7 +272,10 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       ) : !rows.length ? (
         <div className={box}>{PROCESSED_FILTER.NONE}</div>
       ) : (
-        <DataGrid cols={PCOLS} rows={s.filtered} rowKey={(r) => r.id} pageSize={LIST_PAGE_SIZE} selected={selected} onSelectedChange={setSelected}
+        <DataGrid cols={PCOLS} rows={ordered} rowKey={(r) => r.id} pageSize={LIST_PAGE_SIZE} selected={selected} onSelectedChange={setSelected}
+          // Newest / Oldest first from the PO Date and Processed At headers
+          headFilter={(k) => (k === 'poDate' ? <ColumnSort filters={s.filters} setFilters={s.setFilters} field="poDate" title={LIST_FILTER.PO_DATE} />
+            : k === 'processedAt' ? <ColumnSort filters={s.filters} setFilters={s.setFilters} field="processedAt" title={LIST_FILTER.PROCESSED_AT} /> : null)}
           // As PO Working's critical rows: a thin stripe on the row's left edge while it is not in Uniware (red 10+ days, yellow 5+).
           rowClass={(r) => {
             if (stateOf(r.handoff) === UNIWARE_STATE.UPLOADED) return ''

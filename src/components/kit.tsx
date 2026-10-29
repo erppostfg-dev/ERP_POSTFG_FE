@@ -4,12 +4,13 @@ import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowDown, ArrowUp, ArrowUpDown, Calendar, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, Filter, History, MoreHorizontal, Pencil, Search, Upload, X } from 'lucide-react'
 import { Badge, BulkUpload, downloadCsv } from './ui'
-import { DatePicker, Pop, usePopover } from './pickers'
+import { DatePicker, Pop, SelectBox, usePopover } from './pickers'
 import { fmtDate, statusTone, type ColKind } from '../lib/ops'
 import { NOT_IN_DB } from '../constants/masters'
 import { copyText } from '../lib/clipboard'
 import { COPIED_MS, COPYABLE_COLUMNS, GRID_HINT } from '../constants/ui'
 import { downloadExcel } from '../lib/excelExport'
+import { DATE_SORT_KEY, dateSortOf, isOrderKey, type DateSortDir } from '../lib/listOrder'
 
 // ---- Toolbar -----------------------------------------------------------
 export function SectionToolbar({
@@ -92,6 +93,11 @@ export type FilterDef =
   | { key: string; label: string; type: 'date' }
   | { key: string; label: string; type: 'multi'; options: readonly string[]; placeholder?: string }
   | { key: string; label: string; type: 'text'; placeholder?: string }
+  /**
+   * The order of the rows (lib/listOrder keys): not a filter, the page orders its rows by the chosen value.
+   * inPanel false = only its chip (set from a column header).
+   */
+  | { key: string; label: string; type: 'sort'; options: readonly { value: string; label: string }[]; placeholder?: string; inPanel?: boolean }
 export type FilterValues = Record<string, string | string[]>
 
 /** A multi-select gets a search box when it has more options than this. */
@@ -167,13 +173,16 @@ export function FilterPanel({ defs, value, onApply, onClose }: { defs: FilterDef
         <button onClick={onClose} className="rounded p-1 text-ink-400 hover:bg-alt hover:text-ink-900"><X className="size-4" /></button>
       </div>
       <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-        {defs.map((d) => (
+        {defs.filter((d) => !(d.type === 'sort' && d.inPanel === false)).map((d) => (
           <div key={d.key}>
             <div className="mb-1 text-[12px] font-medium text-ink-600">{d.label}</div>
             {d.type === 'multi' ? (
               <MultiSelect value={(draft[d.key] as string[]) ?? []} onChange={(v) => set(d.key, v)} options={d.options} placeholder={d.placeholder ?? `Select ${d.label.toLowerCase()}`} />
             ) : d.type === 'date' ? (
               <DateInput value={(draft[d.key] as string) ?? ''} onChange={(v) => set(d.key, v)} className={draft[d.key] ? '' : 'text-ink-400'} />
+            ) : d.type === 'sort' ? (
+              <SelectBox value={d.options.find((o) => o.value === draft[d.key])?.label ?? ''} options={d.options.map((o) => o.label)}
+                onChange={(l) => set(d.key, d.options.find((o) => o.label === l)?.value ?? '')} placeholder={d.placeholder ?? '—'} />
             ) : (
               <input value={(draft[d.key] as string) ?? ''} onChange={(e) => set(d.key, e.target.value)} placeholder={d.placeholder} className={fieldCls} />
             )}
@@ -195,6 +204,7 @@ export function applyFilters<T>(rows: T[], f: FilterValues): T[] {
     const rec = r as Record<string, unknown>
     for (const [k, v] of Object.entries(f)) {
       if (Array.isArray(v) ? !v.length : !v) continue
+      if (isOrderKey(k)) continue // an order, not a filter
       if (k.endsWith('From') || k.endsWith('To')) {
         const base = k.replace(/(From|To)$/, '')
         const val = String(rec[base] ?? '')
@@ -394,8 +404,10 @@ const cellText = (kind: ColKind, v: unknown): string => {
 
 export function DataGrid<T>({
   cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, stickyFit, maxHeight, onScrolledChange,
-  selected, onSelectedChange,
+  selected, onSelectedChange, headFilter,
 }: {
+  /** A control shown after a column's name in its header (e.g. ColumnSort); null = none (2026-10-29). */
+  headFilter?: (key: keyof T) => ReactNode
   cols: [string, keyof T, ColKind][]; rows: T[]; rowKey: (r: T) => string; sticky?: number
   onRowClick?: (r: T) => void; rowMenu?: (r: T) => { label: string; onClick: () => void }[]; pageSize?: number
   /** Extra columns at the end; with `sortValue` the header gets ↑/↓ and a click sorts every row by it (2026-10-19). */
@@ -536,6 +548,7 @@ export function DataGrid<T>({
                   className={`sticky overflow-hidden border-b border-line px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide bg-alt text-ink-600 ${stickyFit && i < sticky ? 'whitespace-normal leading-tight' : 'text-ellipsis whitespace-nowrap'} ${i < sticky ? 'z-20' : 'z-10'} ${i === sticky - 1 ? 'border-r' : ''}`}
                 >
                   {editable?.has(key) ? <span className="inline-flex items-center gap-1">{label}<Pencil className="size-3 shrink-0" /></span> : label}
+                  {headFilter?.(key)}
                 </th>
               ))}
               {trailing?.map((t) => {
@@ -647,6 +660,64 @@ export function DateInput({ value, onChange, className = '' }: { value: string; 
 }
 
 /**
+ * Newest / Oldest first from a column header (2026-10-29, user: PO Date and Processed At "on the column with headers"):
+ * a sort mark after the column name (blue arrow while it sorts) opens Newest first / Oldest first / Clear. The menu
+ * floats over the page (a portal: header cells cut off what is inside them).
+ */
+export function HeaderSort({ title, value, onChange }: { title: string; value: DateSortDir | ''; onChange: (v: DateSortDir | '') => void }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btn = useRef<HTMLButtonElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
+  const MENU_W = 170
+  useEffect(() => {
+    if (!open) return
+    const inside = (t: EventTarget | null) => t instanceof Node && (!!menu.current?.contains(t) || !!btn.current?.contains(t))
+    const onDown = (e: MouseEvent) => { if (!inside(e.target)) setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const onScroll = (e: Event) => { if (!inside(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', onScroll, true)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); window.removeEventListener('scroll', onScroll, true) }
+  }, [open])
+  const show = () => {
+    const r = btn.current?.getBoundingClientRect()
+    if (!r) return
+    setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left - 8, window.innerWidth - MENU_W - 8)) })
+    setOpen(true)
+  }
+  const pick = (v: DateSortDir | '') => { onChange(v); setOpen(false) }
+  const Icon = value === 'newest' ? ArrowDown : value === 'oldest' ? ArrowUp : ArrowUpDown
+  const item = (v: DateSortDir | '', text: string) => (
+    <button type="button" onClick={() => pick(v)}
+      className={`flex w-full items-center rounded px-2 py-1.5 text-left text-[13px] hover:bg-alt ${value === v && v ? 'font-semibold text-primary' : 'text-ink-900'}`}>{text}</button>
+  )
+  return (
+    <>
+      <button ref={btn} type="button" aria-label={`Sort by ${title}`} title={value === 'newest' ? 'Newest first' : value === 'oldest' ? 'Oldest first' : `Sort by ${title}`}
+        onClick={(e) => { e.stopPropagation(); if (open) setOpen(false); else show() }}
+        className={`ml-1 inline-flex rounded p-0.5 align-[-2px] transition-colors hover:bg-ink-900/5 ${value ? 'text-primary' : 'text-ink-400 hover:text-ink-900'}`}>
+        <Icon className="size-3.5" />
+      </button>
+      {open && createPortal(
+        <div ref={menu} style={{ position: 'fixed', top: pos.top, left: pos.left, width: MENU_W }}
+          className="pf-pop-in z-[60] rounded-[var(--radius)] border border-line bg-surface p-1 normal-case tracking-normal shadow-lg">
+          {item('newest', 'Newest first')}
+          {item('oldest', 'Oldest first')}
+          {value && <div className="mt-1 border-t border-line pt-1">{item('', 'Clear')}</div>}
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
+/** HeaderSort on a section's filter values (DATE_SORT_KEY = '<field>:newest|oldest'; one date column sorts at a time). */
+export function ColumnSort({ filters, setFilters, field, title }: { filters: FilterValues; setFilters: (v: FilterValues) => void; field: string; title: string }) {
+  return <HeaderSort title={title} value={dateSortOf(filters, field)} onChange={(v) => setFilters({ ...filters, [DATE_SORT_KEY]: v ? `${field}:${v}` : '' })} />
+}
+/**
  * The applied filters as chips under the toolbar (2026-10-19, user: they were only visible inside the filter panel).
  * One chip per value ("Channel: Zepto ×"); × removes that value; "Clear all" removes every filter. Hidden when none.
  */
@@ -657,7 +728,8 @@ export function FilterChips({ defs, value, onChange }: { defs: FilterDef[]; valu
     if (Array.isArray(v)) {
       for (const one of v) chips.push({ key: `${d.key}|${one}`, label: d.label, text: one, remove: () => onChange({ ...value, [d.key]: v.filter((x) => x !== one) }) })
     } else if (v) {
-      chips.push({ key: d.key, label: d.label, text: d.type === 'date' ? fmtDate(v) : v, remove: () => onChange({ ...value, [d.key]: '' }) })
+      const text = d.type === 'date' ? fmtDate(v) : d.type === 'sort' ? (d.options.find((o) => o.value === v)?.label ?? v) : v
+      chips.push({ key: d.key, label: d.label, text, remove: () => onChange({ ...value, [d.key]: '' }) })
     }
   }
   if (!chips.length) return null

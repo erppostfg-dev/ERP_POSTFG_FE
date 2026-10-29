@@ -3,7 +3,7 @@ import type { ComponentType } from 'react'
 import { useChannelOptions } from '../../lib/channels'
 import { AlertTriangle, Check, ExternalLink, Link2, Mail, RefreshCw, X } from 'lucide-react'
 import { Badge, Button } from '../../components/ui'
-import { DataGrid, DownloadMenu, FilterChips, FilterPanel, SectionToolbar, applyFilters, exportRows, exportRowsExcel, inputCls, useSection, type FilterDef } from '../../components/kit'
+import { DataGrid, DownloadMenu, FilterChips, FilterPanel, ColumnSort, SectionToolbar, applyFilters, exportRows, exportRowsExcel, inputCls, useSection, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
 import type { ColKind } from '../../lib/ops'
 import {
@@ -12,11 +12,12 @@ import {
 } from '../../api/poReview'
 import { ApiError } from '../../api/client'
 import {
-  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_PAGE_SIZE, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
+  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
 } from '../../constants/poReview'
 import { ACCESS } from '../../constants/auth'
 import { PATHS } from '../../constants/pages'
 import { useAuth } from '../../auth/AuthContext'
+import { DATE_SORT_KEY, SORT_FILTER_KEY, orderRows } from '../../lib/listOrder'
 import { istDateTime } from '../../lib/time'
 import { SkuPicker } from './SkuPicker'
 import { FileCell, SourceCell } from './SourceCells'
@@ -31,22 +32,25 @@ import { CAPABILITY, REVIEW_EDIT_TEXT, editRules, fieldOpen, type LineField } fr
  */
 
 type ReviewRow = {
-  id: string; poNumber: string; channel: string; poDate: string; receivedAt: string; processedAt: string; lines: number | null; value: number | null
+  id: string; poNumber: string; channel: string; poDate: string; processedAt: string; lines: number | null; value: number | null
   openIssues: number; issueTypes: string[]; source: string; file: string
   subject: string | null
+  /** When it was processed (ISO): the Processed At header's Newest / Oldest sorts by this. */
+  processedIso: string
 }
 
 const RCOLS: [string, keyof ReviewRow, ColKind][] = [
   // Ingest ID left out of the screen and the download (user, 2026-10-16); rows still use it as their key.
-  // PO Date before Received At, Processed At after it (user, 2026-10-29)
-  ['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['PO Date', 'poDate', 'date'], ['Received At', 'receivedAt', 'mono'],
+  // PO Date, then Processed At; no Received At column (user, 2026-10-29: Processed At is enough; the review panel still shows it)
+  ['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['PO Date', 'poDate', 'date'],
   ['Processed At', 'processedAt', 'mono'],
   ['Lines', 'lines', 'num'], ['Value', 'value', 'money'],
 ]
 
 const toRow = (r: PoReviewItem): ReviewRow => ({
-  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', poDate: r.poDate ?? '', receivedAt: istDateTime(r.receivedAt), processedAt: istDateTime(r.processedAt), lines: r.lines, value: r.poValue,
+  id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', poDate: r.poDate ?? '', processedAt: istDateTime(r.processedAt), lines: r.lines, value: r.poValue,
   openIssues: r.openIssues, issueTypes: r.issueTypes, source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, subject: r.subject,
+  processedIso: r.processedAt ?? '',
 })
 
 const distinct = (values: string[]) => [...new Set(values.filter(Boolean))].sort()
@@ -91,7 +95,9 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
     const q = s.q.trim().toLowerCase()
     const searched = q ? rows.filter((r) => [r.poNumber, r.id, r.channel, r.file].some((v) => v.toLowerCase().includes(q))) : rows
     const picked = Array.isArray(issue) ? issue : []
-    return applyFilters(searched, others).filter((r) => !picked.length || r.issueTypes.some((t) => picked.includes(label(t))))
+    const kept = applyFilters(searched, others).filter((r) => !picked.length || r.issueTypes.some((t) => picked.includes(label(t))))
+    // Header Newest / Oldest, then Sort by channel (Filters panel); none = the queue order (oldest first)
+    return orderRows(kept, others, { poDate: (r) => r.poDate, processedAt: (r) => r.processedIso })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, s.q, s.filters])
   const channelOptions = useChannelOptions(rows.map((r) => r.channel))
@@ -99,6 +105,9 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
     { key: 'channel', label: 'Channel', type: 'multi', options: channelOptions },
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows.map((r) => r.source)) },
     { key: 'issue', label: 'Issue', type: 'multi', options: distinct(rows.flatMap((r) => r.issueTypes.map(label))) },
+    { key: SORT_FILTER_KEY, label: LIST_FILTER.SORT, type: 'sort', options: [{ value: LIST_SORT.CHANNEL, label: LIST_FILTER.SORT_CHANNEL }], placeholder: LIST_FILTER.SORT_DEFAULT_REVIEW },
+    // the PO Date / Processed At header sort: only its chip here
+    { key: DATE_SORT_KEY, label: LIST_FILTER.DATE_SORT, type: 'sort', options: LIST_FILTER.DATE_SORT_OPTIONS, inPanel: false },
   ]
 
   // Re-check after a master fix (2026-10-22): editors only; the result goes into the notice line.
@@ -157,6 +166,9 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
         <div className={box}>No POs are waiting for review.</div>
       ) : (
         <DataGrid cols={RCOLS} rows={shown} rowKey={(r) => r.id} pageSize={LIST_PAGE_SIZE} onRowClick={setSel} selected={selected} onSelectedChange={setSelected}
+          // Newest / Oldest first from the PO Date and Processed At headers
+          headFilter={(k) => (k === 'poDate' ? <ColumnSort filters={s.filters} setFilters={s.setFilters} field="poDate" title={LIST_FILTER.PO_DATE} />
+            : k === 'processedAt' ? <ColumnSort filters={s.filters} setFilters={s.setFilters} field="processedAt" title={LIST_FILTER.PROCESSED_AT} /> : null)}
           rowClass={() => '[&>td:first-child]:shadow-[inset_3px_0_0_var(--color-crit)]'}
           trailing={[
             { label: 'Issues', render: (r) => <span className="flex flex-wrap gap-1">{r.issueTypes.map((t) => <Badge key={t} tone="crit">{label(t)}</Badge>)}</span> },

@@ -25,6 +25,28 @@ export const PROCESSED_FILTER = {
   NONE: 'No processed POs yet.',
 } as const
 
+/**
+ * Processed + In Review lists (2026-10-29, user): Newest / Oldest first from the PO Date and Processed At headers (no
+ * date ranges), and "Sort by" Channel in the Filters panel (all POs of a channel together, A-Z; the header's order, else
+ * the list's own, inside each channel).
+ */
+export const LIST_FILTER = {
+  PO_DATE: 'PO Date',
+  PROCESSED_AT: 'Processed At',
+  SORT: 'Sort by',
+  SORT_CHANNEL: 'Channel (grouped, A–Z)',
+  /** What '' means on each tab (the server's order). */
+  SORT_DEFAULT_PROCESSED: 'Newest processed first',
+  SORT_DEFAULT_REVIEW: 'Oldest first (as they came in)',
+  /** The chip of a header sort. */
+  DATE_SORT: 'Sorted',
+  DATE_SORT_OPTIONS: [
+    { value: 'poDate:newest', label: 'PO Date, newest first' }, { value: 'poDate:oldest', label: 'PO Date, oldest first' },
+    { value: 'processedAt:newest', label: 'Processed At, newest first' }, { value: 'processedAt:oldest', label: 'Processed At, oldest first' },
+  ],
+} as const
+export const LIST_SORT = { CHANNEL: 'channel' } as const
+
 /** Dates and times are shown in Indian time. */
 export const DISPLAY_TIME_ZONE = 'Asia/Kolkata'
 
