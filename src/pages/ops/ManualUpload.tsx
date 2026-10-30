@@ -8,7 +8,7 @@ import {
   type ManualUploadItem, type UploadChannel,
 } from '../../api/manualUpload'
 import {
-  AMAZON_ACCEPT, AMAZON_CHANNEL, CHANNEL_GROUPS, MANUAL_ACCEPT, RECENT_CHANNELS_KEY, RECENT_CHANNELS_MAX, MANUAL_MAX_FILES, MANUAL_MAX_MB, MANUAL_STATUS, MANUAL_STATUS_LABEL, MANUAL_STATUS_TONE, MANUAL_TEXT as T,
+  AMAZON_ACCEPT, AMAZON_CHANNEL, CHANNEL_GROUPS, FLIPKART_ACCEPT, FLIPKART_CHANNEL, FLIPKART_FILE, MANUAL_ACCEPT, RECENT_CHANNELS_KEY, RECENT_CHANNELS_MAX, MANUAL_MAX_FILES, MANUAL_MAX_MB, MANUAL_STATUS, MANUAL_STATUS_LABEL, MANUAL_STATUS_TONE, MANUAL_TEXT as T,
   PO_RESULT_LABEL, PO_RESULT_TONE,
 } from '../../constants/manualUpload'
 import { istDateTime } from '../../lib/time'
@@ -72,11 +72,13 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
 
   const picked = channels.find((c) => c.channel === channel)
   const isAmazon = channel === AMAZON_CHANNEL
+  const isFlipkart = channel === FLIPKART_CHANNEL
   const addFiles = (list: FileList | null) => {
     if (!list) return
     const problems: string[] = []
     const ok = [...list].filter((f) => {
       if (isAmazon && !/\.tsv$/i.test(f.name)) return problems.push(T.WRONG_TYPE_AMAZON(f.name)), false
+      if (isFlipkart && !FLIPKART_FILE.test(f.name)) return problems.push(T.WRONG_TYPE_FLIPKART(f.name)), false
       if (!isAmazon && !/\.(pdf|xlsx|xls|csv)$/i.test(f.name)) return problems.push(T.WRONG_TYPE(f.name)), false
       if (f.size > MANUAL_MAX_MB * 1024 * 1024) return problems.push(T.TOO_BIG(f.name)), false
       return true
@@ -134,7 +136,7 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
               <GroupedSelect value={channel} groups={groups} placeholder={T.PICK_CHANNEL}
                 onChange={(v) => { setChannel(v); setFiles([]) }} />
             </div>
-            {picked && <span key={channel} className="pf-tab-in text-[12px] text-ink-600">{isAmazon ? T.AMAZON_HINT : T.NEEDS(picked.needs, picked.twoFiles, picked.optional, picked.manyPos)}</span>}
+            {picked && <span key={channel} className="pf-tab-in text-[12px] text-ink-600">{isAmazon ? T.AMAZON_HINT : isFlipkart ? T.FLIPKART_HINT : T.NEEDS(picked.needs, picked.twoFiles, picked.optional, picked.manyPos)}</span>}
           </div>
           <div
             onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
@@ -144,8 +146,8 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
             className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border-2 border-dashed px-6 py-8 text-center transition-colors ${drag ? 'border-primary bg-primary-soft/60' : 'border-line hover:border-primary hover:bg-primary-soft/30'}`}>
             <div className="flex size-11 items-center justify-center rounded-full bg-primary-soft text-primary"><UploadCloud className="size-5" /></div>
             <div className="text-[14px] font-semibold text-ink-900">{T.DROP}</div>
-            <div className="text-[12px] text-ink-400">{isAmazon ? T.DROP_HINT_AMAZON : T.DROP_HINT}</div>
-            <input ref={input} type="file" accept={isAmazon ? AMAZON_ACCEPT : MANUAL_ACCEPT} multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
+            <div className="text-[12px] text-ink-400">{isAmazon ? T.DROP_HINT_AMAZON : isFlipkart ? T.DROP_HINT_FLIPKART : T.DROP_HINT}</div>
+            <input ref={input} type="file" accept={isAmazon ? AMAZON_ACCEPT : isFlipkart ? FLIPKART_ACCEPT : MANUAL_ACCEPT} multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
           </div>
           {files.length > 0 && (
             <ul className="pf-tab-in divide-y divide-line rounded-[var(--radius)] border border-line">

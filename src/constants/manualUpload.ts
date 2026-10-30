@@ -30,6 +30,10 @@ export const MANUAL_ACCEPT = '.pdf,.xlsx,.xls,.csv'
 /** Amazon (2026-10-22): Seller Central's shipment file, one .tsv per shipment; duplicates are refused by the server. */
 export const AMAZON_CHANNEL = 'amazon'
 export const AMAZON_ACCEPT = '.tsv'
+/** Flipkart (2026-10-30): a consignment's CSV from Seller Hub (Consignments > 3 dots > Download CSV), for ones the robot missed. */
+export const FLIPKART_CHANNEL = 'flipkart'
+export const FLIPKART_ACCEPT = '.csv'
+export const FLIPKART_FILE = /^(?:Consignment_Details_\d+_\d{2}-\d{2}-\d{4}|\d{6,})(?:\s*\(\d+\))?\.csv$/i
 
 /**
  * Channel list groups (user, 2026-10-22): Manual (channels that only come by hand, used every day) open at the top,
@@ -69,6 +73,9 @@ export const MANUAL_TEXT = {
   WRONG_TYPE: (name: string) => `${name}: only PDF, Excel or CSV`,
   WRONG_TYPE_AMAZON: (name: string) => `${name}: for Amazon, upload the shipment .tsv file from Seller Central`,
   AMAZON_HINT: 'One .tsv per shipment. A shipment already in POST_FG (or already in this queue) is refused, so nothing is processed twice. No OCR: the file is read directly.',
+  WRONG_TYPE_FLIPKART: (name: string) => `${name}: for Flipkart, upload the consignment CSV as downloaded: from Seller Hub (Consignment_Details_<id>_<date>.csv) or from POST_FG (<id>.csv)`,
+  FLIPKART_HINT: 'One consignment CSV per PO, as downloaded from Seller Hub (Consignment_Details_<id>_<date>.csv) or from POST_FG (<id>.csv): the id is read from the file name. The warehouse comes from the robot\'s last Bulk Consignment File; if it is not there, the PO waits in review for the location. A consignment the robot fetched or POST_FG already has is refused. No OCR.',
+  DROP_HINT_FLIPKART: `Flipkart consignment .csv files · up to ${MANUAL_MAX_FILES} files`,
   DROP_HINT_AMAZON: `Amazon shipment .tsv files · up to ${MANUAL_MAX_FILES} files`,
   TOO_BIG: (name: string) => `${name}: larger than ${MANUAL_MAX_MB} MB`,
   VIEW_ONLY: 'View only: ask an admin for editor access to upload.',
