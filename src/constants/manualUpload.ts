@@ -46,6 +46,9 @@ export const RECENT_CHANNELS_KEY = 'postfg.manualUpload.recentChannels'
 export const RECENT_CHANNELS_MAX = 3
 export const MANUAL_MAX_FILES = 20
 export const MANUAL_MAX_MB = 20
+/** Upload queue (user, 2026-10-30: a bulk file made one row a long list): a cell with more POs / files than this shows
+ *  one line with the count, opened on click. */
+export const QUEUE_CELL_OPEN_MAX = 2
 
 export const MANUAL_TEXT = {
   CHANNEL: 'Channel',
@@ -80,4 +83,7 @@ export const MANUAL_TEXT = {
   TOO_BIG: (name: string) => `${name}: larger than ${MANUAL_MAX_MB} MB`,
   VIEW_ONLY: 'View only: ask an admin for editor access to upload.',
   OPEN_HINT: 'Find it on the Processed or In Review tab',
+  QUEUE_POS: (n: number) => `${n} POs`,
+  QUEUE_FILES: (n: number) => `${n} files`,
+  QUEUE_HIDE: 'Hide',
 } as const
