@@ -35,8 +35,11 @@ export const SOURCE_INFO: Record<Source, { label: string; sub: string; only: { k
   },
   uniware: {
     label: 'Uniware',
-    sub: 'Export-B2B Sale Orders, Purchase_Order and Export-Inventory Snapshot, one export per facility. Can take up to an hour.',
-    only: [{ key: 'b2b', label: 'B2B Sale Orders only' }, { key: 'po', label: 'Purchase Orders only' }, { key: 'inventory', label: 'Inventory Snapshot only' }],
+    sub: 'Export-B2B Sale Orders, Purchase_Order, Export-Inventory Snapshot and Export-Shelfwise Inventory (optional, for the Shelfwise_Inventory sheet), one export per facility. Can take up to an hour.',
+    only: [
+      { key: 'b2b', label: 'B2B Sale Orders only' }, { key: 'po', label: 'Purchase Orders only' }, { key: 'inventory', label: 'Inventory Snapshot only' },
+      { key: 'shelfwise', label: 'Shelfwise Inventory only' },
+    ],
   },
   // the Seller Hub robot (POST_FG sources/flipkart-seller-hub.ts, 2026-10-28): a headless browser, OTP read from the intake mailbox
   flipkart: {
@@ -103,3 +106,44 @@ export const FACILITY_COLUMNS: { type: string; label: string }[] = [
   { type: 'Return', label: 'Return' },
   { type: 'B2C', label: 'B2C (marketplaces)' },
 ]
+
+/** The weekly Uniware facility check (POST_FG facility-check.service.ts, 2026-10-30): banner + review drawer. */
+export const FACILITY_CHECK_TEXT = {
+  BANNER: (added: number, gone: number) => [
+    added ? `${added} facilit${added === 1 ? 'y is' : 'ies are'} enabled in Uniware but not in the in-transit report` : '',
+    gone ? `${gone} facilit${gone === 1 ? 'y is' : 'ies are'} no longer enabled in Uniware but still exported / counted` : '',
+  ].filter(Boolean).join('; '),
+  FAILED: (error: string) => `The last Uniware facility check failed: ${error}`,
+  CHECKED: (when: string) => `checked ${when}`,
+  REVIEW: 'Review',
+  TITLE: 'Uniware facility check',
+  VIEW_ONLY: 'You can see the list; an editor of In-transit Stock or Warehouses adds or stops facilities.',
+  NEW_TITLE: (n: number) => `New in Uniware (${n})`,
+  NEW_SUB: 'Enabled in Uniware, but neither exported nor counted as stock here. Pick its stock bucket and Add: it is exported from the next Uniware fetch and counted from the next build. Not stock = never asked again.',
+  DISABLED_TITLE: (n: number) => `No longer enabled in Uniware (${n})`,
+  DISABLED_SUB: 'Still exported / counted here, but Uniware no longer has them enabled (or our Uniware user cannot see them). Stop = no longer exported nor counted.',
+  NONE: 'None.',
+  NO_NAME: 'no name in Uniware',
+  NOT_IN_MASTER: 'not in Warehouses yet (Add creates it)',
+  SUGGESTED: (label: string) => `looks like ${label}`,
+  PICK: 'Pick a bucket',
+  ADD: 'Add',
+  NOT_STOCK: 'Not stock',
+  STOP: 'Stop exporting',
+  EXPORTED: 'exported',
+  SAVING: 'Saving…',
+  ADDED: (code: string, label: string) => `${code} added as ${label}: exported from the next Uniware fetch, counted from the next build.`,
+  IGNORED: (code: string) => `${code} marked not stock: it will not be asked again.`,
+  STOPPED: (code: string) => `${code} is no longer exported nor counted.`,
+} as const
+
+/** The in-transit mail's workbooks next to each build (POST_FG MAIL_FILES, 2026-10-30). */
+export const MAIL_FILES = { STOCK: 'Stock.xlsx', B2C: 'B2C-Format-Data-Planning.xlsx' } as const
+export const MAIL_FILE_LABEL: Record<string, string> = { [MAIL_FILES.STOCK]: 'Stock', [MAIL_FILES.B2C]: 'B2C format' }
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+/** The name a workbook is mailed with: Stock-30Oct'26.xlsx, B2C-Format-Data-Planning-30Oct.xlsx (as POST_FG mailFileName). */
+export const mailFileName = (file: string, asOf: string) => {
+  const [y, m, d] = asOf.split('-')
+  const day = `${d}${MONTH_SHORT[Number(m) - 1] ?? m}`
+  return file === MAIL_FILES.STOCK ? `Stock-${day}'${y.slice(2)}.xlsx` : `${file.replace(/\.xlsx$/, '')}-${day}.xlsx`
+}
