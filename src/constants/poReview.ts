@@ -168,6 +168,8 @@ export const REVIEW_TEXT = {
 
 /** Issue types that can only be rejected (never corrected or accepted). */
 export const REJECT_ONLY_ISSUES = ['DUPLICATE_PO']
+/** Price check (2026-10-30): decided by a click in the review panel (ours / the channel's). */
+export const PRICE_ISSUES = { PRICE_MISMATCH: 'price', MRP_MISMATCH: 'mrp' } as Record<string, 'price' | 'mrp'>
 
 /* ---- Approvals page: PO reviews waiting for an approver (2026-10-15) ---- */
 

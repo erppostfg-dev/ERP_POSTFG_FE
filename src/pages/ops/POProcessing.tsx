@@ -30,9 +30,12 @@ import { VerifyPanel } from './VerifyPanel'
 import { ManualUpload } from './ManualUpload'
 import { PoIssues } from './PoIssues'
 import { PO_ISSUES_TEXT } from '../../constants/poIssues'
+import { PriceDifferences } from './PriceDifferences'
+import { PRICE_DIFF_TEXT } from '../../constants/priceDifferences'
 
 // PO issues (2026-10-29): moved here from Users & Roles, for everyone who can open this page
-const TABS = ['processed', 'review', 'manual', 'issues'] as const
+// Price differences (2026-10-30): lines kept at our price, to tell the channel
+const TABS = ['processed', 'review', 'manual', 'issues', 'prices'] as const
 type Tab = (typeof TABS)[number]
 const SRC_ICON = { API: Zap, Webhook: Webhook, Email: Mail, Manual: FileUp } as const
 
@@ -53,11 +56,13 @@ export default function POProcessing() {
         { key: 'review', label: 'In Review', count: reviewCount, danger: !!reviewCount },
         { key: 'manual', label: 'Manual Upload' },
         { key: 'issues', label: PO_ISSUES_TEXT.TAB },
+        { key: 'prices', label: PRICE_DIFF_TEXT.TAB },
       ]} />
       {tab === 'processed' && <Processed onCount={setProcessedCount} liveTick={liveTick} />}
       {tab === 'review' && <InReview srcIcon={SRC_ICON} onCount={setReviewCount} liveTick={liveTick} />}
       {tab === 'manual' && <ManualUpload canEdit={canEditRoot} liveTick={liveTick} />}
       {tab === 'issues' && <PoIssues />}
+      {tab === 'prices' && <PriceDifferences canEdit={canEditRoot} />}
     </div>
   )
 }

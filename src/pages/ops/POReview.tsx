@@ -12,8 +12,10 @@ import {
 } from '../../api/poReview'
 import { ApiError } from '../../api/client'
 import {
-  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED,
+  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED, PRICE_ISSUES,
 } from '../../constants/poReview'
+import { PRICE_CHECK_TEXT, PRICE_CHOICE, TOTAL_TOLERANCE, type PriceChoice } from '../../constants/priceDifferences'
+import { PriceCheck, type PriceRow } from './PriceCheck'
 import { ACCESS } from '../../constants/auth'
 import { PATHS } from '../../constants/pages'
 import { useAuth } from '../../auth/AuthContext'
@@ -227,6 +229,9 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   const [rejectRemark, setRejectRemark] = useState('')
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<{ message: string; stillOpen?: StillOpen['openIssues'] }>()
+  // price check (2026-10-30): lineNo -> ours / channel for its MRP and price together (ours to start); lines whose master takes the PO's values
+  const [choices, setChoices] = useState<Record<string, PriceChoice>>({})
+  const [master, setMaster] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -234,6 +239,8 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
       .then((d) => {
         setData(d)
         setEdits(Object.fromEntries(d.lines.map((l) => [lineKey(l), startOf(l)])))
+        setChoices(Object.fromEntries(d.issues.filter((i) => i.status === ISSUE_STATUS.OPEN && PRICE_ISSUES[i.type] && i.lineNo !== null)
+          .map((i) => [String(i.lineNo), PRICE_CHOICE.OURS])))
       })
       .catch((e: unknown) => !ctrl.signal.aborted && setError(e instanceof ApiError ? e.message : String(e)))
     return () => ctrl.abort()
@@ -256,11 +263,41 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   const location = picked ?? data?.location ?? null
   const sku = (pep: string) => data?.skuOptions.find((o) => o.pepCode === pep)
 
+
+  // Price check rows: one per line with an open price and / or MRP mismatch (one decision for both: an MRP difference
+  // nearly always brings the price with it), with what the PO says now (a misread corrected above counts)
+  const priceRows: PriceRow[] = (data?.lines ?? []).flatMap((l) => {
+    const kinds = new Set(open.filter((i) => PRICE_ISSUES[i.type] && String(i.lineNo) === lineKey(l)).map((i) => PRICE_ISSUES[i.type]))
+    if (!kinds.size) return []
+    const e = edits[lineKey(l)]
+    return [{
+      lineNo: lineKey(l), sku: l.skuName || l.description, code: l.channelSkuCode,
+      ...(kinds.has('mrp') ? { mrp: { ours: l.ourMrp, channel: numOrEmpty(e?.mrp ?? '') } } : {}),
+      ...(kinds.has('price') ? { price: { ours: l.ourRate, channel: numOrEmpty(e?.rate ?? '') } } : {}),
+    }]
+  })
+  // The PO total after the choices: the line totals as the PO prints them vs its unit prices (the rest is explained by
+  // the lines kept at our price); the same rule as the backend (0.02% of the value, at least Rs 10).
+  const chargedOf = (l: PoReviewLine) => { const q = numOrEmpty(edits[lineKey(l)]?.qty ?? ''); return q === '' ? 0 : q - (l.freeQty === '' ? 0 : Number(l.freeQty)) }
+  const printedTotal = data?.lines.reduce((s, l) => s + (changed(l) || l.poLineValue === '' ? chargedOf(l) * Number(numOrEmpty(edits[lineKey(l)]?.rate ?? '') || 0) : Number(l.poLineValue)), 0) ?? 0
+  const chosenTotal = data?.lines.reduce((s, l) => {
+    const rate = choices[lineKey(l)] === PRICE_CHOICE.CHANNEL ? Number(numOrEmpty(edits[lineKey(l)]?.rate ?? '') || 0) : Number(l.ourRate || 0)
+    return s + chargedOf(l) * rate
+  }, 0) ?? 0
+  const explained = data?.lines.reduce((s, l) => s + (choices[lineKey(l)] === PRICE_CHOICE.OURS ? chargedOf(l) * (Number(numOrEmpty(edits[lineKey(l)]?.rate ?? '') || 0) - Number(l.ourRate || 0)) : 0), 0) ?? 0
+  const left = Math.round((printedTotal - chosenTotal - explained) * 100) / 100
+  const totalLeft = Math.abs(left) > Math.max(TOTAL_TOLERANCE.MIN, (chosenTotal * TOTAL_TOLERANCE.PERCENT) / 100) ? left : null
+  const totalIssue = open.find((i) => i.field === ISSUE_FIELD.PO_VALUE)
+  const totalNeedsRemark = !!totalIssue && accepted.has(totalIssue.issueId) && !remark.trim()
+
   // An issue counts as handled when it is accepted, or the part it is about was corrected. The backend checks again on
   // Submit and answers with whatever is still open.
   const handled = (i: PoReviewIssue): boolean => {
     if (accepted.has(i.issueId)) return true
     if (REJECT_ONLY_ISSUES.includes(i.type)) return false
+    // a price / MRP mismatch is decided in the Price check (ours or the channel's)
+    if (PRICE_ISSUES[i.type] && i.lineNo !== null && choices[String(i.lineNo)]) return true
+    if (i.field === ISSUE_FIELD.PO_VALUE && priceRows.length && totalLeft === null) return true
     if (i.field === ISSUE_FIELD.DELIVERY_LOCATION) return !!picked
     if (i.lineNo !== null) {
       const l = data?.lines.find((x) => String(x.lineNo) === String(i.lineNo))
@@ -304,6 +341,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   const blockers = data
     ? [
         ...(unresolved.length ? [`${unresolved.length} issue${unresolved.length > 1 ? 's' : ''} to resolve`] : []),
+        ...(totalNeedsRemark ? [PRICE_CHECK_TEXT.TOTAL_REMARK] : []),
         ...checks.filter((c) => !c.ok).map((c) => c.label),
       ]
     : []
@@ -327,6 +365,16 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
       if (e.mrp !== o.mrp && numOrEmpty(e.mrp) !== '') c.mrp = Number(e.mrp)
       if (e.rate !== o.rate && numOrEmpty(e.rate) !== '') c.rate = Number(e.rate)
       lines.push(c)
+    }
+    // price check choices (every decided line is sent, changed or not)
+    for (const r of priceRows) {
+      const choice = choices[r.lineNo]
+      if (!choice) continue
+      let c = lines.find((x) => x.lineNo === r.lineNo)
+      if (!c) { c = { lineNo: r.lineNo }; lines.push(c) }
+      if (r.price) c.priceFrom = choice
+      if (r.mrp) c.mrpFrom = choice
+      if (choice === PRICE_CHOICE.CHANNEL && master.has(r.lineNo)) c.updateMaster = true
     }
     const body: ResubmitBody = {
       ...(picked ? { location: { detailsChannelId: picked.detailsChannelId } } : {}),
@@ -438,6 +486,16 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
               {field({ title: 'Pincode', value: data.po.pincode, mono: true })}
               {field({ title: 'Fulfilment facility', value: location?.facilityCode ?? '', mono: true, req: true })}
             </div>
+
+            {priceRows.length > 0 && (
+              <>
+                <Sec>{PRICE_CHECK_TEXT.TITLE(priceRows.length)}</Sec>
+                <PriceCheck rows={priceRows} choices={choices} canEdit={canEdit} master={master}
+                  onChoose={(lineNos, choice) => setChoices((cur) => ({ ...cur, ...Object.fromEntries(lineNos.map((k) => [k, choice])) }))}
+                  onMaster={(lineNo, on) => setMaster((cur) => { const next = new Set(cur); if (on) next.add(lineNo); else next.delete(lineNo); return next })}
+                  totals={{ po: money(printedTotal), chosen: money(chosenTotal), explained: Math.abs(explained) >= 0.01 ? money(explained) : null, left: totalLeft === null ? null : money(totalLeft) }} />
+              </>
+            )}
 
             <Sec>Line items</Sec>
             <div className="overflow-x-auto rounded-[var(--radius)] border border-line">

@@ -1,6 +1,7 @@
 import { api, apiUrl, ApiError } from './client'
 import { ERROR_CODE } from '../constants/auth'
 import { LINE_ITEMS, PO_REVIEW_ENDPOINT, PO_REVIEW_MAX_PAGE_SIZE, PO_REVIEW_MAX_PAGES } from '../constants/poReview'
+import type { PriceChoice } from '../constants/priceDifferences'
 
 /* GET /po-review: one row per PO upload (API contract "PO review"). */
 
@@ -193,7 +194,11 @@ export async function getPoFile(uploadId: string, signal?: AbortSignal): Promise
  * pass completely -> pending_approval; an approver creates the PO on the Approvals page.
  */
 
-export type LineCorrection = { lineNo: string; pepCode?: string; qty?: number; mrp?: number; rate?: number }
+export type LineCorrection = {
+  lineNo: string; pepCode?: string; qty?: number; mrp?: number; rate?: number
+  /** Price check (2026-10-30): a price / MRP mismatch decided by a click; updateMaster with a channel choice. */
+  priceFrom?: PriceChoice; mrpFrom?: PriceChoice; updateMaster?: boolean
+}
 
 export type ResubmitBody = {
   location?: { detailsChannelId: string }

@@ -9,6 +9,7 @@ import { approveSubmission, getApproval, listApprovals, rejectSubmission, type A
 import type { Num } from '../api/poReview'
 import { APPROVAL_ERROR, APPROVAL_STATUS, APPROVAL_TABS, APPROVAL_TEXT, FIX_FIELD_LABEL, ISSUE_LABELS, PO_REVIEW_REMARK_MAX, type ApprovalStatus } from '../constants/poReview'
 import { SEARCH_DELAY_MS } from '../constants/poOverview'
+import { APPROVAL_PRICE_TEXT, PRICE_CHECK_TEXT, PRICE_CHOICE } from '../constants/priceDifferences'
 import { REVIEW_LIVE } from '../constants/poReview'
 import { useLiveReview } from '../lib/liveReview'
 import { LiveDot } from '../components/LiveDot'
@@ -278,6 +279,28 @@ function ApprovalBody({ a }: { a: ApprovalDetail }) {
           </div>
         )}
       </Section>
+
+      {!!fixes?.choices?.length && (
+        <Section title={APPROVAL_PRICE_TEXT.TITLE(fixes.choices.length)}>
+          <div className="overflow-hidden rounded-[var(--radius)] border border-line">
+            <table className="w-full text-[12.5px]">
+              <thead className="bg-alt"><tr>{APPROVAL_PRICE_TEXT.COLS.map((h) => <th key={h} className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">{h}</th>)}</tr></thead>
+              <tbody>
+                {fixes.choices.map((c) => (
+                  <tr key={`${c.lineNo}-${c.field}`} className="border-t border-line">
+                    <td className="px-3 py-2 text-ink-600">Line {c.lineNo}<div className="max-w-[220px] truncate font-mono text-[11px] text-ink-400" title={c.description ?? undefined}>{c.channelSku}</div></td>
+                    <td className="px-3 py-2">{PRICE_CHECK_TEXT.FIELD[c.field] ?? c.field}</td>
+                    <td className="tnum px-3 py-2">{money(c.ours)}</td>
+                    <td className="tnum px-3 py-2">{money(c.channel)}</td>
+                    <td className="px-3 py-2"><Badge tone={c.from === PRICE_CHOICE.CHANNEL ? 'info' : 'neutral'}>{APPROVAL_PRICE_TEXT.USES[c.from] ?? c.from}</Badge></td>
+                    <td className="px-3 py-2">{c.updateMaster ? <span className="font-medium text-warn">{APPROVAL_PRICE_TEXT.WILL_UPDATE(PRICE_CHECK_TEXT.FIELD[c.field] ?? c.field, money(c.ours), money(c.channel))}</span> : <span className="text-ink-400">–</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
 
       <Section title={`Issues resolved (${fixes?.issues.length ?? 0})`}>
         <ul className="space-y-1.5">
