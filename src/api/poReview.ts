@@ -86,6 +86,8 @@ export type PoReviewLine = {
   poUnitPrice: Num
   poLineValue: Num
   pepCode: string
+  /** The code the sale order is punched with: the _S code of a combo when our master has it, else pepCode. */
+  punchCode: string
   skuName: string
   ourMrp: Num
   ourRate: Num

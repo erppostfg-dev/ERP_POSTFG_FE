@@ -518,6 +518,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
                           <SkuPicker value={e?.pep ?? ''} options={data.skuOptions} disabled={!editable(l, 'pep')} invalid={!e?.pep}
                             onChange={(pep) => setEdits({ ...edits, [lineKey(l)]: { ...e, pep } })} />
                           {(o?.skuName ?? (e?.pep === l.pepCode ? l.skuName : '')) && <div className="mt-0.5 max-w-[220px] truncate text-[11px] text-ink-600">{o?.skuName ?? l.skuName}</div>}
+                          {e?.pep === l.pepCode && l.punchCode && l.punchCode !== l.pepCode && <div className="mt-0.5 font-mono text-[11px] text-ink-600" title={REVIEW_TEXT.PUNCHED_AS_TIP}>{REVIEW_TEXT.PUNCHED_AS(l.punchCode)}</div>}
                           {errs.map((i) => (
                             <div key={i.issueId} className={`mt-1 flex items-start gap-1 text-[11px] ${handled(i) && !still.length ? 'text-ink-400' : 'text-crit'}`}>
                               {handled(i) && !still.length && <Check className="mt-px size-3 shrink-0 text-ok" />}
