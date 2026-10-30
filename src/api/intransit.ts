@@ -1,6 +1,6 @@
 import { api, ApiError, apiUrl } from './client'
 import { ERROR_CODE } from '../constants/auth'
-import { INTRANSIT_ENDPOINT, PEPIMS_CONNECTOR, type RunStatus, type Source } from '../constants/intransit'
+import { INTRANSIT_ENDPOINT, mailFileName, PEPIMS_CONNECTOR, type RunStatus, type Source } from '../constants/intransit'
 import * as P from '../dev/intransitPreview'
 
 /* In-transit stock API (POST_FG src/routes/intransit.routes.ts). */
@@ -97,6 +97,16 @@ export interface SavedInput {
   unchanged: boolean
 }
 
+/** One row of a build's WH table (the in-transit mail). */
+export interface WhSummaryRow {
+  wh: string
+  gmv: number
+  units: number
+  cogs: number
+  /** Share of the total COGS, 0..1. */
+  cogsSplit: number
+}
+
 export interface IntransitRun {
   id: string
   kind: 'report' | Source
@@ -118,6 +128,10 @@ export interface IntransitRun {
     saved?: string[]; rejected?: Record<string, string[]>; comboCheck?: ComboCheck | null
     inputsUsed?: { masters: number; ofDate: string[]; earlier: { name: string; date: string }[] }
     fetched?: { source: Source | typeof PEPIMS_CONNECTOR; runId: string | null; status: string; files: string[]; error: string | null }[]
+    /** Report: what a person should see about the build (e.g. an optional input with no copy). */
+    warnings?: string[]
+    /** Report: GMV / Units / COGS per warehouse row, the in-transit mail's table (POST_FG stages/wh-summary.ts). */
+    whSummary?: WhSummaryRow[]
   } | null
   hasReport: boolean
   /**
@@ -265,18 +279,66 @@ export interface PeriodCopy {
 export const listPeriods = (signal?: AbortSignal) => pv() ? P.previewPeriods() : api<PeriodCopy[]>(`${E}/periods`, { signal })
 export const downloadPeriod = (p: PeriodCopy) => saveFrom(`${E}/periods/download?key=${enc(p.key)}`, `Intransit_Stock_Report_${p.fy}_${p.label}.xlsx`)
 
+// ---- weekly Uniware facility check (POST_FG facility-check.service.ts, 2026-10-30) ------------------------------
+
+export interface CheckedNewFacility {
+  code: string
+  name: string | null
+  /** It has a Warehouses row already (else Add creates one). */
+  inMaster: boolean
+  /** The bucket its code suggests, or null. */
+  guess: string | null
+}
+export interface CheckedDisabledFacility {
+  code: string
+  name: string | null
+  group: string | null
+  exported: boolean
+}
+export interface FacilityCheck {
+  checkedAt: string | null
+  attemptedAt: string | null
+  error: string | null
+  newFacilities: CheckedNewFacility[]
+  disabled: CheckedDisabledFacility[]
+  ignored: string[]
+  buckets: { group: string; type: string; label: string }[]
+}
+const NO_CHECK: FacilityCheck = { checkedAt: null, attemptedAt: null, error: null, newFacilities: [], disabled: [], ignored: [], buckets: [] }
+const facilityAction = (action: 'add' | 'ignore' | 'stop', body: { code: string; group?: string }) =>
+  api<FacilityCheck>(`${E}/facility-check/${action}`, { method: 'POST', body: JSON.stringify(body) })
+
+export const getFacilityCheck = (signal?: AbortSignal) => pv() ? Promise.resolve(NO_CHECK) : api<FacilityCheck>(`${E}/facility-check`, { signal })
+export const addCheckedFacility = (code: string, group: string) => facilityAction('add', { code, group })
+export const ignoreCheckedFacility = (code: string) => facilityAction('ignore', { code })
+export const stopCheckedFacility = (code: string) => facilityAction('stop', { code })
+
 /** Fetch a protected file (the session cookie goes along) and hand it to the browser as a download. */
+/**
+ * Save a file the server sends. Asked with link=1 (user, 2026-10-29): a file kept in S3 comes back as a 5-minute S3
+ * link and the browser downloads it from S3 directly (not through the server); anything else is the file itself.
+ */
 async function saveFrom(path: string, fallbackName: string): Promise<void> {
   if (pv()) return P.previewDownload()
   let res: Response
   try {
-    res = await fetch(apiUrl(path), { credentials: 'include' })
+    res = await fetch(apiUrl(`${path}${path.includes('?') ? '&' : '?'}link=1`), { credentials: 'include' })
   } catch {
     throw new ApiError(0, ERROR_CODE.NETWORK, 'Cannot reach the server')
   }
   if (!res.ok) {
     const err = (await res.json().catch(() => null))?.error
     throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? res.statusText, err?.details)
+  }
+  if (res.headers.get('Content-Type')?.includes('application/json')) {
+    const link = (await res.json().catch(() => null))?.data as { url?: string } | undefined
+    if (!link?.url) throw new ApiError(res.status, `HTTP_${res.status}`, 'The server sent no download link')
+    // S3 answers with Content-Disposition: attachment, so this saves the file and the page stays
+    const a = document.createElement('a')
+    a.href = link.url
+    a.rel = 'noopener'
+    a.click()
+    return
   }
   const name = /filename="?([^";]+)"?/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName
   const url = URL.createObjectURL(await res.blob())
@@ -288,6 +350,14 @@ async function saveFrom(path: string, fallbackName: string): Promise<void> {
 }
 
 export const downloadReport = (id: string) => saveFrom(`${E}/runs/${id}/report`, `Intransit_Stock_Report_run${id}.xlsx`)
+/** GET /intransit/runs/:id/mail: the build's in-transit mail as it will be sent (opened in a new tab). */
+export const runMailUrl = (id: string) => apiUrl(`${E}/runs/${id}/mail`)
+/** POST /intransit/runs/:id/mail/send: that mail, with the build's Stock / B2C workbooks, to the "In-transit daily report" list. */
+export const sendRunMail = (id: string) =>
+  api<{ to: string[]; cc: string[]; bcc: string[]; attachments: string[] }>(`${E}/runs/${id}/mail/send`, { method: 'POST' })
+/** One of the mail's workbooks of a build, under the name it is mailed with. */
+export const downloadMailFile = (id: string, file: string, asOf: string) =>
+  saveFrom(`${E}/runs/${id}/files/${enc(file)}/download`, mailFileName(file, asOf))
 export const downloadLog = (id: string) => saveFrom(`${E}/runs/${id}/log`, `intransit_run${id}.log`)
 
 // ---- CSV viewer ----------------------------------------------------------------------------------------------------

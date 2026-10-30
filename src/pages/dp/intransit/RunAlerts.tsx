@@ -20,9 +20,11 @@ const problemOf = (r: IntransitRun): string | null => {
   if (r.status !== 'succeeded') return null
   if (r.kind !== 'report') return r.error ? `Done, but ${r.error}.` : null
   const fetchFailed = (r.result?.fetched ?? []).filter((f) => f.error)
-  return fetchFailed.length
-    ? `Built, but ${fetchFailed.map((f) => `the ${SOURCE_INFO[f.source as Source]?.label ?? f.source} fetch failed (${f.error})`).join('; ')}, so earlier copies were used.`
-    : null
+  const notes = [
+    ...(fetchFailed.length ? [`${fetchFailed.map((f) => `the ${SOURCE_INFO[f.source as Source]?.label ?? f.source} fetch failed (${f.error})`).join('; ')}, so earlier copies were used`] : []),
+    ...(r.result?.warnings ?? []),
+  ]
+  return notes.length ? `Built, but: ${notes.join('. ')}.` : null
 }
 
 /** Watches the runs going on (`running`) and returns the ones that ended badly, until dismissed. */

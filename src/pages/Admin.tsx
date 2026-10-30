@@ -9,13 +9,14 @@ import {
   createUser, getRolePages, getUserOptions, listRoles, listUsers, resendWelcome, updateRole, updateUser,
   type AccessLevel, type AdminUser, type RoleItem, type RolePage, type UserBody, type UserOptions,
 } from '../api/admin'
-import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT, SETTINGS_SECTIONS, type SettingsSection } from '../constants/admin'
+import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT, EMAIL_TEXT, SETTINGS_SECTIONS, type SettingsSection } from '../constants/admin'
 import { istDateTime } from '../lib/time'
 import { PATHS, URL_PARAM } from '../constants/pages'
 import { oneOf, useUrlParam } from '../lib/urlState'
 import type { ColKind } from '../lib/ops'
 import { Toggle, VerifySettings } from './ops/VerifySettings'
-import { NotificationsDummy, ReviewRulesDummy } from './SettingsDummy'
+import { ReviewRulesDummy } from './SettingsDummy'
+import { EmailTab } from './admin/EmailTab'
 import { IntakeSettings } from './ops/IntakeSettings'
 import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
 
@@ -26,9 +27,10 @@ import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
  * can change a role's page access (Hidden / View / Edit). Built-in roles (admin, developer) are read-only. Nobody is
  * deleted: people are switched off. Settings tab (2026-10-22): the verify-before-Uniware switch per channel (VerifySettings).
  * PO issues moved to PO Processing & Review (2026-10-29: for everyone with that page).
+ * Email tab (2026-10-30): who gets each mail the ERP sends (pages/admin/EmailTab.tsx).
  */
 
-const TABS = ['users', 'roles', 'settings'] as const
+const TABS = ['users', 'roles', 'email', 'settings'] as const
 type Tab = (typeof TABS)[number]
 type Notice = { tone: 'ok' | 'err'; text: string } | null
 const errText = (e: unknown) => (e instanceof ApiError ? (Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message) : String(e))
@@ -40,8 +42,8 @@ export default function Admin() {
   return (
     <div className="space-y-5">
       <PageTitle title={ADMIN_TEXT.TITLE} sub={ADMIN_TEXT.SUB} />
-      <SubTabs value={tab} onChange={setTab} tabs={[{ key: 'users', label: 'Users', count: users.data?.length }, { key: 'roles', label: 'Roles', count: roles.data?.length }, { key: 'settings', label: VERIFY_SETTINGS_TEXT.TAB }]} />
-      <div key={tab} className="pf-tab-in">{tab === 'users' ? <UsersTab /> : tab === 'roles' ? <RolesTab /> : <SettingsTab />}</div>
+      <SubTabs value={tab} onChange={setTab} tabs={[{ key: 'users', label: 'Users', count: users.data?.length }, { key: 'roles', label: 'Roles', count: roles.data?.length }, { key: 'email', label: EMAIL_TEXT.TAB }, { key: 'settings', label: VERIFY_SETTINGS_TEXT.TAB }]} />
+      <div key={tab} className="pf-tab-in">{tab === 'users' ? <UsersTab /> : tab === 'roles' ? <RolesTab /> : tab === 'email' ? <EmailTab /> : <SettingsTab />}</div>
     </div>
   )
 }
@@ -63,7 +65,6 @@ function SettingsTab() {
       </div>
       <div key={section} className="pf-tab-in">
         {section === 'po-verify' && <VerifySettings />}
-        {section === 'notifications' && <NotificationsDummy />}
         {section === 'review-rules' && <ReviewRulesDummy />}
         {section === 'po-intake' && <IntakeSettings />}
       </div>
