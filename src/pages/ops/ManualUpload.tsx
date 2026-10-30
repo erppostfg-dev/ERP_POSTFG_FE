@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Check, FileSpreadsheet, FileText, Loader2, Play, RotateCcw, UploadCloud, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AlertTriangle, Check, ChevronDown, FileSpreadsheet, FileText, Loader2, Play, RotateCcw, UploadCloud, X } from 'lucide-react'
 import { Badge } from '../../components/ui'
 import { GroupedSelect } from '../../components/pickers'
 import { ApiError } from '../../api/client'
@@ -9,7 +9,7 @@ import {
 } from '../../api/manualUpload'
 import {
   AMAZON_ACCEPT, AMAZON_CHANNEL, CHANNEL_GROUPS, FLIPKART_ACCEPT, FLIPKART_CHANNEL, FLIPKART_FILE, MANUAL_ACCEPT, RECENT_CHANNELS_KEY, RECENT_CHANNELS_MAX, MANUAL_MAX_FILES, MANUAL_MAX_MB, MANUAL_STATUS, MANUAL_STATUS_LABEL, MANUAL_STATUS_TONE, MANUAL_TEXT as T,
-  PO_RESULT_LABEL, PO_RESULT_TONE,
+  PO_RESULT_LABEL, PO_RESULT_TONE, QUEUE_CELL_OPEN_MAX,
 } from '../../constants/manualUpload'
 import { istDateTime } from '../../lib/time'
 
@@ -31,6 +31,30 @@ const saveRecent = (channel: string) => {
 }
 
 const isSheet = (name: string) => /\.(xlsx|xls|csv|tsv)$/i.test(name)
+
+/** POs by result in the order of PO_RESULT_LABEL: "9 Processed · 5 In Review". */
+const posSummary = (pos: ManualUploadItem['pos']) => {
+  const n = new Map<string, number>()
+  for (const p of pos) n.set(p.status, (n.get(p.status) ?? 0) + 1)
+  return [...n.entries()].sort(([a], [b]) => Object.keys(PO_RESULT_LABEL).indexOf(a) - Object.keys(PO_RESULT_LABEL).indexOf(b))
+}
+
+/** A queue cell with many entries: one line with the count (+ extra), the list on click; a few entries show as they are. */
+function Expandable({ count, title, extra, children }: { count: number; title: string; extra?: ReactNode; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  if (count <= QUEUE_CELL_OPEN_MAX) return <>{children}</>
+  return (
+    <div>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
+        className="flex items-center gap-1 rounded-md py-0.5 text-left text-[12.5px] font-semibold text-ink-900 hover:text-primary">
+        <ChevronDown className={`size-3.5 shrink-0 text-ink-400 transition-transform duration-200 ${open ? '' : '-rotate-90'}`} />
+        {open ? T.QUEUE_HIDE : title}
+      </button>
+      {!open && extra && <div className="mt-0.5 flex flex-wrap gap-1 pl-[18px]">{extra}</div>}
+      {open && <div className="pf-tab-in mt-1 max-h-[240px] overflow-auto pl-[18px]">{children}</div>}
+    </div>
+  )
+}
 
 export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick: number }) {
   const [channels, setChannels] = useState<UploadChannel[]>([])
@@ -223,7 +247,9 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
                     <td className={`${td} tnum text-ink-400`}>{r.id}</td>
                     <td className={`${td} font-semibold text-ink-900`}>{r.channelName}</td>
                     <td className={`${td} max-w-[260px]`}>
-                      {r.files.map((f) => <div key={f.filename} className="truncate font-mono text-[12px]" title={f.filename}>{f.filename}</div>)}
+                      <Expandable count={r.files.length} title={T.QUEUE_FILES(r.files.length)}>
+                        {r.files.map((f) => <div key={f.filename} className="truncate font-mono text-[12px]" title={f.filename}>{f.filename}</div>)}
+                      </Expandable>
                     </td>
                     <td className={td}>
                       <Badge tone={MANUAL_STATUS_TONE[r.status]}>
@@ -232,12 +258,17 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
                       {r.note && <div className={`mt-1 max-w-[260px] text-[11.5px] ${r.status === MANUAL_STATUS.FAILED ? 'text-crit' : 'text-warn'}`}>{r.note}</div>}
                     </td>
                     <td className={td} title={T.OPEN_HINT}>
-                      {r.pos.length ? r.pos.map((p) => (
-                        <div key={p.uploadId} className="flex items-center gap-1.5 py-0.5">
-                          <span className="font-mono text-[12px]">{p.poNumber ?? '—'}</span>
-                          <Badge tone={PO_RESULT_TONE[p.status] ?? 'neutral'}>{PO_RESULT_LABEL[p.status] ?? p.status}</Badge>
-                        </div>
-                      )) : <span className="text-ink-400">—</span>}
+                      {r.pos.length ? (
+                        <Expandable count={r.pos.length} title={T.QUEUE_POS(r.pos.length)}
+                          extra={posSummary(r.pos).map(([s, n]) => <Badge key={s} tone={PO_RESULT_TONE[s] ?? 'neutral'}>{n} {PO_RESULT_LABEL[s] ?? s}</Badge>)}>
+                          {r.pos.map((p) => (
+                            <div key={p.uploadId} className="flex items-center gap-1.5 py-0.5">
+                              <span className="font-mono text-[12px]">{p.poNumber ?? '—'}</span>
+                              <Badge tone={PO_RESULT_TONE[p.status] ?? 'neutral'}>{PO_RESULT_LABEL[p.status] ?? p.status}</Badge>
+                            </div>
+                          ))}
+                        </Expandable>
+                      ) : <span className="text-ink-400">—</span>}
                     </td>
                     <td className={`${td} text-[12px] text-ink-600`}>
                       <div>{r.uploadedBy ?? '—'}</div>

@@ -151,6 +151,9 @@ export const REVIEW_TEXT = {
   VIEW_ONLY: 'View only: ask an admin for editor access to submit or reject POs.',
   SUBMIT: 'Submit for approval',
   REJECT: 'Reject PO',
+  /** Combos / gift kits / M_Tools go to Uniware with their _S code when our master has it (2026-10-30). */
+  PUNCHED_AS: (code: string) => `Punched as ${code}`,
+  PUNCHED_AS_TIP: 'Combos, gift kits and M_Tools are punched in Uniware with their _S code (sale order CSV + PO Overview)',
   REJECT_PROMPT: 'Why is this PO rejected? (required, kept with the PO)',
   REMARK: 'Remark (optional, kept with the PO)',
   DUPLICATE_ONLY_REJECT: 'A duplicate PO can only be rejected.',
