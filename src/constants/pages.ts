@@ -20,7 +20,7 @@ export const PATHS = {
   PO_OVERVIEW: '/operations/po-overview',
   PO_REVIEW: '/operations/po-review',
   PO_WORKING: '/operations/po-working',
-  /** Amazon inbound plans + FBA shipments (2026-10-19). */
+  /** Channel Pulls (2026-10-30; was Amazon Inbound, same URL + page key): channels pulled by API / robot + Amazon's inbound tabs. */
   AMAZON_INBOUND: '/operations/amazon-inbound',
   SKUS_SHORT: '/operations/skus-short',
   OPS_ANALYTICS: '/operations/analytics',
@@ -99,7 +99,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: PATHS.PO_REVIEW, label: 'PO Processing & Review' },
       { path: PATHS.PO_OVERVIEW, label: 'PO Overview' },
       { path: PATHS.PO_WORKING, label: 'PO Working' },
-      { path: PATHS.AMAZON_INBOUND, label: 'Amazon Inbound' },
+      { path: PATHS.AMAZON_INBOUND, label: 'Channel Pulls' },
       { path: PATHS.SKUS_SHORT, label: 'SKUs Short' },
       { path: PATHS.OPS_ANALYTICS, label: 'Analytics' },
     ],

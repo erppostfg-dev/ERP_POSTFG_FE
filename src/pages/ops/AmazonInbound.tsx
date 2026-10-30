@@ -13,6 +13,8 @@ import {
   EVENT_LABEL, EVENT_SOURCE_LABEL, INBOUND_TEXT, SHIPMENT_STEPS, STATUS_FILL, STATUS_LABEL, STATUS_TONE, UNIWARE_LABEL,
 } from '../../constants/amazonInbound'
 import { useAuth } from '../../auth/AuthContext'
+import { ChannelPullsTab } from './ChannelPulls'
+import { PULLS_TEXT } from '../../constants/channelPulls'
 import { ACCESS } from '../../constants/auth'
 import { PATHS, URL_PARAM } from '../../constants/pages'
 import { oneOf, useUrlParam } from '../../lib/urlState'
@@ -26,7 +28,8 @@ import { istDateTime } from '../../lib/time'
  * (editors change them). Reads only POST_FG (GET /amazon/inbound/*); only Refresh asks Amazon.
  */
 
-const TABS = ['plans', 'shipments', 'limits'] as const
+// Channel Pulls (2026-10-30): this page is now every channel pulled by API or robot; Amazon's own tabs stay after it
+const TABS = ['channels', 'plans', 'shipments', 'limits'] as const
 type Tab = (typeof TABS)[number]
 const label = (s: string) => STATUS_LABEL[s] ?? s
 const n = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v.toLocaleString('en-IN'))
@@ -353,7 +356,7 @@ function Limits({ canEdit }: { canEdit: boolean }) {
 }
 
 export default function AmazonInbound() {
-  const [tab, setTab] = useUrlParam<Tab>(PATHS.AMAZON_INBOUND, URL_PARAM.TAB, oneOf(TABS), 'plans')
+  const [tab, setTab] = useUrlParam<Tab>(PATHS.AMAZON_INBOUND, URL_PARAM.TAB, oneOf(TABS), 'channels')
   const [plan, setPlan] = useState<string | null>(null)
   const [ship, setShip] = useState<string | null>(null)
   const { accessFor } = useAuth()
@@ -361,9 +364,10 @@ export default function AmazonInbound() {
   const sync = useQuery({ queryKey: ['amazon-inbound', 'sync'], queryFn: ({ signal }) => getSyncState(signal) }).data
   return (
     <div className="space-y-5">
-      <PageTitle title={INBOUND_TEXT.TITLE} sub={INBOUND_TEXT.SUB}
+      <PageTitle title={PULLS_TEXT.TITLE} sub={PULLS_TEXT.SUB}
         right={sync?.lastSuccessAt ? <span className="text-[12px] text-ink-400">Last checked {istDateTime(sync.lastSuccessAt)}{sync.lastError ? ' · some items failed' : ''}</span> : undefined} />
-      <SubTabs value={tab} onChange={setTab} tabs={[{ key: 'plans', label: 'Plans' }, { key: 'shipments', label: 'Shipments' }, { key: 'limits', label: 'Stuck limits' }]} />
+      <SubTabs value={tab} onChange={setTab} tabs={[{ key: 'channels', label: PULLS_TEXT.TAB_CHANNELS }, { key: 'plans', label: 'Amazon plans' }, { key: 'shipments', label: 'Amazon shipments' }, { key: 'limits', label: 'Amazon stuck limits' }]} />
+      {tab === 'channels' && <ChannelPullsTab canEdit={canEdit} />}
       {tab === 'plans' && <Plans onPlan={setPlan} />}
       {tab === 'shipments' && <Shipments onShipment={setShip} />}
       {tab === 'limits' && <Limits canEdit={canEdit} />}
