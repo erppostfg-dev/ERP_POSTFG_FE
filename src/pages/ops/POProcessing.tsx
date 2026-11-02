@@ -34,10 +34,13 @@ import { PoIssues } from './PoIssues'
 import { PO_ISSUES_TEXT } from '../../constants/poIssues'
 import { PriceDifferences } from './PriceDifferences'
 import { PRICE_DIFF_TEXT } from '../../constants/priceDifferences'
+import { RejectedFailed } from './RejectedFailed'
+import { ENDED_TEXT } from '../../constants/poReview'
 
 // PO issues (2026-10-29): moved here from Users & Roles, for everyone who can open this page
 // Price differences (2026-10-30): lines kept at our price, to tell the channel
-const TABS = ['processed', 'review', 'manual', 'issues', 'prices'] as const
+// Rejected & Failed (2026-11-02): the POs that ended without a sale order, with who / why
+const TABS = ['processed', 'review', 'manual', 'issues', 'prices', 'ended'] as const
 type Tab = (typeof TABS)[number]
 const SRC_ICON = { API: Zap, Webhook: Webhook, Email: Mail, Manual: FileUp } as const
 
@@ -59,12 +62,14 @@ export default function POProcessing() {
         { key: 'manual', label: 'Manual Upload' },
         { key: 'issues', label: PO_ISSUES_TEXT.TAB },
         { key: 'prices', label: PRICE_DIFF_TEXT.TAB },
+        { key: 'ended', label: ENDED_TEXT.TAB },
       ]} />
       {tab === 'processed' && <Processed onCount={setProcessedCount} liveTick={liveTick} />}
       {tab === 'review' && <InReview srcIcon={SRC_ICON} onCount={setReviewCount} liveTick={liveTick} />}
       {tab === 'manual' && <ManualUpload canEdit={canEditRoot} liveTick={liveTick} />}
       {tab === 'issues' && <PoIssues />}
       {tab === 'prices' && <PriceDifferences canEdit={canEditRoot} />}
+      {tab === 'ended' && <RejectedFailed liveTick={liveTick} />}
     </div>
   )
 }

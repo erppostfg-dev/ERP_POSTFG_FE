@@ -8,6 +8,36 @@ export const PO_FILE_PATH = (uploadId: string) => `${PO_REVIEW_ENDPOINT}/${encod
 export const PO_STATUS = {
   NEEDS_REVIEW: 'needs_review',
   COMPLETED: 'completed',
+  REJECTED: 'rejected',
+  FAILED: 'failed',
+} as const
+
+/**
+ * Rejected & Failed tab (2026-11-02, user): the tag of a failed PO = the pipeline step that failed (POST_FG
+ * PIPELINE_STEP, kept in po_uploads.error_details.step).
+ */
+export const FAIL_STEP_LABEL: Record<string, string> = {
+  ocr: 'OCR failed',
+  processing: 'Reading failed',
+  save_po: 'Saving the PO failed',
+  uniware_csv: 'Uniware CSV failed',
+  release: 'Held PO not found',
+}
+export const FAIL_STEP_HINT: Record<string, string> = {
+  ocr: 'The PO file could not be read (OCR / download of the PO file). Upload it again from Manual Upload, or ask to re-run it.',
+  processing: 'The PO was read but could not be turned into the PO format (an unknown layout or a missing field).',
+  save_po: 'Every check passed but saving the PO rows failed; it can be re-run.',
+  uniware_csv: 'The PO is saved; only the Uniware CSV (S3) failed; it can be re-run.',
+  release: 'A PO held by PO intake was released but its stored files were gone.',
+}
+export const REJECTED_FROM_LABEL: Record<'review' | 'approval', string> = { review: 'PO review (reviewer)', approval: 'Approvals (approver)' }
+export const ENDED_TEXT = {
+  TAB: 'Rejected & Failed',
+  REJECTED: 'Rejected',
+  FAILED: 'Failed',
+  REJECTED_SUB: 'POs rejected by a reviewer (PO review) or an approver (Approvals): no PO and no sale order were made; their files are kept.',
+  FAILED_SUB: 'POs the system could not finish, with the step that failed and why. Nothing was sent anywhere.',
+  NO_REASON: 'no reason saved',
 } as const
 
 /** The backend's largest page; the lists load every PO in pages of this size. */

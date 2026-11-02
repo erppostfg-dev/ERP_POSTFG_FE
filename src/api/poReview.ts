@@ -33,6 +33,10 @@ export type PoReviewItem = {
   poValue: number | null
   openIssues: number
   issueTypes: string[]
+  /** Failed POs (2026-11-02): the step that failed (FAIL_STEP), its code and reason, when; null otherwise. */
+  failure?: { step: string | null; code: string | null; reason: string | null; at: string | null; ocrAttempts: number } | null
+  /** Rejected POs: the latest rejection, by the reviewer (PO review) or the approver (Approvals). */
+  rejection?: { by: string | null; byEmail: string | null; at: string | null; reason: string | null; from: 'review' | 'approval' } | null
 }
 
 export type PoReviewListParams = {
