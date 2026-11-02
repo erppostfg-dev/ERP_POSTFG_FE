@@ -230,6 +230,10 @@ export async function getRunLog(id: string, signal?: AbortSignal): Promise<strin
 export const startReport = (opts: { asOf: string; fetchFirst: boolean }) =>
   pv() ? P.previewStartReport(opts) : api<IntransitRun>(`${E}/runs`, { method: 'POST', body: JSON.stringify(opts) })
 export const deleteRun = (id: string) => pv() ? P.previewDeleteRun(id) : api<void>(`${E}/runs/${id}`, { method: 'DELETE' })
+/** POST /intransit/robots/:source/login: a portal login from this browser (ERP Robot Login extension), then a check fetch. */
+export interface SavedRobotLogin { portal: string; cookies: number; check: IntransitRun | null; checkError: string | null }
+export const saveRobotLogin = (source: 'myntra', login: { cookies: unknown[]; localStorage: { name: string; value: string }[] }) =>
+  api<SavedRobotLogin>(`${E}/robots/${source}/login`, { method: 'POST', body: JSON.stringify(login) })
 /** POST /intransit/connectors/:source: fetch its files for a day (a past day: only those fetchable for any day). */
 export const startConnector = (source: Source, opts: { date: string; only?: string[] }) =>
   pv() ? P.previewStartConnector(source, opts) : api<IntransitRun>(`${E}/connectors/${source}`, { method: 'POST', body: JSON.stringify(opts) })
