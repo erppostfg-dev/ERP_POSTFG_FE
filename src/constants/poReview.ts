@@ -204,7 +204,28 @@ export const APPROVAL_ERROR = {
   /** The PO no longer passed the checks when approved: it went back to In Review by itself. */
   RETURNED: 'REVIEW_RETURNED',
   NOT_PENDING: 'SUBMISSION_NOT_PENDING',
+  /** A bulk approve holds approvals that update the master and the person has not confirmed it yet. */
+  MASTER_NOT_CONFIRMED: 'MASTER_UPDATE_NOT_CONFIRMED',
 } as const
+
+/**
+ * What kind of approval a submission is (POST_FG APPROVAL_KIND, 2026-11-02): from review = only this PO changes;
+ * master update = a price check line changes our master (channel SKU rate / MRP) on approval. More kinds come later.
+ */
+export const APPROVAL_KIND = { REVIEW: 'review', MASTER_UPDATE: 'master_update' } as const
+export type ApprovalKind = (typeof APPROVAL_KIND)[keyof typeof APPROVAL_KIND]
+export const APPROVAL_KIND_LABEL: Record<ApprovalKind, string> = { review: 'From review', master_update: 'Master update' }
+
+/** The Approvals Filters panel's keys = the list's query names (POST_FG APPROVAL_QUERY / PO_REVIEW_QUERY). */
+export const APPROVAL_FILTER = { CHANNEL: 'channel', KIND: 'kind', ISSUE: 'issue', SUBMITTED_BY: 'submittedBy', FROM: 'from', TO: 'to' } as const
+
+/** Bulk approve / reject (POST_FG APPROVAL_BULK): up to MAX per call; each one decided like the single action. */
+export const APPROVAL_BULK = {
+  APPROVE: '/approvals/po-reviews/bulk-approve',
+  REJECT: '/approvals/po-reviews/bulk-reject',
+  MAX: 50,
+} as const
+export const APPROVAL_BULK_RESULT = { APPROVED: 'approved', REJECTED: 'rejected', RETURNED: 'returned', FAILED: 'failed' } as const
 
 export const APPROVAL_TEXT = {
   SUB: 'PO reviews submitted by the reviewers wait here for an approver. Approving creates the PO, the sale order and the Uniware CSV.',
@@ -215,6 +236,15 @@ export const APPROVAL_TEXT = {
   APPROVED: (po: string, code: string) => `PO ${po} approved: sale order ${code}, Uniware CSV saved in S3.`,
   REJECTED: (po: string) => `PO ${po} rejected.`,
   VIEW_ONLY: 'Only admins and developers can approve or reject.',
+  BULK_APPROVE: (n: number) => `Approve selected (${n})`,
+  BULK_REJECT: (n: number) => `Reject selected (${n})`,
+  BULK_APPROVE_TITLE: (n: number) => `Approve ${n} PO review(s)?`,
+  BULK_APPROVE_SUB: 'Each one is approved exactly like Approve on its own: checks run again, then the PO, sale order and Uniware CSV are made.',
+  BULK_MASTER_WARN: (n: number) => `${n} of them UPDATE THE MASTER when approved (the channel SKU's rate / MRP changes for every later PO of that channel):`,
+  BULK_MASTER_CONFIRM: 'I checked these master changes: approve them too',
+  BULK_REJECT_TITLE: (n: number) => `Reject ${n} PO review(s)?`,
+  BULK_TOO_MANY: (max: number) => `Select at most ${max} at a time.`,
+  BULK_DONE: (parts: string) => `Done: ${parts}.`,
 } as const
 
 
