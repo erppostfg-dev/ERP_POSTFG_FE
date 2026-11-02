@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { PATHS } from '../../../constants/pages'
-import { AlertTriangle, Check, Download, FileText } from 'lucide-react'
+import { AlertTriangle, Check, Download, FileText, Mail, Send } from 'lucide-react'
 import { Button, Card } from '../../../components/ui'
-import { downloadCsvFile, downloadReport, getRun, type IntransitRun } from '../../../api/intransit'
-import { COMBO_FILES, COMBO_TAB, INTRANSIT_POLL_MS } from '../../../constants/intransit'
+import { downloadCsvFile, downloadMailFile, downloadReport, getRun, runMailUrl, sendRunMail, type IntransitRun } from '../../../api/intransit'
+import { COMBO_FILES, COMBO_TAB, INTRANSIT_POLL_MS, MAIL_FILE_LABEL, MAIL_FILES, mailFileName } from '../../../constants/intransit'
 import { ComboTable, pendingCombos, useAddToSplit1, useMapVariants } from '../ComboSplit1'
 import RunLog from './RunLog'
 import { dayLabel, errText, isActive, shortDay, StatusBadge, took, whenOn, type OnNotice } from './shared'
@@ -81,6 +81,7 @@ export default function ReportPanel({ run, canEdit, onNotice }: { run: Intransit
                 </button>
               ))}
             </div>
+            {shown === 'summary' && <WhSummary run={r} canEdit={canEdit} onNotice={onNotice} />}
             {shown === 'summary' ? <RunSummary run={r} /> : (
               <div className="overflow-hidden rounded-[var(--radius)] border border-line">
                 <ComboTable run={r} canEdit={canEdit} onNotice={onNotice} />
@@ -165,6 +166,76 @@ function ComboNotice({ run, canEdit, onOpen, onError, onNotice }: {
       </div>
       {uniwareNote}
     </>
+  )
+}
+
+/**
+ * The WH table of a build (user, 2026-10-29): GMV, units and COGS of stock on hand + in transit per warehouse row - the
+ * table the in-transit mail carries. "Mail preview" opens that mail; the Stock and B2C workbooks it carries (2026-10-30)
+ * download here; "Send mail" sends it, with both attached, to the "In-transit daily report" list (Users & Roles -> Email).
+ */
+function WhSummary({ run, canEdit, onNotice }: { run: IntransitRun; canEdit: boolean; onNotice: OnNotice }) {
+  const [confirming, setConfirming] = useState(false)
+  const [sending, setSending] = useState(false)
+  const rows = run.result?.whSummary ?? []
+  if (!rows.length) return null
+  const head = ['WHs', 'GMV', 'Units', 'COGS (With Tax)', 'COGS Split']
+  const inr = (n: number) => Math.round(n).toLocaleString('en-IN')
+  const asOf = run.asOf ?? ''
+  const send = async () => {
+    setSending(true)
+    try {
+      const r = await sendRunMail(run.id)
+      const to = [...r.to, ...r.cc, ...r.bcc]
+      onNotice('ok', `Report #${run.id} mailed to ${to.length} ${to.length === 1 ? 'person' : 'people'} (${to.join(', ')})${r.attachments.length ? `, with ${r.attachments.join(' and ')}` : ' - this build has no Stock / B2C workbooks (built before 30-Oct)'}.`)
+    } catch (e) {
+      onNotice('warn', errText(e))
+    } finally {
+      setSending(false)
+      setConfirming(false)
+    }
+  }
+  const link = 'inline-flex items-center gap-1 text-[12px] font-medium text-primary hover:underline'
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-[13px] font-semibold text-ink-900">Stock by warehouse (SOH + in transit)</h3>
+        <div className="flex flex-wrap items-center gap-3">
+          {Object.values(MAIL_FILES).map((f) => (
+            <button key={f} className={link} title={mailFileName(f, asOf)} onClick={() => void downloadMailFile(run.id, f, asOf).catch((e) => onNotice('warn', errText(e)))}>
+              <Download className="size-3.5" /> {MAIL_FILE_LABEL[f]}
+            </button>
+          ))}
+          <a href={runMailUrl(run.id)} target="_blank" rel="noreferrer" className={link}>
+            <Mail className="size-3.5" /> Mail preview
+          </a>
+          {canEdit && !confirming && <Button icon={<Send className="size-3.5" />} onClick={() => setConfirming(true)}>Send mail</Button>}
+          {canEdit && confirming && (
+            <span className="inline-flex items-center gap-2 text-[12px] text-ink-600">
+              Send to the In-transit daily report list?
+              <Button variant="primary" disabled={sending} onClick={() => void send()}>{sending ? 'Sending…' : 'Send'}</Button>
+              <Button variant="ghost" disabled={sending} onClick={() => setConfirming(false)}>Cancel</Button>
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-[var(--radius)] border border-line">
+        <table className="w-full text-[12.5px]">
+          <thead><tr className="bg-ok-soft">{head.map((h, i) => <th key={h} className={`px-3 py-2 text-[11.5px] font-semibold text-ink-600 ${i ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <tbody>
+            {rows.map((w) => (
+              <tr key={w.wh} className="border-t border-line">
+                <td className="px-3 py-1.5">{w.wh}</td>
+                <td className="tnum px-3 py-1.5 text-right">{inr(w.gmv)}</td>
+                <td className="tnum px-3 py-1.5 text-right">{inr(w.units)}</td>
+                <td className="tnum px-3 py-1.5 text-right">{inr(w.cogs)}</td>
+                <td className="tnum px-3 py-1.5 text-right">{(w.cogsSplit * 100).toFixed(1)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 

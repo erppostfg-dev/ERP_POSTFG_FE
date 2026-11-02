@@ -7,8 +7,11 @@ import { getMasterChanges, getMasterHistory, setMasterActive, listChannelCustome
 import { ADD_TEXT, EDIT_TEXT, HISTORY_TEXT, MASTER_ADD_ROLES, SWITCH_OFF_EFFECT, SWITCH_ON_EFFECT, MASTER_HISTORY_DAYS, MASTER_LOG_ACTION_LABEL, MASTER_LOG_SOURCE_LABEL, MASTER_LOG_TYPE, MASTER_LOG_TYPE_LABEL, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS, masterFieldLabel } from '../constants/masters'
 import { Timeline, type TimelineOptions } from './ops/ShipmentHistory'
 import { useAuth } from '../auth/AuthContext'
+import { ACCESS } from '../constants/auth'
+import { PATHS } from '../constants/pages'
 import { MasterAddDrawer, type AddMaster, type EditMaster } from '../components/MasterAddDrawer'
 import { MASTER_TABS } from '../lib/data'
+import FacilityCheckBanner from './dp/intransit/FacilityCheckBanner'
 import { OPS_CHANNELS, type ColKind } from '../lib/ops'
 import { Badge, Button, Drawer, PageTitle } from '../components/ui'
 import { Reveal } from '../components/shell'
@@ -205,6 +208,9 @@ export default function Masters({ tab = MASTER_TABS[0] }: { tab?: string }) {
   const state = { loading: query.isPending, error: query.error ? (query.error instanceof ApiError ? query.error.message : String(query.error)) : undefined }
 
   const fromApi = CFG[id].readOnly
+  // Warehouses: the weekly Uniware facility check's prompt (also on In-transit Stock); an editor of either page acts on it
+  const { accessFor } = useAuth()
+  const canEditFacilities = accessFor(PATHS.WAREHOUSES) === ACCESS.EDITOR || accessFor(PATHS.INTRANSIT_STOCK) === ACCESS.EDITOR
   const [changesOpen, setChangesOpen] = useState(false)
   const box = 'rounded-[var(--radius)] border border-line bg-surface px-4 py-10 text-center text-[13px] text-ink-600'
   const save = (k: string, r: Row, prevKey?: string) => {
@@ -221,6 +227,7 @@ export default function Masters({ tab = MASTER_TABS[0] }: { tab?: string }) {
             <span title={NOT_AVAILABLE_YET}><Button disabled icon={<RefreshCw className="size-3.5" />}>Sync now</Button></span></>
           : <><span className="hidden text-[11px] text-ink-400 sm:inline">Synced from Uniware · 2 min ago</span><Button icon={<RefreshCw className="size-3.5" />}>Sync now</Button></>}
       />
+      {id === 'pepWh' && <FacilityCheckBanner canEdit={canEditFacilities} onChanged={() => void queryClient.invalidateQueries({ queryKey: mastersKey('pepWh') })} />}
       {fromApi && state.error ? (
         <div className="flex items-center gap-3 rounded-[var(--radius)] border border-crit/30 bg-crit-soft px-4 py-3 text-[13px] text-crit">
           <AlertTriangle className="size-4" /> Could not load {CFG[id].entity}: {state.error}

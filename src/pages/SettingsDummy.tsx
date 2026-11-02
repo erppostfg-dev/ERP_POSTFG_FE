@@ -34,19 +34,6 @@ function Switch({ start }: { start: boolean }) {
 const input = 'h-8 w-24 rounded-[var(--radius)] border border-line bg-surface px-2 text-right text-[13px] tnum outline-none focus:border-primary'
 const card = (children: ReactNode) => <div className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">{children}</div>
 
-export function NotificationsDummy() {
-  return (
-    <DummySection what="Notifications settings">
-      {card(<>
-        <Row title="Email when a PO goes to In Review" hint="Sent to the PO Review editors of that channel"><Switch start /></Row>
-        <Row title="Daily summary at 9:00 am" hint="Processed, in review, waiting for Uniware, stuck Amazon shipments"><Switch start /></Row>
-        <Row title="Alert when a CSV waits more than" hint="Days after processing before the Uniware CSV is flagged"><input className={input} defaultValue={5} /></Row>
-        <Row title="CloudWatch error alerts" hint="Email the developer on backend errors"><Switch start={false} /></Row>
-      </>)}
-    </DummySection>
-  )
-}
-
 export function ReviewRulesDummy() {
   return (
     <DummySection what="PO review rules">

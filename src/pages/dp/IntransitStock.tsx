@@ -10,6 +10,7 @@ import { istDay } from '../../lib/time'
 import CsvViewer from './CsvViewer'
 import DayRibbon from './intransit/DayRibbon'
 import DailyRun from './intransit/DailyRun'
+import FacilityCheckBanner from './intransit/FacilityCheckBanner'
 import HistoryTab from './intransit/HistoryTab'
 import MastersTab from './intransit/MastersTab'
 import RunAlerts, { useRunAlerts } from './intransit/RunAlerts'
@@ -60,6 +61,7 @@ export default function IntransitStock() {
   return (
     <div className="space-y-5">
       <PageTitle title={INTRANSIT_TEXT.TITLE} sub={INTRANSIT_TEXT.SUB} />
+      <FacilityCheckBanner canEdit={canEdit} />
       {plan && <DayRibbon days={plan.days} date={date} today={plan.today} onPick={(d) => { setDate(d); setNotice(null) }} />}
       <SubTabs value={tab} onChange={(t) => { setTab(t); setNotice(null) }} tabs={INTRANSIT_TABS.map((t) => ({ key: t.key, label: t.label }))} />
       <NoticeBar notice={notice} onClose={() => setNotice(null)} />
