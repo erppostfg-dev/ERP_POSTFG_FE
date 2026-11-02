@@ -34,7 +34,7 @@ const ask = <T>(body: Record<string, unknown>, timeoutMs: number): Promise<T | n
 })
 
 /** The extension's version, or null when it is not installed (or not enabled for this site). */
-export const robotLoginExtension = async (): Promise<string | null> =>
+const robotLoginExtension = async (): Promise<string | null> =>
   (await ask<{ version?: string }>({ type: 'erp-robot-login:ping' }, PING_MS))?.version ?? null
 
 export class RobotLoginError extends Error {
