@@ -61,6 +61,41 @@ export const VERIFY_TEXT = {
   RATE_DIFF: 'Rate differs from the PO by more than ₹2 (the rate comes from our master; check it is right)',
 } as const
 
+/**
+ * Bulk verify from a file (2026-11-02): the Processed download with "Verified" typed in its Check column, uploaded back.
+ * Column names = the download's (POProcessing PEXPORT); the server takes BULK_MAX ids per call (backend PO_VERIFY.BULK_MAX).
+ */
+export const VERIFY_UPLOAD = {
+  BULK_MAX: 200,
+  ACCEPT: '.xlsx,.xls,.csv',
+  COL_CHECK: 'Check',
+  COL_SALE_ORDER: 'Sale order',
+  COL_PO: 'PO Number',
+  COL_CHANNEL: 'Channel',
+  MARK: 'Verified',
+  /** The Check column's dropdown in the Excel download (CSV has none: small spelling slips are still read as Verified). */
+  DROPDOWN: ['Verified', 'To verify'],
+  /** What the download writes in Check by itself (VERIFY_TEXT's states): not a person's mark, never "not understood". */
+  OWN_STATES: ['To verify', 'In Uniware', 'Optional'],
+  DROPDOWN_PROMPT: 'Pick Verified for each PO you checked, then upload this file with Upload verified',
+  UNCLEAR: (values: string[]) => `Not understood in the Check column (left as they are): ${values.slice(0, 5).map((v) => `"${v}"`).join(', ')}${values.length > 5 ? '…' : ''}`,
+  BUTTON: 'Upload verified',
+  BUTTON_HINT: 'Download the POs (Excel / CSV), type Verified in the Check column of the POs you checked, then upload that file here',
+  READING: 'Reading the file…',
+  NO_CHECK_COLUMN: 'This file has no Check column: upload the Processed POs download with Verified typed in its Check column.',
+  NONE_MARKED: 'No row of this file says Verified in the Check column.',
+  SUMMARY: (file: string, marked: number) => `${file}: ${marked} row${marked === 1 ? '' : 's'} marked Verified`,
+  WILL: (n: number) => `${n} PO${n === 1 ? '' : 's'} will be verified`,
+  ALREADY: (n: number) => `${n} already verified`,
+  NOT_NEEDED: (n: number) => `${n} need no check (in Uniware / check off)`,
+  NOT_FOUND: (list: string[]) => `${list.length} not in the Processed list: ${list.slice(0, 5).join(', ')}${list.length > 5 ? '…' : ''}`,
+  CONFIRM: (n: number) => `Verify ${n}`,
+  CANCEL: 'Cancel',
+  VERIFYING: (done: number, total: number) => `Verifying… ${done} of ${total}`,
+  REMARK: (file: string) => `Verified in ${file} (Processed download)`,
+  DONE: (n: number, skipped: number) => `${n} PO${n === 1 ? '' : 's'} verified${skipped ? `, ${skipped} left as they were (changed meanwhile)` : ''}: their Uniware CSVs can be downloaded now.`,
+} as const
+
 /** processed.json fields shown in the Verify panel: [key, label, how to find it on the PO]. */
 export type FieldKind = 'number' | 'date' | 'text'
 export const VERIFY_HEADER_FIELDS: [string, string, FieldKind][] = [

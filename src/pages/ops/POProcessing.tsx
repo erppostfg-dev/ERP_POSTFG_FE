@@ -24,8 +24,10 @@ import { LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_STATUS, PROCESSED_FILTER, RE
 import { useLiveReview } from '../../lib/liveReview'
 import { LiveDot } from '../../components/LiveDot'
 import { ShieldCheck } from 'lucide-react'
-import { getVerifyStates, type VerifyStateItem } from '../../api/poVerify'
-import { VERIFY_STATE, VERIFY_TEXT, type VerifyState } from '../../constants/poVerify'
+import { getVerifyStates, verifyMany, type VerifyStateItem } from '../../api/poVerify'
+import { VERIFY_STATE, VERIFY_TEXT, VERIFY_UPLOAD, type VerifyState } from '../../constants/poVerify'
+import { chunks, matchVerified, type VerifyMatch } from '../../lib/verifyUpload'
+import { sheetTables } from '../../lib/fileTables'
 import { VerifyPanel } from './VerifyPanel'
 import { ManualUpload } from './ManualUpload'
 import { PoIssues } from './PoIssues'
@@ -159,6 +161,52 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   }), [baseRows, verify])
   const toVerify = (r: ProcessedRow) => verify.required && r.verify?.state === VERIFY_STATE.TO_VERIFY
 
+  // Bulk verify from a file (2026-11-02): the Processed download with Verified typed in its Check column, uploaded back;
+  // read here, only the matching ids go to the server, BULK_MAX per call, one call after another.
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [upload, setUpload] = useState<{ file: string; match: VerifyMatch } | null>(null)
+  const [verifying, setVerifying] = useState<string | null>(null)
+  const readVerified = async (file: File) => {
+    setNote(null)
+    setVerifying(VERIFY_UPLOAD.READING)
+    try {
+      const [table] = await sheetTables(await file.arrayBuffer())
+      const match = matchVerified(table?.rows ?? [], rows.map((r) => ({
+        id: r.id, saleOrder: r.saleOrder, poNumber: r.poNumber, channel: r.channel, toVerify: toVerify(r), verified: r.verify?.state === VERIFY_STATE.VERIFIED,
+      })))
+      if (!match) fail(VERIFY_UPLOAD.NO_CHECK_COLUMN)
+      else if (!match.marked) fail(match.unclear.length ? `${VERIFY_UPLOAD.NONE_MARKED} ${VERIFY_UPLOAD.UNCLEAR(match.unclear)}` : VERIFY_UPLOAD.NONE_MARKED)
+      else setUpload({ file: file.name, match })
+    } catch (e) {
+      fail(e instanceof Error ? e.message : String(e))
+    } finally {
+      setVerifying(null)
+    }
+  }
+  // The Excel download's Check column gets a dropdown (Verified / To verify), so nobody has to type it (no spelling slips).
+  const checkList = verify.required ? [{ col: 'check' as const, values: [...VERIFY_UPLOAD.DROPDOWN], prompt: VERIFY_UPLOAD.DROPDOWN_PROMPT }] : undefined
+  const verifyUploaded = async () => {
+    if (!upload) return
+    const ids = upload.match.ids
+    let verified = 0
+    let skipped = 0
+    try {
+      for (const part of chunks(ids, VERIFY_UPLOAD.BULK_MAX)) {
+        setVerifying(VERIFY_UPLOAD.VERIFYING(verified + skipped, ids.length))
+        const r = await verifyMany(part, VERIFY_UPLOAD.REMARK(upload.file))
+        verified += r.verified.length
+        skipped += r.skipped.length
+      }
+      setUpload(null)
+      done(VERIFY_UPLOAD.DONE(verified, skipped))
+    } catch (e) {
+      fail(e instanceof ApiError ? e.message : String(e))
+      if (verified) setReload((n) => n + 1)
+    } finally {
+      setVerifying(null)
+    }
+  }
+
   const s = useSection<ProcessedRow>(rows, ['poNumber', 'id', 'file', 'saleOrder'])
   // Ticked rows (by id): CSV / Excel download only these; none ticked = every row shown. Rows that left the list drop out.
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -169,6 +217,9 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
     // the PO Date / Processed At header sort: only its chip here
     { key: DATE_SORT_KEY, label: LIST_FILTER.DATE_SORT, type: 'sort', options: LIST_FILTER.DATE_SORT_OPTIONS, inPanel: false },
     { key: 'channel', label: 'Channel', type: 'multi', options: channelOptions },
+    // PO Date range (user, 2026-11-02; next to the Newest / Oldest header sort)
+    { key: 'poDateFrom', label: LIST_FILTER.PO_DATE_FROM, type: 'date' },
+    { key: 'poDateTo', label: LIST_FILTER.PO_DATE_TO, type: 'date' },
     { key: 'brand', label: 'Brand', type: 'multi', options: distinct(rows, 'brand') },
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows, 'source') },
     { key: 'uniware', label: 'Uniware', type: 'multi', options: Object.values(UNIWARE_STATE_LABEL) },
@@ -216,7 +267,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   const linesGroup = T.GROUP_LINES(linePos.length, picked.length > 0)
   const tableRows = linePos
   const downloadItems: DownloadItem[] = [
-    { group: T.GROUP_TABLE(tableRows.length, picked.length > 0), label: T.EXCEL, onClick: () => void exportRowsExcel('processed_pos', PEXPORT, tableRows), disabled: !tableRows.length },
+    { group: T.GROUP_TABLE(tableRows.length, picked.length > 0), label: T.EXCEL, onClick: () => void exportRowsExcel('processed_pos', PEXPORT, tableRows, checkList), disabled: !tableRows.length },
     { group: T.GROUP_TABLE(tableRows.length, picked.length > 0), label: T.CSV, onClick: () => exportRows('processed_pos', 'csv', PEXPORT, tableRows), disabled: !tableRows.length },
     { group: linesGroup, label: T.EXCEL, onClick: () => void downloadLines('excel'), disabled: !linePos.length || tooManyLines, hint: linesHint },
     { group: linesGroup, label: T.CSV, onClick: () => void downloadLines('csv'), disabled: !linePos.length || tooManyLines, hint: linesHint },
@@ -230,12 +281,21 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
           <DownloadMenu busy={bulkBusy}
             label={T.POS_BUTTON(tableRows.length)} title={T.POS_HINT} items={downloadItems} />
         }
-        primary={canEdit && picked.length > 0 ? (
+        primary={canEdit && (picked.length > 0 || verify.required) ? (
           <span className="pf-tab-in inline-flex flex-wrap gap-2">
-            {canEdit && <button onClick={() => void bulk('csv')} disabled={bulkBusy || unverifiedPicked > 0} title={unverifiedPicked ? VERIFY_TEXT.BLOCKED(unverifiedPicked) : undefined} className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
+            {verify.required && (
+              <>
+                <input ref={fileInput} type="file" accept={VERIFY_UPLOAD.ACCEPT} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void readVerified(f) }} />
+                <button onClick={() => fileInput.current?.click()} disabled={!!verifying || bulkBusy} title={VERIFY_UPLOAD.BUTTON_HINT}
+                  className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-ok/50 px-3 text-[13px] font-semibold text-ok hover:bg-ok-soft disabled:opacity-60">
+                  <ShieldCheck className="size-4" />{VERIFY_UPLOAD.BUTTON}
+                </button>
+              </>
+            )}
+            {picked.length > 0 && <button onClick={() => void bulk('csv')} disabled={bulkBusy || unverifiedPicked > 0} title={unverifiedPicked ? VERIFY_TEXT.BLOCKED(unverifiedPicked) : undefined} className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
               <DownloadIcon className="size-4" />{UNIWARE_TEXT.BULK_DOWNLOAD(picked.length)}
             </button>}
-            {canEdit && markable.length > 0 && (
+            {markable.length > 0 && (
               <button onClick={() => void bulk('mark')} disabled={bulkBusy} className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-ok px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
                 <UploadIcon className="size-4" />{UNIWARE_TEXT.BULK_MARK(markable.length)}
               </button>
@@ -260,6 +320,23 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       {canEdit && unverifiedPicked > 0 && (
         <div className="pf-tab-in flex items-center gap-2 rounded-[var(--radius)] bg-warn-soft px-3 py-2 text-[12.5px] text-warn"><AlertTriangle className="size-4" />{VERIFY_TEXT.BLOCKED(unverifiedPicked)}</div>
       )}
+      {verifying && <div className="pf-tab-in rounded-[var(--radius)] bg-alt px-3 py-2 text-[12.5px] text-ink-600">{verifying}</div>}
+      {upload && !verifying && (
+        <div className="pf-tab-in space-y-2 rounded-[var(--radius)] border border-ok/40 bg-ok-soft/40 px-3 py-2.5 text-[12.5px] text-ink-900">
+          <div className="font-semibold">{VERIFY_UPLOAD.SUMMARY(upload.file, upload.match.marked)}</div>
+          <ul className="list-disc space-y-0.5 pl-5 text-ink-600">
+            <li className="font-semibold text-ok">{VERIFY_UPLOAD.WILL(upload.match.ids.length)}</li>
+            {upload.match.alreadyVerified > 0 && <li>{VERIFY_UPLOAD.ALREADY(upload.match.alreadyVerified)}</li>}
+            {upload.match.notNeeded > 0 && <li>{VERIFY_UPLOAD.NOT_NEEDED(upload.match.notNeeded)}</li>}
+            {upload.match.notFound.length > 0 && <li className="text-warn">{VERIFY_UPLOAD.NOT_FOUND(upload.match.notFound)}</li>}
+            {upload.match.unclear.length > 0 && <li className="text-warn">{VERIFY_UPLOAD.UNCLEAR(upload.match.unclear)}</li>}
+          </ul>
+          <div className="flex gap-2">
+            <button onClick={() => void verifyUploaded()} disabled={!upload.match.ids.length} className="pf-press inline-flex h-8 items-center gap-1.5 rounded-[var(--radius)] bg-ok px-3 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50"><Check className="size-4" />{VERIFY_UPLOAD.CONFIRM(upload.match.ids.length)}</button>
+            <button onClick={() => setUpload(null)} className="rounded-[var(--radius)] px-3 text-[12.5px] text-ink-600 hover:bg-alt">{VERIFY_UPLOAD.CANCEL}</button>
+          </div>
+        </div>
+      )}
       {note && (
         <div className={`pf-tab-in flex items-start gap-2 rounded-[var(--radius)] px-3 py-2 text-[12.5px] ${note.tone === 'ok' ? 'bg-ok-soft text-ok' : 'bg-crit-soft text-crit'}`}>
           {note.tone === 'ok' ? <Check className="mt-0.5 size-4 shrink-0" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0" />}
@@ -277,7 +354,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       ) : !rows.length ? (
         <div className={box}>{PROCESSED_FILTER.NONE}</div>
       ) : (
-        <DataGrid cols={PCOLS} rows={ordered} rowKey={(r) => r.id} pageSize={LIST_PAGE_SIZE} selected={selected} onSelectedChange={setSelected}
+        <DataGrid cols={PCOLS} rows={ordered} rowKey={(r) => r.id} pageSize={LIST_PAGE_SIZE} pageSizeKey="processed" selected={selected} onSelectedChange={setSelected}
           // Newest / Oldest first from the PO Date and Processed At headers
           headFilter={(k) => (k === 'poDate' ? <ColumnSort filters={s.filters} setFilters={s.setFilters} field="poDate" title={LIST_FILTER.PO_DATE} />
             : k === 'processedAt' ? <ColumnSort filters={s.filters} setFilters={s.setFilters} field="processedAt" title={LIST_FILTER.PROCESSED_AT} /> : null)}

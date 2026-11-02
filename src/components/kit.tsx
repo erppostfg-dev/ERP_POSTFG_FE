@@ -8,7 +8,7 @@ import { DatePicker, Pop, SelectBox, usePopover } from './pickers'
 import { fmtDate, statusTone, type ColKind } from '../lib/ops'
 import { NOT_IN_DB } from '../constants/masters'
 import { copyText } from '../lib/clipboard'
-import { COPIED_MS, COPYABLE_COLUMNS, GRID_HINT } from '../constants/ui'
+import { COPIED_MS, COPYABLE_COLUMNS, GRID_HINT, GRID_PAGE_SIZE } from '../constants/ui'
 import { downloadExcel } from '../lib/excelExport'
 import { DATE_SORT_KEY, dateSortOf, isOrderKey, type DateSortDir } from '../lib/listOrder'
 
@@ -239,8 +239,10 @@ export function exportRows<T>(name: string, ext: 'csv' | 'xls', cols: [string, k
 }
 
 /** The same table as a real .xlsx (SheetJS, codes kept as text; numbers stay numbers). */
-export const exportRowsExcel = <T,>(name: string, cols: [string, keyof T, ColKind][], rows: T[]) =>
+export const exportRowsExcel = <T,>(name: string, cols: [string, keyof T, ColKind][], rows: T[], lists?: { col: keyof T; values: string[]; prompt?: string }[]) =>
   downloadExcel(name, [{
+    // dropdowns on some columns (2026-11-02: the Check column of the Processed download)
+    lists: lists?.map((l) => ({ col: cols.findIndex((c) => c[1] === l.col), values: l.values, prompt: l.prompt })).filter((l) => l.col >= 0),
     name, header: cols.map((c) => c[0]),
     rows: rows.map((r) => cols.map(([, k, kind]) => {
       const v = r[k]
@@ -404,10 +406,12 @@ const cellText = (kind: ColKind, v: unknown): string => {
 
 export function DataGrid<T>({
   cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, stickyFit, maxHeight, onScrolledChange,
-  selected, onSelectedChange, headFilter,
+  selected, onSelectedChange, headFilter, pageSizeKey,
 }: {
   /** A control shown after a column's name in its header (e.g. ColumnSort); null = none (2026-10-29). */
   headFilter?: (key: keyof T) => ReactNode
+  /** The person picks the rows per page (footer box, any number 1..GRID_PAGE_SIZE.MAX), kept in this browser under this key. */
+  pageSizeKey?: string
   cols: [string, keyof T, ColKind][]; rows: T[]; rowKey: (r: T) => string; sticky?: number
   onRowClick?: (r: T) => void; rowMenu?: (r: T) => { label: string; onClick: () => void }[]; pageSize?: number
   /** Extra columns at the end; with `sortValue` the header gets ↑/↓ and a click sorts every row by it (2026-10-19). */
@@ -448,6 +452,21 @@ export function DataGrid<T>({
   const headBox = useRef<HTMLInputElement>(null)
   useEffect(() => { if (headBox.current) headBox.current.indeterminate = ticked > 0 && ticked < allKeys.length }, [ticked, allKeys.length])
   const [page, setPage] = useState(0)
+  const storeKey = pageSizeKey ? GRID_PAGE_SIZE.STORE_KEY + pageSizeKey : null
+  const [size, setSize] = useState(() => {
+    if (!storeKey) return pageSize
+    try { const v = Number(localStorage.getItem(storeKey)); return Number.isInteger(v) && v >= 1 ? Math.min(v, GRID_PAGE_SIZE.MAX) : pageSize } catch { return pageSize }
+  })
+  const [sizeDraft, setSizeDraft] = useState(String(size))
+  const applySize = (raw: string) => {
+    const v = Math.trunc(Number(raw))
+    if (!Number.isFinite(v) || v < 1) { setSizeDraft(String(size)); return }
+    const next = Math.min(v, GRID_PAGE_SIZE.MAX)
+    setSize(next)
+    setSizeDraft(String(next))
+    setPage(0)
+    if (storeKey) try { localStorage.setItem(storeKey, String(next)) } catch { /* kept for this visit only */ }
+  }
   // Every table (user, 2026-10-15): a single click copies that cell's text (as shown), a double-click opens the row.
   const [copied, setCopied] = useState<string | null>(null)
   const copyTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -480,9 +499,9 @@ export function DataGrid<T>({
     setSort((s) => (s?.label !== label ? { label, dir: 'desc' } : s.dir === 'desc' ? { label, dir: 'asc' } : null))
     setPage(0)
   }
-  const pages = Math.max(1, Math.ceil(rows.length / pageSize))
+  const pages = Math.max(1, Math.ceil(rows.length / size))
   useEffect(() => setPage(0), [rows.length])
-  const view = sortedRows.slice(page * pageSize, page * pageSize + pageSize)
+  const view = sortedRows.slice(page * size, page * size + size)
   const scrolledRef = useRef(false)
   const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const away = e.currentTarget.scrollLeft > 0 || e.currentTarget.scrollTop > 0
@@ -623,7 +642,17 @@ export function DataGrid<T>({
       <div className="flex items-center justify-between border-t border-line px-4 py-2.5 text-[12px] text-ink-600">
         <span>
           <span className="mr-3 hidden text-ink-400 md:inline">{onRowClick ? GRID_HINT.OPEN_AND_COPY : GRID_HINT.COPY}</span>
-          <span className="tnum">{rows.length ? page * pageSize + 1 : 0}–{Math.min(rows.length, (page + 1) * pageSize)}</span> of <span className="tnum">{rows.length}</span> records
+          <span className="tnum">{rows.length ? page * size + 1 : 0}–{Math.min(rows.length, (page + 1) * size)}</span> of <span className="tnum">{rows.length}</span> records
+          {storeKey && (
+            <label className="ml-3 inline-flex items-center gap-1.5">
+              {GRID_PAGE_SIZE.LABEL}
+              <input type="number" min={1} max={GRID_PAGE_SIZE.MAX} list={`${storeKey}-sizes`} value={sizeDraft}
+                onChange={(e) => setSizeDraft(e.target.value)} onBlur={(e) => applySize(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') applySize(e.currentTarget.value) }}
+                className="tnum h-7 w-[72px] rounded-md border border-line bg-surface px-2 text-[12px] text-ink-900" />
+              <datalist id={`${storeKey}-sizes`}>{GRID_PAGE_SIZE.SUGGEST.map((n) => <option key={n} value={n} />)}</datalist>
+            </label>
+          )}
         </span>
         <div className="flex items-center gap-1">
           <button disabled={page === 0} onClick={() => setPage(page - 1)} className="rounded-md p-1.5 hover:bg-alt disabled:opacity-30"><ChevronLeft className="size-4" /></button>

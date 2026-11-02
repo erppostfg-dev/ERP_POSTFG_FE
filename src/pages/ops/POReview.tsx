@@ -105,6 +105,9 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
   const channelOptions = useChannelOptions(rows.map((r) => r.channel))
   const defs: FilterDef[] = [
     { key: 'channel', label: 'Channel', type: 'multi', options: channelOptions },
+    // PO Date range (user, 2026-11-02; next to the Newest / Oldest header sort)
+    { key: 'poDateFrom', label: LIST_FILTER.PO_DATE_FROM, type: 'date' },
+    { key: 'poDateTo', label: LIST_FILTER.PO_DATE_TO, type: 'date' },
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows.map((r) => r.source)) },
     { key: 'issue', label: 'Issue', type: 'multi', options: distinct(rows.flatMap((r) => r.issueTypes.map(label))) },
     { key: SORT_FILTER_KEY, label: LIST_FILTER.SORT, type: 'sort', options: [{ value: LIST_SORT.CHANNEL, label: LIST_FILTER.SORT_CHANNEL }], placeholder: LIST_FILTER.SORT_DEFAULT_REVIEW },
@@ -167,7 +170,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
       ) : !rows.length ? (
         <div className={box}>No POs are waiting for review.</div>
       ) : (
-        <DataGrid cols={RCOLS} rows={shown} rowKey={(r) => r.id} pageSize={LIST_PAGE_SIZE} onRowClick={setSel} selected={selected} onSelectedChange={setSelected}
+        <DataGrid cols={RCOLS} rows={shown} rowKey={(r) => r.id} pageSize={LIST_PAGE_SIZE} pageSizeKey="review" onRowClick={setSel} selected={selected} onSelectedChange={setSelected}
           // Newest / Oldest first from the PO Date and Processed At headers
           headFilter={(k) => (k === 'poDate' ? <ColumnSort filters={s.filters} setFilters={s.setFilters} field="poDate" title={LIST_FILTER.PO_DATE} />
             : k === 'processedAt' ? <ColumnSort filters={s.filters} setFilters={s.setFilters} field="processedAt" title={LIST_FILTER.PROCESSED_AT} /> : null)}

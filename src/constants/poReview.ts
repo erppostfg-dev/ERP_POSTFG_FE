@@ -32,6 +32,9 @@ export const PROCESSED_FILTER = {
  */
 export const LIST_FILTER = {
   PO_DATE: 'PO Date',
+  /** PO Date range in the Filters panel (user, 2026-11-02; Processed + In Review). */
+  PO_DATE_FROM: 'PO Date from',
+  PO_DATE_TO: 'PO Date to',
   PROCESSED_AT: 'Processed At',
   SORT: 'Sort by',
   SORT_CHANNEL: 'Channel (grouped, A–Z)',

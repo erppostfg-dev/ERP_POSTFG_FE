@@ -53,6 +53,12 @@ export function verifyPo(uploadId: string, body: { remark?: string; linesChecked
   return api<{ state: VerifyState }>(`${one(uploadId)}/verify`, { method: 'POST', body: JSON.stringify(body) })
 }
 
+/** POST /po-verify/verify (API #95): up to 200 POs at once; only those still to verify are verified. */
+export interface VerifyManyResult { verified: string[]; skipped: { uploadId: string; reason: 'not_found' | 'not_ready' | 'already_verified' | 'in_uniware' | 'not_required' }[] }
+export function verifyMany(uploadIds: string[], remark?: string) {
+  return api<VerifyManyResult>(`${PO_VERIFY_ENDPOINT}/verify`, { method: 'POST', body: JSON.stringify({ uploadIds, remark }) })
+}
+
 export function sendBackPo(uploadId: string, remark: string) {
   return api<{ status: string; issues: number }>(`${one(uploadId)}/send-back`, { method: 'POST', body: JSON.stringify({ remark }) })
 }
