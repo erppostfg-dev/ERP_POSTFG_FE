@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "ERP Robot Login",
+  "version": "1.0.0",
+  "description": "Hands your Myntra Partner Portal login to the ERP's in-transit robot when you press Connect Myntra in the ERP.",
+  "permissions": ["cookies", "scripting"],
+  "host_permissions": ["*://*.myntra.com/*", "*://*.myntrainfo.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://*.mcaffeine.com/*", "http://localhost/*", "http://localhost:5173/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": { "default_title": "ERP Robot Login", "default_popup": "popup.html" }
+}

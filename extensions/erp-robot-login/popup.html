@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { width: 300px; margin: 0; padding: 14px; font: 13px/1.45 Arial, sans-serif; color: #1f2933; }
+    h1 { margin: 0 0 8px; font-size: 14px; }
+    .status { margin: 0 0 10px; padding: 6px 8px; border-radius: 6px; background: #f1f5f9; }
+    .ok { background: #e7f6ec; color: #1e6b3a; }
+    .no { background: #fdf0e6; color: #8a4b12; }
+    ol { margin: 0 0 10px; padding-left: 18px; }
+    button { width: 100%; padding: 7px; border: 1px solid #c9d2dc; border-radius: 6px; background: #fff; cursor: pointer; font: inherit; }
+    button:hover { background: #f5f7fa; }
+  </style>
+</head>
+<body>
+  <h1>ERP Robot Login</h1>
+  <p id="status" class="status">Checking the Myntra login…</p>
+  <ol>
+    <li>Log in at partners.myntrainfo.com and choose <b>FBM/PPMP/MDirect</b>.</li>
+    <li>In the ERP: In-transit Stock → Daily run → Myntra → <b>Connect Myntra</b>.</li>
+  </ol>
+  <button id="open">Open the Myntra Partner Portal</button>
+  <script src="portals.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

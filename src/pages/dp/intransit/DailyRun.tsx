@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, CloudDownload, Eye, FolderOpen, Loader2, Play, Trash2, Upload, UploadCloud } from 'lucide-react'
+import { Check, ChevronDown, CloudDownload, Eye, FolderOpen, KeyRound, Loader2, Play, Trash2, Upload, UploadCloud } from 'lucide-react'
 import { Button, Card } from '../../../components/ui'
-import { deleteInput, getRun, listRuns, startConnector, startReport, type DailyItem, type DayPlan, type IntransitRun, type MasterItem } from '../../../api/intransit'
-import { INTRANSIT_POLL_MS, PEPIMS_CONNECTOR, PEPIMS_TEXT, SOURCE_INFO, SOURCES, type Source } from '../../../constants/intransit'
+import { deleteInput, getRun, listRuns, saveRobotLogin, startConnector, startReport, type DailyItem, type DayPlan, type IntransitRun, type MasterItem } from '../../../api/intransit'
+import { INTRANSIT_POLL_MS, isMyntraLoginError, PEPIMS_CONNECTOR, PEPIMS_TEXT, ROBOT_LOGIN_TEXT as RL, SOURCE_INFO, SOURCES, type Source } from '../../../constants/intransit'
 import { dropEntries, filesFromEntries, filesFromInput, matchFolder, type FolderFile, type FolderMatch } from '../../../lib/folderFiles'
+import { portalLogin, RobotLoginError } from '../../../lib/robotLogin'
 import FolderReview, { type Batch } from './FolderReview'
 import ReportPanel from './ReportPanel'
 import RunLog from './RunLog'
@@ -348,6 +349,23 @@ function SourceRow({ source, files, plan, canEdit, running, fileRow, onNotice, o
   }
   const allOfDay = files.every((d) => d.on === 'date')
   const reason = !info?.configured ? 'not set up' : !info.fetchable.length ? 'current state only, so only for today' : null
+  // Myntra's bot check blocks the server's own logins: the person hands over their Chrome's login (2026-11-02)
+  const canConnect = source === 'myntra' && canEdit && !!info?.configured
+  const loginNeeded = canConnect && !running && last?.status === 'failed' && isMyntraLoginError(last.error)
+  const connect = async () => {
+    setBusy(true)
+    try {
+      const saved = await saveRobotLogin('myntra', await portalLogin('myntra'))
+      onNotice(saved.check ? 'ok' : 'warn', saved.check ? RL.SAVED(saved.cookies, saved.check.id) : RL.SAVED_NO_CHECK(saved.checkError ?? ''))
+      onChanged()
+    } catch (err) {
+      if (err instanceof RobotLoginError) {
+        if (err.reason !== 'cancelled') onNotice('warn', err.reason === 'missing' ? RL.MISSING : RL.FAILED(err.message))
+      } else onNotice('warn', RL.FAILED(errText(err)))
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <div className="py-2 first:pt-1">
       <div className="flex items-center gap-2">
@@ -366,11 +384,19 @@ function SourceRow({ source, files, plan, canEdit, running, fileRow, onNotice, o
         ) : reason ? (
           <span className="text-[11.5px] text-ink-400">{reason}</span>
         ) : canEdit && (
-          <Button variant={step ? 'primary' : 'default'} icon={<CloudDownload className="size-3.5" />} disabled={busy} onClick={() => void fetchNow()}>
-            {busy ? 'Starting…' : step ? `Fetch for ${shortDay(plan.date)}` : allOfDay ? 'Fetch again' : 'Fetch'}
-          </Button>
+          <>
+            {canConnect && (
+              <Button variant={loginNeeded ? 'primary' : 'default'} icon={<KeyRound className="size-3.5" />} disabled={busy} onClick={() => void connect()}>
+                {busy ? RL.BUSY : RL.BUTTON}
+              </Button>
+            )}
+            <Button variant={step && !loginNeeded ? 'primary' : 'default'} icon={<CloudDownload className="size-3.5" />} disabled={busy} onClick={() => void fetchNow()}>
+              {busy ? 'Starting…' : step ? `Fetch for ${shortDay(plan.date)}` : allOfDay ? 'Fetch again' : 'Fetch'}
+            </Button>
+          </>
         )}
       </div>
+      {loginNeeded && <p className="mt-1 text-[11.5px] text-crit">{RL.NEEDED}</p>}
       {showLog && last && (
         <RunLog runId={last.id} live={!!running} title={`${SOURCE_INFO[source].label} fetch #${last.id}`}
           onClose={() => setLogOpen(false)} onFail={(err) => onNotice('warn', errText(err))} />

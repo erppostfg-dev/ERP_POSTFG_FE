@@ -107,6 +107,20 @@ export const FACILITY_COLUMNS: { type: string; label: string }[] = [
   { type: 'B2C', label: 'B2C (marketplaces)' },
 ]
 
+/** Connect Myntra: the robot's login from the person's own Chrome (ERP Robot Login extension, 2026-11-02). */
+export const ROBOT_LOGIN_TEXT = {
+  BUTTON: 'Connect Myntra',
+  BUSY: 'Connecting…',
+  NEEDED: 'Myntra login needed: log in at partners.myntrainfo.com in Chrome (team FBM/PPMP/MDirect), then press Connect Myntra.',
+  MISSING: 'Connect Myntra needs the ERP Robot Login extension in this Chrome (ask the tech team to install it). Then log in at partners.myntrainfo.com and press Connect Myntra again.',
+  SAVED: (cookies: number, run: string) => `Myntra login saved (${cookies} cookies). Checking it now with a GRN fetch (#${run}): when that is done, the robot can fetch Myntra again.`,
+  SAVED_NO_CHECK: (why: string) => `Myntra login saved, but the check fetch did not start: ${why}`,
+  FAILED: (why: string) => `Myntra not connected: ${why}`,
+}
+
+/** A failed Myntra fetch whose cause is the login (the robot's own messages), so Connect Myntra is what helps. */
+export const isMyntraLoginError = (error: string | null | undefined) => !!error && /login form did not open|login did not open|bot check|team chooser/i.test(error)
+
 /** The weekly Uniware facility check (POST_FG facility-check.service.ts, 2026-10-30): banner + review drawer. */
 export const FACILITY_CHECK_TEXT = {
   BANNER: (added: number, gone: number) => [
