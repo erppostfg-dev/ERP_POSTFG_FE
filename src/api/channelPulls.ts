@@ -27,15 +27,22 @@ export interface ChannelPull {
   intake: { enabled: boolean; processFrom: string | null }
   processing: boolean
   sync: { lastRunAt: string | null; lastSuccessAt: string | null; failures: number; lastError: string | null; lastResult: Record<string, unknown> | null } | null
-  robot: { running: boolean; lastRun: RobotRun | null; schedule: { everyHours: number | null; updatedBy: string | null; updatedAt: string | null }; nextRunAt: string | null } | null
+  /** schedule null = the robot starts with its email (Myntra STRs, 2026-11-03). */
+  robot: { running: boolean; lastRun: RobotRun | null; schedule: { everyHours: number | null; updatedBy: string | null; updatedAt: string | null } | null; nextRunAt: string | null; startedBy?: 'schedule' | 'email' } | null
+  /** Process now / the timer make POs from what was fetched (Myntra STRs: not yet). */
+  processes?: boolean
   /** API channels: how often the server pulls (everyHours null = defaultHours) and when next (null = not polled here). */
   poll: { everyHours: number | null; defaultHours: number; updatedBy: string | null; updatedAt: string | null; nextRunAt: string | null } | null
-  counts: { fetched: number; notTaken: number; waiting: number; taken: number } | null
+  counts: { fetched: number; notTaken: number; waiting: number; taken: number; stored?: number; failed?: number } | null
 }
 
 export interface PullItem {
   externalId: string
+  /** Myntra: STR · NON TC P0 · BP. */
+  label?: string
   status: string | null
+  /** Why the last try failed (Myntra STRs). */
+  error?: string | null
   warehouse: string | null
   createdOn: string | null
   fetchedAt: string

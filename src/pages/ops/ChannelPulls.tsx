@@ -26,6 +26,24 @@ const toRow = (i: PullItem): Row => ({
   id: i.externalId, consignment: i.externalId, warehouse: i.warehouse ?? '', created: i.createdOn ?? '', status: i.status ?? '', fetched: istDateTime(i.fetchedAt), po: i.upload?.status ?? '', raw: i,
 })
 
+/** Myntra STRs (2026-11-03): STR, its group (NON TC / TC, P0 - P3), destination, the date in its code, when the email came. */
+type StrRow = { id: string; str: string; group: string; destination: string; date: string; fetched: string; raw: PullItem }
+const STR_COLS: [string, keyof StrRow, ColKind][] = [
+  ['STR', 'str', 'mono'], ['Group', 'group', 'text'], ['Destination', 'destination', 'mono'], ['STR date', 'date', 'date'], ['Email came', 'fetched', 'mono'],
+]
+const toStrRow = (i: PullItem): StrRow => ({
+  id: i.externalId, str: i.externalId, group: (i.label ?? '').split(' · ')[1] ?? '', destination: i.warehouse ?? '', date: i.createdOn ?? '', fetched: istDateTime(i.fetchedAt), raw: i,
+})
+function StrStateCell({ item }: { item: PullItem }) {
+  const s = T.STR_STATE[item.status ?? 'waiting'] ?? { label: item.status ?? '', tone: 'neutral' as const }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <Badge tone={s.tone}>{s.label}</Badge>
+      {item.error && item.status !== 'stored' && <span className="text-[11.5px] text-ink-400" title={item.error}>{item.error}</span>}
+    </span>
+  )
+}
+
 function PoCell({ item }: { item: PullItem }) {
   if (item.upload) {
     const s = UPLOAD_STATE[item.upload.status] ?? { label: item.upload.status, tone: 'neutral' as const }
@@ -78,6 +96,9 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
   const r = p.robot
   const last = r?.lastRun
   const Icon = p.kind === 'robot' ? Bot : Cloud
+  // Myntra STRs: started by its email, stored in S3 only (no POs yet)
+  const byEmail = r?.startedBy === 'email'
+  const processes = p.processes !== false
   return (
     <section className="space-y-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
       <div className="flex flex-wrap items-start gap-3">
@@ -99,10 +120,10 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
                 icon={r.running ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}>{r.running ? T.ROBOT_RUNNING : T.RUN_ROBOT}</Button>
             )}
             {/* an API channel pulls and processes in one step: "Pull now"; a robot channel processes what the robot fetched */}
-            <Button variant={r ? 'default' : 'primary'} disabled={acting || p.processing || (!r && !p.configured)} onClick={() => void act(async () => ((await processPull(p.key)).started === 'queued' ? T.QUEUED : T.STARTED), T.STARTED)}
+            {processes && <Button variant={r ? 'default' : 'primary'} disabled={acting || p.processing || (!r && !p.configured)} onClick={() => void act(async () => ((await processPull(p.key)).started === 'queued' ? T.QUEUED : T.STARTED), T.STARTED)}
               icon={p.processing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}>
               {p.processing ? (r ? T.PROCESSING : T.PULLING) : (r ? T.PROCESS : T.PULL_NOW)}
-            </Button>
+            </Button>}
           </div>
         )}
       </div>
@@ -116,7 +137,7 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
                 <span className="inline-flex flex-wrap items-center gap-1.5">
                   {last.ok === false ? <AlertTriangle className="size-3.5 text-crit" /> : last.ok ? <Check className="size-3.5 text-ok" /> : <Loader2 className="size-3.5 animate-spin" />}
                   {istDateTime(last.startedAt)}
-                  {last.ok && <span className="text-ink-600">· {T.RUN_RESULT(last.listed, last.stored, last.failed.length)}</span>}
+                  {last.ok && <span className="text-ink-600">· {(byEmail ? T.STR_RUN_RESULT : T.RUN_RESULT)(last.listed, last.stored, last.failed.length)}</span>}
                   {last.ok === false && <span className="text-crit">· {last.error}</span>}
                   <button type="button" onClick={() => setLogOpen(true)} className="inline-flex items-center gap-1 text-primary hover:underline"><ScrollText className="size-3.5" />{T.VIEW_LOG}</button>
                 </span>
@@ -124,7 +145,13 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
             </dd>
           </div>
         )}
-        <div>
+        {!processes && (
+          <div>
+            <dt className="text-[11.5px] font-semibold text-ink-400">{T.LAST_PROCESS}</dt>
+            <dd className="text-ink-600">{T.NO_PROCESSING}</dd>
+          </div>
+        )}
+        {processes && <div>
           <dt className="text-[11.5px] font-semibold text-ink-400">{T.LAST_PROCESS}</dt>
           <dd className="text-ink-900">
             {p.sync?.lastRunAt ? (
@@ -133,12 +160,18 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
             ) : <span className="text-ink-400">{T.NEVER_PROCESSED}</span>}
             {!p.polling && <div className="text-[11.5px] text-ink-400">{T.POLLING_OFF}</div>}
           </dd>
-        </div>
-        {r && (
+        </div>}
+        {r && byEmail && (
+          <div>
+            <dt className="text-[11.5px] font-semibold text-ink-400">{T.STARTS_WITH}</dt>
+            <dd className="text-ink-600">{T.STARTED_BY_EMAIL}</dd>
+          </div>
+        )}
+        {r?.schedule && (
           <div>
             <dt className="text-[11.5px] font-semibold text-ink-400">{T.SCHEDULE}</dt>
             <dd className="flex flex-wrap items-center gap-2 text-ink-900">
-              <select value={r.schedule.everyHours ?? ''} disabled={!canEdit || acting} aria-label={T.SCHEDULE}
+              <select value={r.schedule?.everyHours ?? ''} disabled={!canEdit || acting} aria-label={T.SCHEDULE}
                 onChange={(e) => void act(async () => { await setRobotSchedule(p.key, e.target.value ? Number(e.target.value) : null) }, T.SAVED_SCHEDULE)}
                 className="h-8 rounded-[var(--radius)] border border-line bg-surface px-2 text-[12.5px] disabled:opacity-60">
                 {ROBOT_SCHEDULE_HOURS.map((h) => <option key={h ?? 'off'} value={h ?? ''}>{h ? T.EVERY(h) : T.SCHEDULE_OFF}</option>)}
@@ -162,15 +195,18 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
         )}
         {p.counts && (
           <div>
-            <dt className="text-[11.5px] font-semibold text-ink-400">{T.RECENT}</dt>
-            <dd className="text-ink-600">{T.COUNTS(p.counts)}</dd>
+            <dt className="text-[11.5px] font-semibold text-ink-400">{byEmail ? T.RECENT_STRS : T.RECENT}</dt>
+            <dd className="text-ink-600">{byEmail ? T.STR_COUNTS(p.counts) : T.COUNTS(p.counts)}</dd>
           </div>
         )}
       </dl>
 
       {p.kind === 'robot' && (
         (items.data ?? []).length === 0 ? (
-          <div className="rounded-md border border-dashed border-line px-4 py-6 text-center text-[12.5px] text-ink-400">{T.NO_ITEMS}</div>
+          <div className="rounded-md border border-dashed border-line px-4 py-6 text-center text-[12.5px] text-ink-400">{byEmail ? T.NO_STRS : T.NO_ITEMS}</div>
+        ) : byEmail ? (
+          <DataGrid cols={STR_COLS} rows={(items.data ?? []).map(toStrRow)} rowKey={(row) => row.id} pageSize={10}
+            trailing={[{ label: 'State', render: (row) => <StrStateCell item={row.raw} /> }]} />
         ) : (
           <DataGrid cols={COLS} rows={(items.data ?? []).map(toRow)} rowKey={(row) => row.id} pageSize={10}
             trailing={[{ label: 'PO', render: (row) => <PoCell item={row.raw} /> }]} />

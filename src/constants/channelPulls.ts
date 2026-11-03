@@ -52,6 +52,19 @@ export const PULLS_TEXT = {
   QUEUED: 'A run is going: it runs again right after.',
   SAVED_SCHEDULE: 'Schedule saved.',
   VIEW_ONLY: 'View only: running and processing need editor access.',
+  // Myntra STRs (2026-11-03): the robot starts with the "Request to Raise STRs" email; CSV + processed.json kept in S3
+  STARTED_BY_EMAIL: 'Starts by itself when a "Request to Raise STRs" email comes; Run robot now tries the waiting STRs again',
+  STARTS_WITH: 'Starts with',
+  NO_PROCESSING: 'STRs are stored in S3 (CSV + processed.json); making POs / sale orders from them comes next',
+  STR_RUN_RESULT: (listed: number, stored: number, failed: number) => `${listed} STR(s) · ${stored} stored in S3${failed ? ` · ${failed} not yet (tried again)` : ''}`,
+  STR_COUNTS: (c: { fetched: number; waiting: number; stored?: number; failed?: number }) => `${c.fetched} STR(s) · ${c.stored ?? 0} stored in S3 · ${c.waiting} waiting${c.failed ? ` · ${c.failed} failed` : ''}`,
+  RECENT_STRS: 'Recent STRs',
+  NO_STRS: 'No STR email yet.',
+  STR_STATE: {
+    stored: { label: 'Stored in S3', tone: 'ok' },
+    failed: { label: 'Failed (3 runs)', tone: 'crit' },
+    waiting: { label: 'Waiting for the robot', tone: 'warn' },
+  } as Record<string, { label: string; tone: 'ok' | 'warn' | 'crit' | 'info' | 'neutral' }>,
 } as const
 
 /** The PO a fetched consignment became (po_uploads.status) -> label + tone. */
