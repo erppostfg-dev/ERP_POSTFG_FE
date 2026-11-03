@@ -1,0 +1,4 @@
+# Before every push (2026-10-28): import rules + unused code + all tests + build (the same checks CI runs).
+npm run deps
+npm run knip
+npm test

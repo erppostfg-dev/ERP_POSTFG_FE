@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { apiUrl } from '../api/client'
 import { getChanges, getShipment, type ShipmentChange, type ShipmentItem } from '../api/poOverview'
-import { CREATED_ACTION, LIVE_EVENT, LIVE_FLASH_MS, LIVE_POLL_MS, LIVE_SILENT_MS, LIVE_WATCHDOG_MS, PO_OVERVIEW_ENDPOINT } from '../constants/poOverview'
+import { LIST_ACTIONS, LIVE_EVENT, LIVE_FLASH_MS, LIVE_POLL_MS, LIVE_SILENT_MS, LIVE_WATCHDOG_MS, PO_OVERVIEW_ENDPOINT } from '../constants/poOverview'
 
 /*
  * Live PO Overview (2026-10-14, self-healing; user: "reduce manual intervention"):
@@ -47,7 +47,7 @@ export function useLiveShipments() {
 
     const apply = async (c: ShipmentChange) => {
       seen(c.logId)
-      if (c.action === CREATED_ACTION) {
+      if (LIST_ACTIONS.includes(c.action)) {
         void qc.invalidateQueries({ queryKey: SHIPMENT_LISTS })
         void qc.invalidateQueries({ queryKey: LINE_LISTS })
         return

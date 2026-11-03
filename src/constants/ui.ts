@@ -25,5 +25,24 @@ export const TABLE_HEIGHT = {
 
 /** Tables: how long the "Copied" chip stays on a clicked cell, and the hint under every table (user, 2026-10-15). */
 export const COPIED_MS = 1_200
-export const GRID_HINT = { OPEN_AND_COPY: 'Click a cell to copy · double-click a row to open', COPY: 'Click a cell to copy' } as const
+/** Old-style table toolbar (Columns / Filters / Density): shown on a button the page has not wired up. */
+export const TOOLBAR_TEXT = { NOT_HERE: 'Not available on this table' } as const
+
+export const GRID_HINT = { OPEN_AND_COPY: 'Click a code to copy · double-click a row to open', COPY: 'Click a code to copy' } as const
+/**
+ * Rows per page chosen by the person (user, 2026-11-02: "give it to the users to add how much they want"): any number
+ * from 1 to MAX, with these suggestions; kept in this browser per table (STORE_KEY + the table's key).
+ */
+export const GRID_PAGE_SIZE = { LABEL: 'Rows per page', SUGGEST: [25, 50, 100, 200], MAX: 1000, STORE_KEY: 'postfg.rowsPerPage.' } as const
+/**
+ * Only these columns copy on click, in every table (user, 2026-10-19): codes and names people paste elsewhere.
+ * Dates, quantities, amounts, statuses and remarks do not. Matched on the column title, any case.
+ */
+export const COPYABLE_COLUMNS: ReadonlySet<string> = new Set([
+  'po number', 'channel', 'brand', 'sale order', 'source', 'po source',
+  'sku', 'sku code', 'pep code', 'channel sku', 'channel sku code',
+  'facility', 'location', 'location code',
+  // Amazon Inbound (2026-10-19): plan and shipment ids, FC.
+  'plan', 'fba id', 'fc',
+])
 

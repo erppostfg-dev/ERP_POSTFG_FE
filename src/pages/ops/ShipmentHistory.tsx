@@ -16,7 +16,9 @@ import { fmtDate } from '../../lib/ops'
  * and live change (same query key that liveShipments invalidates).
  */
 
-type Entry = { key: string; at: string; by: string | null; byEmail: string | null; byTeam: string | null; action: string; source: string; remark: string | null; changes: HistoryItem[] }
+type Entry = { key: string; at: string; by: string | null; byEmail: string | null; byTeam: string | null; action: string; source: string; remark: string | null; changes: HistoryItem[]
+  /** The value of an action row (no field), e.g. what a master row was added with. */
+  note: string | null; first: HistoryItem }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -28,9 +30,11 @@ const toEntries = (items: HistoryItem[]): Entry[] => {
     if (last && h.batchId && last.key === h.batchId) {
       if (h.field) last.changes.push(h)
       if (!last.remark && h.remark) last.remark = h.remark
+      if (!h.field && !last.note && h.newValue) last.note = h.newValue
       continue
     }
-    out.push({ key: h.batchId ?? h.id, at: h.at, by: h.by, byEmail: h.byEmail, byTeam: h.byTeam, action: h.action, source: h.source, remark: h.remark, changes: h.field ? [h] : [] })
+    out.push({ key: h.batchId ?? h.id, at: h.at, by: h.by, byEmail: h.byEmail, byTeam: h.byTeam, action: h.action, source: h.source, remark: h.remark, changes: h.field ? [h] : [],
+      note: h.field ? null : h.newValue, first: h })
   }
   return out
 }
@@ -63,11 +67,24 @@ function Value({ v, old }: { v: string | null; old?: boolean }) {
   return <span className={old ? 'text-ink-600 line-through decoration-ink-400' : 'font-medium text-ink-900'}>{shown}</span>
 }
 
-function EntryCard({ e, labelOf }: { e: Entry; labelOf: (field: string) => string }) {
+/** Labels and extras of a timeline (2026-10-28: shared with the Masters history; PO Overview keeps its defaults). */
+export type TimelineOptions = {
+  actionLabel?: Record<string, string>
+  sourceLabel?: Record<string, string>
+  /** Show the value of action rows (no field) under the entry. */
+  notes?: boolean
+  /** A chip naming what the entry is about (e.g. the master row in a list of every master's changes). */
+  tagOf?: (h: HistoryItem) => string | null
+}
+
+function EntryCard({ e, labelOf, o }: { e: Entry; labelOf: (field: string) => string; o: TimelineOptions }) {
   const person = e.by
+  const actionLabel = o.actionLabel ?? LOG_ACTION_LABEL
+  const sourceLabel = o.sourceLabel ?? LOG_SOURCE_LABEL
+  const tag = o.tagOf?.(e.first)
   const what = e.action === 'field_changed' && e.changes.length
     ? `Updated ${e.changes.length} field${e.changes.length === 1 ? '' : 's'}`
-    : (LOG_ACTION_LABEL[e.action] ?? e.action.replace(/_/g, ' '))
+    : (actionLabel[e.action] ?? e.action.replace(/_/g, ' '))
   return (
     <li className="relative pb-4 pl-10 last:pb-1">
       {/* the line of the timeline + the avatar on it */}
@@ -83,8 +100,10 @@ function EntryCard({ e, labelOf }: { e: Entry; labelOf: (field: string) => strin
           <span className="ml-auto whitespace-nowrap text-[11.5px] text-ink-400" title={new Date(e.at).toLocaleString()}>{timeOf(e.at)} · {ago(e.at)}</span>
         </div>
         <div className="px-3 pb-2 pt-0.5">
-          <span className="inline-block rounded-full bg-alt px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-ink-600">{LOG_SOURCE_LABEL[e.source] ?? e.source}</span>
+          <span className="inline-block rounded-full bg-alt px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-ink-600">{sourceLabel[e.source] ?? e.source}</span>
+          {tag && <span className="ml-1.5 inline-block rounded-full bg-primary-soft px-2 py-0.5 font-mono text-[10.5px] font-medium text-primary">{tag}</span>}
         </div>
+        {o.notes && e.note && <div className="border-t border-line px-3 py-1.5 text-[12.5px] text-ink-600 [overflow-wrap:anywhere]">{e.note}</div>}
         {e.changes.length > 0 && (
           <table className="w-full border-t border-line text-[12.5px]">
             <tbody>
@@ -114,27 +133,34 @@ function EntryCard({ e, labelOf }: { e: Entry; labelOf: (field: string) => strin
 /** The history of one shipment as a timeline (newest first, grouped by day). */
 export function HistoryTimeline({ uid, labelOf }: { uid: string; labelOf: (field: string) => string }) {
   const q = useQuery({ queryKey: ['po-overview', 'history', uid], queryFn: ({ signal }) => getHistory(uid, signal) })
+  return <Timeline items={q.data} pending={q.isPending} error={q.isError} onRetry={() => void q.refetch()} labelOf={labelOf} empty="Nothing recorded for this shipment yet." />
+}
+
+/** Any history list as the timeline (newest first, one entry per save, grouped by day). */
+export function Timeline({ items, pending, error, onRetry, labelOf, empty, options = {} }: {
+  items: HistoryItem[] | undefined; pending: boolean; error: boolean; onRetry: () => void; labelOf: (field: string) => string; empty: string; options?: TimelineOptions
+}) {
   const days = useMemo(() => {
     const out: { day: string; entries: Entry[] }[] = []
-    for (const e of toEntries(q.data ?? [])) {
+    for (const e of toEntries(items ?? [])) {
       const day = dayLabel(e.at)
       if (out[out.length - 1]?.day === day) out[out.length - 1]!.entries.push(e)
       else out.push({ day, entries: [e] })
     }
     return out
-  }, [q.data])
+  }, [items])
 
-  if (q.isPending) return <p className="px-2 py-3 text-[12.5px] text-ink-400">Loading history…</p>
-  if (q.isError) return (
-    <div className="px-2 py-3 text-[12.5px] text-crit">Could not load the history. <button onClick={() => void q.refetch()} className="font-semibold underline">Try again</button></div>
+  if (pending) return <p className="px-2 py-3 text-[12.5px] text-ink-400">Loading history…</p>
+  if (error) return (
+    <div className="px-2 py-3 text-[12.5px] text-crit">Could not load the history. <button onClick={onRetry} className="font-semibold underline">Try again</button></div>
   )
-  if (!days.length) return <p className="px-2 py-3 text-[12.5px] text-ink-400">Nothing recorded for this shipment yet.</p>
+  if (!days.length) return <p className="px-2 py-3 text-[12.5px] text-ink-400">{empty}</p>
   return (
     <div className="space-y-3">
       {days.map((d) => (
         <section key={d.day}>
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{d.day}</div>
-          <ol>{d.entries.map((e) => <EntryCard key={e.key} e={e} labelOf={labelOf} />)}</ol>
+          <ol>{d.entries.map((e) => <EntryCard key={e.key} e={e} labelOf={labelOf} o={options} />)}</ol>
         </section>
       ))}
     </div>

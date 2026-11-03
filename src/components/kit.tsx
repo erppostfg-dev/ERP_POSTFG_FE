@@ -2,21 +2,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, Filter, History, MoreHorizontal, Pencil, Search, Upload, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Calendar, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, Filter, History, MoreHorizontal, Pencil, Search, Upload, X } from 'lucide-react'
 import { Badge, BulkUpload, downloadCsv } from './ui'
-import { DatePicker, Pop, usePopover } from './pickers'
+import { DatePicker, DateRangePicker, Pop, SelectBox, usePopover } from './pickers'
 import { fmtDate, statusTone, type ColKind } from '../lib/ops'
 import { NOT_IN_DB } from '../constants/masters'
 import { copyText } from '../lib/clipboard'
-import { COPIED_MS, GRID_HINT } from '../constants/ui'
+import { COPIED_MS, COPYABLE_COLUMNS, GRID_HINT, GRID_PAGE_SIZE } from '../constants/ui'
+import { downloadExcel } from '../lib/excelExport'
+import { DATE_SORT_KEY, dateSortOf, isOrderKey, type DateSortDir } from '../lib/listOrder'
 
 // ---- Toolbar -----------------------------------------------------------
 export function SectionToolbar({
-  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra,
+  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra, onUpload, selectedCount = 0, onClearSelection, exportMenu,
 }: {
   q: string; setQ: (v: string) => void; placeholder?: string
   filtersOpen?: boolean; onToggleFilters?: () => void; activeFilters?: number
   entity: string; onExport: (ext: 'csv' | 'xls') => void; primary?: ReactNode; extra?: ReactNode
+  /** What Upload CSV does on a live page (e.g. open the page that takes the files); default: the sample upload modal. */
+  onUpload?: () => void
+  /** Rows ticked in the table: CSV / Excel then download only those (the page's onExport decides). */
+  selectedCount?: number
+  onClearSelection?: () => void
+  /** One Download button (DownloadMenu) in place of the separate CSV and Excel buttons (PO review, 2026-10-26). */
+  exportMenu?: ReactNode
 }) {
   const [upload, setUpload] = useState(false)
   return (
@@ -43,13 +52,25 @@ export function SectionToolbar({
       )}
       {extra}
       <div className="ml-auto flex flex-wrap items-center gap-2">
-        <button onClick={() => onExport('csv')} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
-          <Download className="size-4" /> CSV
-        </button>
-        <button onClick={() => onExport('xls')} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
-          <Download className="size-4" /> Excel
-        </button>
-        <button onClick={() => setUpload(true)} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line bg-surface px-3 text-[13px] font-medium text-ink-900 hover:bg-canvas">
+        {/* Always takes its place (hidden at 0), so ticking a row never moves the toolbar or the table (user, 2026-10-19). */}
+        {onClearSelection && (
+          <span aria-hidden={selectedCount === 0}
+            className={`inline-flex h-9 min-w-[150px] items-center justify-center gap-2 rounded-[var(--radius)] border border-primary/30 px-3 text-[12.5px] text-primary transition-opacity duration-200 ${selectedCount > 0 ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+            <span className="tnum font-semibold">{selectedCount} selected</span>
+            <button onClick={onClearSelection} tabIndex={selectedCount > 0 ? 0 : -1} className="text-ink-600 underline-offset-2 hover:text-ink-900 hover:underline">Clear</button>
+          </span>
+        )}
+        {exportMenu ?? (<>
+          <button onClick={() => onExport('csv')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
+            <Download className="size-4" /> CSV
+          </button>
+          <button onClick={() => onExport('xls')} title={selectedCount ? `Download the ${selectedCount} selected row(s)` : 'Download all rows shown'}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15">
+            <Download className="size-4" /> Excel
+          </button>
+        </>)}
+        <button onClick={() => (onUpload ? onUpload() : setUpload(true))} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line bg-surface px-3 text-[13px] font-medium text-ink-900 hover:bg-canvas">
           <Upload className="size-4" /> Upload CSV
         </button>
         {primary}
@@ -70,15 +91,32 @@ export function PrimaryBtn({ children, onClick, icon }: { children: ReactNode; o
 // ---- Filters ------------------------------------------------------------
 export type FilterDef =
   | { key: string; label: string; type: 'date' }
+  /** One from - to field opening a From and a To calendar side by side (2026-11-03); the values stay under fromKey / toKey. */
+  | { key: string; label: string; type: 'dateRange'; fromKey: string; toKey: string }
   | { key: string; label: string; type: 'multi'; options: readonly string[]; placeholder?: string }
   | { key: string; label: string; type: 'text'; placeholder?: string }
+  /**
+   * The order of the rows (lib/listOrder keys): not a filter, the page orders its rows by the chosen value.
+   * inPanel false = only its chip (set from a column header).
+   */
+  | { key: string; label: string; type: 'sort'; options: readonly { value: string; label: string }[]; placeholder?: string; inPanel?: boolean }
 export type FilterValues = Record<string, string | string[]>
 
-export const countActive = (v: FilterValues) => Object.values(v).filter((x) => (Array.isArray(x) ? x.length : x)).length
+/** A multi-select gets a search box when it has more options than this. */
+const MULTI_SEARCH_FROM = 6
 
-function MultiSelect({ value, onChange, options, placeholder }: { value: string[]; onChange: (v: string[]) => void; options: readonly string[]; placeholder: string }) {
+/** Filters in use; a from / to pair (<field>From, <field>To) counts once (one date range field, 2026-11-03). */
+export const countActive = (v: FilterValues) =>
+  new Set(Object.entries(v).filter(([, x]) => (Array.isArray(x) ? x.length : x)).map(([k]) => k.replace(/(From|To)$/, ''))).size
+
+export function MultiSelect({ value, onChange, options, placeholder }: { value: string[]; onChange: (v: string[]) => void; options: readonly string[]; placeholder: string }) {
   // Our popover: opens / closes with the same animation as the other pickers (components/pickers.tsx).
   const { open, leaving, ref, toggle } = usePopover()
+  // A search box on top of long lists (2026-10-19, user: channels were hard to find).
+  const [q, setQ] = useState('')
+  useEffect(() => { if (open) setQ('') }, [open])
+  const searchable = options.length > MULTI_SEARCH_FROM
+  const shown = q.trim() ? options.filter((o) => o.toLowerCase().includes(q.trim().toLowerCase())) : options
   return (
     <div ref={ref} className="relative">
       <button
@@ -96,8 +134,21 @@ function MultiSelect({ value, onChange, options, placeholder }: { value: string[
         )}
       </button>
       {open && (
-        <Pop leaving={leaving} className="max-h-60 w-full min-w-[180px] overflow-y-auto">
-          {options.map((o) => {
+        <Pop leaving={leaving} className="max-h-72 w-full min-w-[200px] overflow-y-auto">
+          {searchable && (
+            <div className="sticky -top-1 z-10 -mx-1 -mt-1 mb-1 border-b border-line bg-surface p-1.5">
+              <div className="flex items-center gap-1.5 rounded-md border border-line px-2 focus-within:border-primary">
+                <Search className="size-3.5 shrink-0 text-ink-400" />
+                <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" className="h-7 min-w-0 flex-1 bg-transparent text-[13px] outline-none" />
+              </div>
+              <div className="mt-1 flex items-center justify-between px-0.5 text-[11.5px] text-ink-400">
+                <span>{shown.length} of {options.length}</span>
+                {value.length > 0 && <button type="button" onClick={() => onChange([])} className="hover:text-ink-900">Clear ({value.length})</button>}
+              </div>
+            </div>
+          )}
+          {shown.length === 0 && <div className="px-2 py-3 text-center text-[12.5px] text-ink-400">No match</div>}
+          {shown.map((o) => {
             const on = value.includes(o)
             return (
               <label key={o} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-alt">
@@ -118,19 +169,28 @@ export function FilterPanel({ defs, value, onApply, onClose }: { defs: FilterDef
   const [draft, setDraft] = useState<FilterValues>(value)
   const set = (k: string, v: string | string[]) => setDraft((d) => ({ ...d, [k]: v }))
   return (
-    <div className="rounded-[var(--radius-card)] border border-primary/25 bg-surface p-4 shadow-[0_1px_0_rgba(79,70,229,0.06)]">
+    // relative z-42: the open dropdowns hang over the table below (its fixed cells go up to z-40), and stay under the
+    // sidebar when it opens over the page (z-45).
+    <div className="relative z-[42] rounded-[var(--radius-card)] border border-primary/25 bg-surface p-4 shadow-[0_1px_0_rgba(79,70,229,0.06)]">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-[13px] font-semibold text-ink-900">Filters</div>
         <button onClick={onClose} className="rounded p-1 text-ink-400 hover:bg-alt hover:text-ink-900"><X className="size-4" /></button>
       </div>
       <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-        {defs.map((d) => (
+        {defs.filter((d) => !(d.type === 'sort' && d.inPanel === false)).map((d) => (
           <div key={d.key}>
             <div className="mb-1 text-[12px] font-medium text-ink-600">{d.label}</div>
             {d.type === 'multi' ? (
               <MultiSelect value={(draft[d.key] as string[]) ?? []} onChange={(v) => set(d.key, v)} options={d.options} placeholder={d.placeholder ?? `Select ${d.label.toLowerCase()}`} />
             ) : d.type === 'date' ? (
               <DateInput value={(draft[d.key] as string) ?? ''} onChange={(v) => set(d.key, v)} className={draft[d.key] ? '' : 'text-ink-400'} />
+            ) : d.type === 'dateRange' ? (
+              // one field; it opens a From and a To calendar side by side (user, 2026-11-03)
+              <DateRangePicker from={(draft[d.fromKey] as string) ?? ''} to={(draft[d.toKey] as string) ?? ''}
+                onChange={(f, t) => setDraft((x) => ({ ...x, [d.fromKey]: f, [d.toKey]: t }))} />
+            ) : d.type === 'sort' ? (
+              <SelectBox value={d.options.find((o) => o.value === draft[d.key])?.label ?? ''} options={d.options.map((o) => o.label)}
+                onChange={(l) => set(d.key, d.options.find((o) => o.label === l)?.value ?? '')} placeholder={d.placeholder ?? '—'} />
             ) : (
               <input value={(draft[d.key] as string) ?? ''} onChange={(e) => set(d.key, e.target.value)} placeholder={d.placeholder} className={fieldCls} />
             )}
@@ -138,8 +198,9 @@ export function FilterPanel({ defs, value, onApply, onClose }: { defs: FilterDef
         ))}
       </div>
       <div className="mt-4 flex justify-end gap-2">
-        <button onClick={() => { setDraft({}); onApply({}) }} className="h-8 rounded-[var(--radius)] border border-line px-3 text-[13px] font-medium hover:bg-canvas">Clear</button>
-        <button onClick={() => onApply(draft)} className="h-8 rounded-[var(--radius)] bg-primary px-3.5 text-[13px] font-semibold text-white hover:opacity-90">Apply</button>
+        {/* Apply and Clear both close the panel once done, on every page (user, 2026-10-16). */}
+        <button onClick={() => { setDraft({}); onApply({}); onClose() }} className="h-8 rounded-[var(--radius)] border border-line px-3 text-[13px] font-medium hover:bg-canvas">Clear</button>
+        <button onClick={() => { onApply(draft); onClose() }} className="h-8 rounded-[var(--radius)] bg-primary px-3.5 text-[13px] font-semibold text-white hover:opacity-90">Apply</button>
       </div>
     </div>
   )
@@ -151,6 +212,7 @@ export function applyFilters<T>(rows: T[], f: FilterValues): T[] {
     const rec = r as Record<string, unknown>
     for (const [k, v] of Object.entries(f)) {
       if (Array.isArray(v) ? !v.length : !v) continue
+      if (isOrderKey(k)) continue // an order, not a filter
       if (k.endsWith('From') || k.endsWith('To')) {
         const base = k.replace(/(From|To)$/, '')
         const val = String(rec[base] ?? '')
@@ -182,6 +244,57 @@ export function useSection<T>(rows: T[], searchKeys: (keyof T)[]) {
 
 export function exportRows<T>(name: string, ext: 'csv' | 'xls', cols: [string, keyof T, ColKind][], rows: T[]) {
   downloadCsv(`${name}.${ext === 'xls' ? 'xls' : 'csv'}`, cols.map((c) => c[0]), rows.map((r) => cols.map((c) => String(r[c[1]] ?? ''))))
+}
+
+/** The same table as a real .xlsx (SheetJS, codes kept as text; numbers stay numbers). */
+export const exportRowsExcel = <T,>(name: string, cols: [string, keyof T, ColKind][], rows: T[], lists?: { col: keyof T; values: string[]; prompt?: string }[]) =>
+  downloadExcel(name, [{
+    // dropdowns on some columns (2026-11-02: the Check column of the Processed download)
+    lists: lists?.map((l) => ({ col: cols.findIndex((c) => c[1] === l.col), values: l.values, prompt: l.prompt })).filter((l) => l.col >= 0),
+    name, header: cols.map((c) => c[0]),
+    rows: rows.map((r) => cols.map(([, k, kind]) => {
+      const v = r[k]
+      if (v === null || v === undefined) return ''
+      return (kind === 'num' || kind === 'money') && typeof v === 'number' ? v : String(v)
+    })),
+  }])
+
+// ---- One Download button (2026-10-26): the main click = the first item, the arrow lists every choice ---------------
+export type DownloadItem = { label: string; onClick: () => void; disabled?: boolean; hint?: string; group?: string }
+
+export function DownloadMenu({ label, items, busy, title }: { label: string; items: DownloadItem[]; busy?: boolean; title?: string }) {
+  const p = usePopover()
+  // The main click is always the first item (the page's default); when it can't run, the arrow still offers the rest.
+  const first = items[0]
+  const run = (i: DownloadItem) => { p.close(); i.onClick() }
+  return (
+    <div ref={p.ref} className="relative inline-flex">
+      <button onClick={() => first && run(first)} disabled={busy || !first || first.disabled} title={title}
+        className="inline-flex h-9 items-center gap-1.5 rounded-l-[var(--radius)] bg-primary-soft px-3 text-[13px] font-medium text-primary hover:bg-primary/15 disabled:opacity-60">
+        <Download className="size-4" /> {label}
+      </button>
+      <button onClick={p.toggle} disabled={busy} aria-label="More download options"
+        className="inline-flex h-9 items-center rounded-r-[var(--radius)] border-l border-primary/20 bg-primary-soft px-2 text-primary hover:bg-primary/15 disabled:opacity-60">
+        <ChevronDown className="size-4" />
+      </button>
+      {p.open && (
+        // Right-aligned under the button: Pop sits at the left of this box, which ends at the button's right edge.
+        <div className="absolute right-0 top-full z-40 w-72">
+        <Pop leaving={p.leaving} className="w-72">
+          {items.map((i, n) => (
+            <div key={i.label}>
+              {i.group && i.group !== items[n - 1]?.group && <div className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{i.group}</div>}
+              <button onClick={() => run(i)} disabled={i.disabled} title={i.hint}
+                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-[13px] text-ink-900 hover:bg-alt disabled:cursor-not-allowed disabled:text-ink-400 disabled:hover:bg-transparent">
+                <Download className="size-3.5 shrink-0" />{i.label}
+              </button>
+            </div>
+          ))}
+        </Pop>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ---- Data grid ---------------------------------------------------------
@@ -263,12 +376,54 @@ function RowMenu({ items }: { items: () => { label: string; onClick: () => void 
   )
 }
 
+// ---- Fixed-column fit: text widths measured on a canvas in the grid's own fonts -------------------------------------
+const HEAD_FONT = '600 11px'
+const HEAD_TRACKING = 0.275 // tracking-wide: 0.025em of 11px per letter
+const BODY_FONT = '400 13px'
+const MONO_FONT = '400 12.5px'
+const CELL_PAD = 26 // px-3 on both sides + the border, + a little air
+const BADGE_PAD = 18
+const FIT_MIN = 56
+let measureCtx: CanvasRenderingContext2D | null | undefined
+const families: Record<string, string> = {}
+const familyOf = (mono: boolean) => {
+  const k = mono ? 'mono' : 'body'
+  if (!families[k]) {
+    const el = document.createElement('span')
+    if (mono) el.className = 'font-mono'
+    document.body.appendChild(el)
+    families[k] = getComputedStyle(el).fontFamily || (mono ? 'monospace' : 'sans-serif')
+    el.remove()
+  }
+  return families[k]
+}
+const textWidth = (text: string, font: string, tracking = 0): number => {
+  if (measureCtx === undefined) measureCtx = document.createElement('canvas').getContext('2d')
+  if (!measureCtx) return text.length * 8
+  measureCtx.font = `${font} ${familyOf(font === MONO_FONT)}`
+  return measureCtx.measureText(text).width + tracking * text.length
+}
+/** The text a cell shows (as Cell renders it). */
+const cellText = (kind: ColKind, v: unknown): string => {
+  if (v === '' || v === null || v === undefined) return '—'
+  if (kind === 'date') return fmtDate(String(v))
+  if (kind === 'num') return Number(v).toLocaleString('en-IN')
+  if (kind === 'money') return `₹${Number(v).toLocaleString('en-IN')}`
+  return String(v)
+}
+
 export function DataGrid<T>({
-  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, maxHeight, onScrolledChange,
+  cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, stickyFit, maxHeight, onScrolledChange,
+  selected, onSelectedChange, headFilter, pageSizeKey,
 }: {
+  /** A control shown after a column's name in its header (e.g. ColumnSort); null = none (2026-10-29). */
+  headFilter?: (key: keyof T) => ReactNode
+  /** The person picks the rows per page (footer box, any number 1..GRID_PAGE_SIZE.MAX), kept in this browser under this key. */
+  pageSizeKey?: string
   cols: [string, keyof T, ColKind][]; rows: T[]; rowKey: (r: T) => string; sticky?: number
   onRowClick?: (r: T) => void; rowMenu?: (r: T) => { label: string; onClick: () => void }[]; pageSize?: number
-  trailing?: { label: string; render: (r: T) => ReactNode }[]; rowClass?: (r: T) => string
+  /** Extra columns at the end; with `sortValue` the header gets ↑/↓ and a click sorts every row by it (2026-10-19). */
+  trailing?: { label: string; render: (r: T) => ReactNode; sortValue?: (r: T) => number | string; sortHint?: string }[]; rowClass?: (r: T) => string
   /** A header row above the columns: each group spans `span` columns in order; `edit` = marked with a pencil. */
   groups?: { label: string; span: number; edit?: boolean }[]
   /** Columns the person can edit: their header carries a pencil (no colour). */
@@ -279,12 +434,47 @@ export function DataGrid<T>({
   onRowHistory?: (r: T) => void
   /** Width (px) of each fixed column; default 132 each. Fixed cells cut long values with "…" (full value on hover). */
   stickyWidths?: number[]
+  /** Fixed columns only as wide as their header / values need (all loaded rows), at most their stickyWidths width. */
+  stickyFit?: boolean
   /** Give the table its own scroll area of this height (CSS), so the header rows and the sideways scrollbar stay on screen. */
   maxHeight?: string
   /** Told true when the table is scrolled / dragged away from its top-left start, false when it is back there. */
   onScrolledChange?: (scrolled: boolean) => void
+  /**
+   * Row checkboxes (2026-10-16, user: "download only the ticked rows"): a fixed first column; the header box ticks /
+   * unticks every row of `rows` (the current search + filters, all pages). Keys = rowKey.
+   */
+  selected?: ReadonlySet<string>
+  onSelectedChange?: (keys: Set<string>) => void
 }) {
+  const selectable = !!selected && !!onSelectedChange
+  const SELECT_W = 40
+  const allKeys = rows.map(rowKey)
+  const ticked = selectable ? allKeys.filter((k) => selected!.has(k)).length : 0
+  const toggleAll = () => onSelectedChange?.(ticked === allKeys.length ? new Set() : new Set(allKeys))
+  const toggle = (k: string) => {
+    const next = new Set(selected)
+    if (next.has(k)) next.delete(k); else next.add(k)
+    onSelectedChange?.(next)
+  }
+  const headBox = useRef<HTMLInputElement>(null)
+  useEffect(() => { if (headBox.current) headBox.current.indeterminate = ticked > 0 && ticked < allKeys.length }, [ticked, allKeys.length])
   const [page, setPage] = useState(0)
+  const storeKey = pageSizeKey ? GRID_PAGE_SIZE.STORE_KEY + pageSizeKey : null
+  const [size, setSize] = useState(() => {
+    if (!storeKey) return pageSize
+    try { const v = Number(localStorage.getItem(storeKey)); return Number.isInteger(v) && v >= 1 ? Math.min(v, GRID_PAGE_SIZE.MAX) : pageSize } catch { return pageSize }
+  })
+  const [sizeDraft, setSizeDraft] = useState(String(size))
+  const applySize = (raw: string) => {
+    const v = Math.trunc(Number(raw))
+    if (!Number.isFinite(v) || v < 1) { setSizeDraft(String(size)); return }
+    const next = Math.min(v, GRID_PAGE_SIZE.MAX)
+    setSize(next)
+    setSizeDraft(String(next))
+    setPage(0)
+    if (storeKey) try { localStorage.setItem(storeKey, String(next)) } catch { /* kept for this visit only */ }
+  }
   // Every table (user, 2026-10-15): a single click copies that cell's text (as shown), a double-click opens the row.
   const [copied, setCopied] = useState<string | null>(null)
   const copyTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -301,10 +491,25 @@ export function DataGrid<T>({
       copyTimer.current = setTimeout(() => setCopied(null), COPIED_MS)
     })
   }
+  /** Only code / name columns copy on click (COPYABLE_COLUMNS); dates, numbers and statuses don't. */
+  const copyable = (label: string) => COPYABLE_COLUMNS.has(label.trim().toLowerCase())
   const chip = (id: string) => copied === id && <span key={id} className="pf-copy-chip pointer-events-none absolute right-1 top-1/2 z-[6] -translate-y-1/2 rounded bg-ink-900 px-1.5 py-0.5 text-[10.5px] font-semibold text-white shadow">Copied</span>
-  const pages = Math.max(1, Math.ceil(rows.length / pageSize))
+  // Sorting by a trailing column: none -> high first (↓) -> low first (↑) -> none. All rows are sorted, then paged.
+  const [sort, setSort] = useState<{ label: string; dir: 'asc' | 'desc' } | null>(null)
+  const sortCol = sort ? trailing?.find((t) => t.label === sort.label && t.sortValue) : undefined
+  const sortedRows = useMemo(() => {
+    if (!sort || !sortCol?.sortValue) return rows
+    const v = sortCol.sortValue
+    const sign = sort.dir === 'asc' ? 1 : -1
+    return [...rows].sort((a, b) => { const x = v(a), y = v(b); return (x < y ? -1 : x > y ? 1 : 0) * sign })
+  }, [rows, sort, sortCol])
+  const cycleSort = (label: string) => {
+    setSort((s) => (s?.label !== label ? { label, dir: 'desc' } : s.dir === 'desc' ? { label, dir: 'asc' } : null))
+    setPage(0)
+  }
+  const pages = Math.max(1, Math.ceil(rows.length / size))
   useEffect(() => setPage(0), [rows.length])
-  const view = rows.slice(page * pageSize, page * pageSize + pageSize)
+  const view = sortedRows.slice(page * size, page * size + size)
   const scrolledRef = useRef(false)
   const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const away = e.currentTarget.scrollLeft > 0 || e.currentTarget.scrollTop > 0
@@ -313,9 +518,26 @@ export function DataGrid<T>({
   const stickyW = 132
   /** Height of the group header row (h-7), so the column header row sticks just under it. */
   const GROUP_ROW_PX = 28
+  // Fit (2026-10-26, PO Overview): each fixed column as wide as its widest header / value, never wider than before,
+  // so the scrolling part gets the space. Measured on all loaded rows, so the widths don't jump between pages.
+  const fitWidths = useMemo(() => {
+    if (!stickyFit) return undefined
+    return cols.slice(0, sticky).map(([label, key, kind], i) => {
+      const cap = stickyWidths?.[i] ?? stickyW
+      // The header may wrap onto two lines here, so only its longest word has to fit; the values decide the width.
+      const head = Math.max(...label.toUpperCase().split(/\s+/).map((w) => textWidth(w, HEAD_FONT, HEAD_TRACKING))) + (editable?.has(key) ? 16 : 0)
+      let widest = head
+      for (const r of rows) {
+        widest = Math.max(widest, textWidth(cellText(kind, r[key]), kind === 'mono' ? MONO_FONT : BODY_FONT) + (kind === 'status' ? BADGE_PAD : 0))
+        if (widest >= cap) break
+      }
+      return Math.min(cap, Math.max(FIT_MIN, Math.ceil(widest) + CELL_PAD))
+    })
+  }, [stickyFit, cols, sticky, stickyWidths, rows, editable])
   // Fixed columns: each its own width, each placed after the widths before it.
-  const widthOf = (i: number) => stickyWidths?.[i] ?? stickyW
-  const leftOf = (i: number) => Array.from({ length: i }, (_, j) => widthOf(j)).reduce((a, b) => a + b, 0)
+  const widthOf = (i: number) => fitWidths?.[i] ?? stickyWidths?.[i] ?? stickyW
+  // The checkbox column (when there is one) sits first, so every fixed column moves right by its width.
+  const leftOf = (i: number) => (selectable ? SELECT_W : 0) + Array.from({ length: i }, (_, j) => widthOf(j)).reduce((a, b) => a + b, 0)
   const fixed = (i: number) => (i < sticky ? { left: leftOf(i), width: widthOf(i), minWidth: widthOf(i), maxWidth: widthOf(i) } : undefined)
   return (
     <div className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
@@ -324,6 +546,7 @@ export function DataGrid<T>({
           <thead>
             {groups && (
               <tr>
+                {selectable && <th style={{ left: 0, width: SELECT_W }} className="sticky top-0 z-40 h-7 border-b border-line bg-alt" />}
                 {groups.map((g, i) => {
                   // A group over the fixed columns is fixed with them; the others keep their name visible just right of
                   // the fixed columns while their columns scroll under it.
@@ -340,22 +563,41 @@ export function DataGrid<T>({
               </tr>
             )}
             <tr>
+              {selectable && (
+                <th style={{ left: 0, width: SELECT_W, minWidth: SELECT_W, top: groups ? GROUP_ROW_PX : 0 }} className="sticky z-20 border-b border-line bg-alt px-3 py-2.5 text-left">
+                  <input ref={headBox} type="checkbox" aria-label="Select all rows" checked={allKeys.length > 0 && ticked === allKeys.length} onChange={toggleAll} className="size-4 cursor-pointer accent-[var(--color-primary)]" />
+                </th>
+              )}
               {cols.map(([label, key], i) => (
                 <th
                   key={label}
                   style={{ ...fixed(i), top: groups ? GROUP_ROW_PX : 0 }}
-                  className={`sticky overflow-hidden text-ellipsis whitespace-nowrap border-b border-line px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide bg-alt text-ink-600 ${i < sticky ? 'z-20' : 'z-10'} ${i === sticky - 1 ? 'border-r' : ''}`}
+                  className={`sticky overflow-hidden border-b border-line px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide bg-alt text-ink-600 ${stickyFit && i < sticky ? 'whitespace-normal leading-tight' : 'text-ellipsis whitespace-nowrap'} ${i < sticky ? 'z-20' : 'z-10'} ${i === sticky - 1 ? 'border-r' : ''}`}
                 >
                   {editable?.has(key) ? <span className="inline-flex items-center gap-1">{label}<Pencil className="size-3 shrink-0" /></span> : label}
+                  {headFilter?.(key)}
                 </th>
               ))}
-              {trailing?.map((t) => <th key={t.label} style={{ top: groups ? GROUP_ROW_PX : 0 }} className="sticky z-10 border-b border-line bg-alt px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">{t.label}</th>)}
+              {trailing?.map((t) => {
+                const on = sort?.label === t.label ? sort.dir : null
+                const Icon = on === 'desc' ? ArrowDown : on === 'asc' ? ArrowUp : ArrowUpDown
+                return (
+                  <th key={t.label} style={{ top: groups ? GROUP_ROW_PX : 0 }} className="sticky z-10 border-b border-line bg-alt px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">
+                    {t.sortValue ? (
+                      <button type="button" onClick={() => cycleSort(t.label)} title={t.sortHint ?? 'Sort'}
+                        className={`inline-flex items-center gap-1 uppercase tracking-wide transition-colors duration-150 hover:text-ink-900 ${on ? 'text-primary' : ''}`}>
+                        {t.label}<Icon className="size-3.5" />
+                      </button>
+                    ) : t.label}
+                  </th>
+                )
+              })}
               {rowMenu && <th style={{ top: groups ? GROUP_ROW_PX : 0 }} className="sticky right-0 z-20 border-b border-l border-line bg-alt px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">Action</th>}
             </tr>
           </thead>
           <tbody>
             {view.length === 0 && (
-              <tr><td colSpan={cols.length + 2} className="px-4 py-14 text-center text-[13px] text-ink-400">No records match the current search & filters.</td></tr>
+              <tr><td colSpan={cols.length + 3} className="px-4 py-14 text-center text-[13px] text-ink-400">No records match the current search & filters.</td></tr>
             )}
             {view.map((r) => {
               const k = rowKey(r)
@@ -363,21 +605,27 @@ export function DataGrid<T>({
                 <tr key={k}
                   onDoubleClick={onRowClick ? () => onRowClick(r) : undefined}
                   onMouseDown={(e) => { if (e.detail > 1) e.preventDefault() }} className={`group ${rowClass?.(r) ?? ''}`}>
+                  {selectable && (
+                    <td style={{ left: 0, width: SELECT_W, minWidth: SELECT_W }} onDoubleClick={(e) => e.stopPropagation()}
+                      className={`sticky z-[5] border-b border-line px-3 py-2.5 group-hover:bg-canvas ${selected!.has(k) ? 'bg-primary-soft' : 'bg-surface'}`}>
+                      <input type="checkbox" aria-label="Select row" checked={selected!.has(k)} onChange={() => toggle(k)} className="size-4 cursor-pointer accent-[var(--color-primary)]" />
+                    </td>
+                  )}
                   {cols.map(([label, key, kind], i) => (
                     <td
                       key={label}
                       style={fixed(i)}
                       title={i < sticky ? String(r[key] ?? '') : undefined}
-                      onClick={(e) => copyCell(e, `${k}|${i}`)}
-                      className={`cursor-copy whitespace-nowrap border-b border-line px-3 py-2.5 transition-colors duration-200 group-hover:bg-canvas ${i < sticky ? 'sticky z-[5] overflow-hidden text-ellipsis bg-surface' : 'relative'} ${i === sticky - 1 ? 'border-r' : ''} ${copied === `${k}|${i}` ? '!bg-primary-soft' : ''}`}
+                      onClick={copyable(label) ? (e) => copyCell(e, `${k}|${i}`) : undefined}
+                      className={`${copyable(label) ? 'cursor-copy' : ''} whitespace-nowrap border-b border-line px-3 py-2.5 transition-colors duration-200 group-hover:bg-canvas ${i < sticky ? 'sticky z-[5] overflow-hidden text-ellipsis bg-surface' : 'relative'} ${i === sticky - 1 ? 'border-r' : ''} ${copied === `${k}|${i}` ? '!bg-primary-soft' : ''}`}
                     >
                       <Cell kind={kind} v={r[key]} />
                       {chip(`${k}|${i}`)}
                     </td>
                   ))}
                   {trailing?.map((t, j) => (
-                    <td key={t.label} onClick={(e) => copyCell(e, `${k}|t${j}`)}
-                      className={`relative cursor-copy whitespace-nowrap border-b border-line px-3 py-2.5 transition-colors duration-200 group-hover:bg-canvas ${copied === `${k}|t${j}` ? '!bg-primary-soft' : ''}`}>
+                    <td key={t.label} onClick={copyable(t.label) ? (e) => copyCell(e, `${k}|t${j}`) : undefined}
+                      className={`relative ${copyable(t.label) ? 'cursor-copy' : ''} whitespace-nowrap border-b border-line px-3 py-2.5 transition-colors duration-200 group-hover:bg-canvas ${copied === `${k}|t${j}` ? '!bg-primary-soft' : ''}`}>
                       {t.render(r)}{chip(`${k}|t${j}`)}
                     </td>
                   ))}
@@ -402,7 +650,17 @@ export function DataGrid<T>({
       <div className="flex items-center justify-between border-t border-line px-4 py-2.5 text-[12px] text-ink-600">
         <span>
           <span className="mr-3 hidden text-ink-400 md:inline">{onRowClick ? GRID_HINT.OPEN_AND_COPY : GRID_HINT.COPY}</span>
-          <span className="tnum">{rows.length ? page * pageSize + 1 : 0}–{Math.min(rows.length, (page + 1) * pageSize)}</span> of <span className="tnum">{rows.length}</span> records
+          <span className="tnum">{rows.length ? page * size + 1 : 0}–{Math.min(rows.length, (page + 1) * size)}</span> of <span className="tnum">{rows.length}</span> records
+          {storeKey && (
+            <label className="ml-3 inline-flex items-center gap-1.5">
+              {GRID_PAGE_SIZE.LABEL}
+              <input type="number" min={1} max={GRID_PAGE_SIZE.MAX} list={`${storeKey}-sizes`} value={sizeDraft}
+                onChange={(e) => setSizeDraft(e.target.value)} onBlur={(e) => applySize(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') applySize(e.currentTarget.value) }}
+                className="tnum h-7 w-[72px] rounded-md border border-line bg-surface px-2 text-[12px] text-ink-900" />
+              <datalist id={`${storeKey}-sizes`}>{GRID_PAGE_SIZE.SUGGEST.map((n) => <option key={n} value={n} />)}</datalist>
+            </label>
+          )}
         </span>
         <div className="flex items-center gap-1">
           <button disabled={page === 0} onClick={() => setPage(page - 1)} className="rounded-md p-1.5 hover:bg-alt disabled:opacity-30"><ChevronLeft className="size-4" /></button>
@@ -437,3 +695,98 @@ export const textareaCls = fieldCls.replace('h-9 ', '') + ' min-h-[68px] py-2 le
 export function DateInput({ value, onChange, className = '' }: { value: string; onChange: (v: string) => void; className?: string }) {
   return <DatePicker value={value} onChange={onChange} className={className} />
 }
+
+/**
+ * Newest / Oldest first from a column header (2026-10-29, user: PO Date and Processed At "on the column with headers"):
+ * a sort mark after the column name (blue arrow while it sorts) opens Newest first / Oldest first / Clear. The menu
+ * floats over the page (a portal: header cells cut off what is inside them).
+ */
+export function HeaderSort({ title, value, onChange }: { title: string; value: DateSortDir | ''; onChange: (v: DateSortDir | '') => void }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btn = useRef<HTMLButtonElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
+  const MENU_W = 170
+  useEffect(() => {
+    if (!open) return
+    const inside = (t: EventTarget | null) => t instanceof Node && (!!menu.current?.contains(t) || !!btn.current?.contains(t))
+    const onDown = (e: MouseEvent) => { if (!inside(e.target)) setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const onScroll = (e: Event) => { if (!inside(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', onScroll, true)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); window.removeEventListener('scroll', onScroll, true) }
+  }, [open])
+  const show = () => {
+    const r = btn.current?.getBoundingClientRect()
+    if (!r) return
+    setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left - 8, window.innerWidth - MENU_W - 8)) })
+    setOpen(true)
+  }
+  const pick = (v: DateSortDir | '') => { onChange(v); setOpen(false) }
+  const Icon = value === 'newest' ? ArrowDown : value === 'oldest' ? ArrowUp : ArrowUpDown
+  const item = (v: DateSortDir | '', text: string) => (
+    <button type="button" onClick={() => pick(v)}
+      className={`flex w-full items-center rounded px-2 py-1.5 text-left text-[13px] hover:bg-alt ${value === v && v ? 'font-semibold text-primary' : 'text-ink-900'}`}>{text}</button>
+  )
+  return (
+    <>
+      <button ref={btn} type="button" aria-label={`Sort by ${title}`} title={value === 'newest' ? 'Newest first' : value === 'oldest' ? 'Oldest first' : `Sort by ${title}`}
+        onClick={(e) => { e.stopPropagation(); if (open) setOpen(false); else show() }}
+        className={`ml-1 inline-flex rounded p-0.5 align-[-2px] transition-colors hover:bg-ink-900/5 ${value ? 'text-primary' : 'text-ink-400 hover:text-ink-900'}`}>
+        <Icon className="size-3.5" />
+      </button>
+      {open && createPortal(
+        <div ref={menu} style={{ position: 'fixed', top: pos.top, left: pos.left, width: MENU_W }}
+          className="pf-pop-in z-[60] rounded-[var(--radius)] border border-line bg-surface p-1 normal-case tracking-normal shadow-lg">
+          {item('newest', 'Newest first')}
+          {item('oldest', 'Oldest first')}
+          {value && <div className="mt-1 border-t border-line pt-1">{item('', 'Clear')}</div>}
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
+/** HeaderSort on a section's filter values (DATE_SORT_KEY = '<field>:newest|oldest'; one date column sorts at a time). */
+export function ColumnSort({ filters, setFilters, field, title }: { filters: FilterValues; setFilters: (v: FilterValues) => void; field: string; title: string }) {
+  return <HeaderSort title={title} value={dateSortOf(filters, field)} onChange={(v) => setFilters({ ...filters, [DATE_SORT_KEY]: v ? `${field}:${v}` : '' })} />
+}
+/**
+ * The applied filters as chips under the toolbar (2026-10-19, user: they were only visible inside the filter panel).
+ * One chip per value ("Channel: Zepto ×"); × removes that value; "Clear all" removes every filter. Hidden when none.
+ */
+export function FilterChips({ defs, value, onChange }: { defs: FilterDef[]; value: FilterValues; onChange: (v: FilterValues) => void }) {
+  const chips: { key: string; label: string; text: string; remove: () => void }[] = []
+  for (const d of defs) {
+    if (d.type === 'dateRange') {
+      const f = (value[d.fromKey] as string) || ''
+      const t = (value[d.toKey] as string) || ''
+      if (f || t) chips.push({ key: d.key, label: d.label, text: `${f ? fmtDate(f) : '…'} → ${t ? fmtDate(t) : '…'}`, remove: () => onChange({ ...value, [d.fromKey]: '', [d.toKey]: '' }) })
+      continue
+    }
+    const v = value[d.key]
+    if (Array.isArray(v)) {
+      for (const one of v) chips.push({ key: `${d.key}|${one}`, label: d.label, text: one, remove: () => onChange({ ...value, [d.key]: v.filter((x) => x !== one) }) })
+    } else if (v) {
+      const text = d.type === 'date' ? fmtDate(v) : d.type === 'sort' ? (d.options.find((o) => o.value === v)?.label ?? v) : v
+      chips.push({ key: d.key, label: d.label, text, remove: () => onChange({ ...value, [d.key]: '' }) })
+    }
+  }
+  if (!chips.length) return null
+  return (
+    <div className="pf-tab-in flex flex-wrap items-center gap-1.5">
+      <span className="mr-0.5 inline-flex items-center gap-1 text-[12px] text-ink-400"><Filter className="size-3.5" />Filtered by</span>
+      {chips.map((c) => (
+        <span key={c.key} className="inline-flex h-7 items-center gap-1 rounded-full border border-primary/25 bg-primary-soft pl-2.5 pr-1 text-[12px] text-primary">
+          <span className="text-primary/70">{c.label}:</span><span className="font-semibold">{c.text}</span>
+          <button type="button" onClick={c.remove} title="Remove" className="rounded-full p-0.5 hover:bg-primary/15"><X className="size-3" /></button>
+        </span>
+      ))}
+      <button type="button" onClick={() => onChange({})} className="ml-1 text-[12px] text-ink-600 underline-offset-2 hover:text-ink-900 hover:underline">Clear all</button>
+    </div>
+  )
+}
+

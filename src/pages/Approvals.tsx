@@ -2,44 +2,86 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertTriangle, ArrowRight, Check, Download, ExternalLink, MessageSquareText, Search, X } from 'lucide-react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Badge, Button, Drawer, PageTitle, SubTabs } from '../components/ui'
-import { DataGrid, inputCls } from '../components/kit'
+import { Badge, Button, Drawer, Modal, PageTitle, SubTabs } from '../components/ui'
+import { DataGrid, FilterChips, FilterPanel, countActive, inputCls, type FilterDef, type FilterValues } from '../components/kit'
+import { Reveal } from '../components/shell'
 import { ApiError } from '../api/client'
-import { approveSubmission, getApproval, listApprovals, rejectSubmission, type ApprovalDetail, type ApprovalItem } from '../api/approvals'
+import { approveSubmission, bulkApprove, bulkReject, getApproval, listApprovals, rejectSubmission, type ApprovalDetail, type ApprovalItem, type BulkItemResult } from '../api/approvals'
 import type { Num } from '../api/poReview'
-import { APPROVAL_ERROR, APPROVAL_STATUS, APPROVAL_TABS, APPROVAL_TEXT, FIX_FIELD_LABEL, ISSUE_LABELS, PO_REVIEW_REMARK_MAX, type ApprovalStatus } from '../constants/poReview'
+import {
+  APPROVAL_BULK, APPROVAL_BULK_RESULT, APPROVAL_ERROR, APPROVAL_FILTER, APPROVAL_KIND, APPROVAL_KIND_LABEL, APPROVAL_STATUS, APPROVAL_TABS, APPROVAL_TEXT,
+  APPROVAL_REOPENED_LABEL, FIX_FIELD_LABEL, ISSUE_LABELS, PO_REVIEW_REMARK_MAX, type ApprovalKind, type ApprovalStatus,
+} from '../constants/poReview'
 import { SEARCH_DELAY_MS } from '../constants/poOverview'
+import { APPROVAL_PRICE_TEXT, PRICE_CHECK_TEXT, PRICE_CHOICE } from '../constants/priceDifferences'
 import { REVIEW_LIVE } from '../constants/poReview'
 import { useLiveReview } from '../lib/liveReview'
 import { LiveDot } from '../components/LiveDot'
 import { istDateTime } from '../lib/time'
+import { PATHS, URL_PARAM } from '../constants/pages'
+import { oneOf, useUrlParam } from '../lib/urlState'
 import { fmtDate, type ColKind } from '../lib/ops'
 
 /*
  * Approvals (2026-10-15, user): PO reviews the reviewers submitted. Pending (oldest first) / Approved / Rejected tabs
  * with counts; a row opens everything about it: who submitted and when, what the reviewer fixed (old -> new), how each
  * issue was resolved, the PO header and its lines as they will be saved, the PO file. Approvers (admin, developer)
- * Approve (creates the PO, sale order, Uniware CSV) or Reject with a reason. Other approval types (appointment change,
- * qty update...) are not built yet and not shown.
+ * Approve (creates the PO, sale order, Uniware CSV) or Reject with a reason.
+ * 2026-11-02 (user): "Approval type" (From review / Master update; more kinds later) and "Errors fixed" columns,
+ * Submitted at last; Filters (channel, type, errors fixed, submitted by, submitted from / to) run on the server;
+ * approvers tick rows on Pending and Approve / Reject them together, each exactly like the single action, with a
+ * warning (and a box to tick) when one updates the master.
  */
 
 type Row = {
-  id: string; poNumber: string; channel: string; submittedBy: string; submittedAt: string; issues: number; changes: number
+  id: string; poNumber: string; channel: string; kind: string; fixed: string; submittedBy: string; submittedAt: string
   decidedBy: string; decidedAt: string; saleOrder: string; reason: string; item: ApprovalItem
 }
 
+/** "Location not mapped · Price mismatch ×2 · Other (accepted)" */
+const fixedText = (a: ApprovalItem) =>
+  a.fixedIssues.map((i) => {
+    const n = i.fixed + i.accepted
+    return `${ISSUE_LABELS[i.type] ?? i.type}${n > 1 ? ` ×${n}` : ''}${i.accepted && !i.fixed ? ' (accepted)' : ''}`
+  }).join(' · ') || '—'
+
 const who = (p: { name: string | null; email: string | null } | null) => p?.name || p?.email || '—'
 const toRow = (a: ApprovalItem): Row => ({
-  id: a.id, poNumber: a.poNumber ?? '—', channel: a.channel ?? '—', submittedBy: who(a.submittedBy), submittedAt: istDateTime(a.submittedAt),
-  issues: a.issueCount, changes: a.changeCount, decidedBy: who(a.decidedBy), decidedAt: istDateTime(a.decidedAt), saleOrder: a.saleOrderCode ?? '—',
-  reason: a.decisionRemark ?? '—', item: a,
+  id: a.id, poNumber: a.poNumber ?? '—', channel: a.channel ?? '—',
+  // "From review · Reopened (was: <reason>)" when it was submitted after a reopen from Rejected (2026-11-03)
+  kind: `${APPROVAL_KIND_LABEL[a.kind] ?? a.kind}${a.reopened ? ` · Reopened${a.reopened.rejectedReason ? ` (was: ${a.reopened.rejectedReason})` : ''}` : ''}`,
+  fixed: fixedText(a),
+  submittedBy: who(a.submittedBy), submittedAt: istDateTime(a.submittedAt), decidedBy: who(a.decidedBy), decidedAt: istDateTime(a.decidedAt),
+  saleOrder: a.saleOrderCode ?? '—', reason: a.decisionRemark ?? '—', item: a,
 })
 
-const BASE: [string, keyof Row, ColKind][] = [['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['Submitted by', 'submittedBy', 'text'], ['Submitted at', 'submittedAt', 'mono'], ['Issues resolved', 'issues', 'num'], ['Fields changed', 'changes', 'num']]
+const BASE: [string, keyof Row, ColKind][] = [['PO Number', 'poNumber', 'mono'], ['Channel', 'channel', 'text'], ['Approval type', 'kind', 'text'], ['Errors fixed', 'fixed', 'text'], ['Submitted by', 'submittedBy', 'text']]
+const SUBMITTED_AT: [string, keyof Row, ColKind] = ['Submitted at', 'submittedAt', 'mono']
+// Submitted at is the last column on every tab (user, 2026-11-02).
 const COLS: Record<ApprovalStatus, [string, keyof Row, ColKind][]> = {
-  [APPROVAL_STATUS.PENDING]: BASE,
-  [APPROVAL_STATUS.APPROVED]: [...BASE, ['Approved by', 'decidedBy', 'text'], ['Approved at', 'decidedAt', 'mono'], ['Sale order', 'saleOrder', 'mono']],
-  [APPROVAL_STATUS.REJECTED]: [...BASE, ['Rejected by', 'decidedBy', 'text'], ['Rejected at', 'decidedAt', 'mono'], ['Reason', 'reason', 'text']],
+  [APPROVAL_STATUS.PENDING]: [...BASE, SUBMITTED_AT],
+  [APPROVAL_STATUS.APPROVED]: [...BASE, ['Approved by', 'decidedBy', 'text'], ['Approved at', 'decidedAt', 'mono'], ['Sale order', 'saleOrder', 'mono'], SUBMITTED_AT],
+  [APPROVAL_STATUS.REJECTED]: [...BASE, ['Rejected by', 'decidedBy', 'text'], ['Rejected at', 'decidedAt', 'mono'], ['Reason', 'reason', 'text'], SUBMITTED_AT],
+}
+
+/** The panel's labels -> the values the list API takes. */
+const KIND_BY_LABEL = Object.fromEntries(Object.entries(APPROVAL_KIND_LABEL).map(([k, l]) => [l, k])) as Record<string, ApprovalKind>
+const ISSUE_BY_LABEL = Object.fromEntries(Object.entries(ISSUE_LABELS).map(([k, l]) => [l, k]))
+
+type Notice = { tone: 'ok' | 'warn'; text: string }
+
+/** What a bulk call answered, as one line: "2 approved, 1 returned to In Review (PO 123: ...)". */
+const bulkSummary = (out: BulkItemResult[]): Notice => {
+  const of = (r: string) => out.filter((x) => x.result === r)
+  const parts: string[] = []
+  if (of(APPROVAL_BULK_RESULT.APPROVED).length) parts.push(`${of(APPROVAL_BULK_RESULT.APPROVED).length} approved`)
+  if (of(APPROVAL_BULK_RESULT.REJECTED).length) parts.push(`${of(APPROVAL_BULK_RESULT.REJECTED).length} rejected`)
+  for (const [r, label] of [[APPROVAL_BULK_RESULT.RETURNED, 'returned to In Review'], [APPROVAL_BULK_RESULT.FAILED, 'not done']] as const) {
+    const xs = of(r)
+    if (xs.length) parts.push(`${xs.length} ${label} (${xs.map((x) => `PO ${x.poNumber ?? x.id}: ${x.message ?? ''}`).join('; ')})`)
+  }
+  const allDone = out.every((x) => x.result === APPROVAL_BULK_RESULT.APPROVED || x.result === APPROVAL_BULK_RESULT.REJECTED)
+  return { tone: allDone ? 'ok' : 'warn', text: APPROVAL_TEXT.BULK_DONE(parts.join(', ')) }
 }
 
 const money = (v: Num | number | unknown) => (v === '' || v === null || v === undefined ? '—' : `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
@@ -47,17 +89,51 @@ const shown = (v: unknown) => (v === null || v === undefined || v === '' ? '' : 
 
 export default function Approvals() {
   const qc = useQueryClient()
-  const [tab, setTab] = useState<ApprovalStatus>(APPROVAL_STATUS.PENDING)
+  const [tab, setTab] = useUrlParam<ApprovalStatus>(PATHS.APPROVALS, URL_PARAM.TAB, oneOf(Object.values(APPROVAL_STATUS)), APPROVAL_STATUS.PENDING)
   const [q, setQ] = useState('')
   const [search, setSearch] = useState('')
   const [sel, setSel] = useState<string | null>(null)
-  const [notice, setNotice] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
+  const [filters, setFilters] = useState<FilterValues>({})
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [ticked, setTicked] = useState<Set<string>>(new Set())
+  const [bulk, setBulk] = useState<'approve' | 'reject' | null>(null)
   useEffect(() => { const t = setTimeout(() => setSearch(q), SEARCH_DELAY_MS); return () => clearTimeout(t) }, [q])
 
-  const list = useQuery({ queryKey: ['approvals', tab, search], queryFn: ({ signal }) => listApprovals(tab, search, signal), placeholderData: keepPreviousData })
+  // The panel's labels sent as the API's values; lists go comma-separated (= any of them).
+  const query = useMemo(() => {
+    const arr = (k: string) => (Array.isArray(filters[k]) ? filters[k] : [])
+    const kinds = arr(APPROVAL_FILTER.KIND).map((l) => KIND_BY_LABEL[l]).filter(Boolean)
+    const reopened = arr(APPROVAL_FILTER.KIND).includes(APPROVAL_REOPENED_LABEL)
+    return {
+      [APPROVAL_FILTER.CHANNEL]: arr(APPROVAL_FILTER.CHANNEL),
+      // both kinds ticked = every kind
+      [APPROVAL_FILTER.KIND]: kinds.length === 1 ? kinds[0] : '',
+      [APPROVAL_FILTER.ISSUE]: arr(APPROVAL_FILTER.ISSUE).map((l) => ISSUE_BY_LABEL[l] ?? l),
+      [APPROVAL_FILTER.SUBMITTED_BY]: arr(APPROVAL_FILTER.SUBMITTED_BY),
+      [APPROVAL_FILTER.FROM]: typeof filters[APPROVAL_FILTER.FROM] === 'string' ? filters[APPROVAL_FILTER.FROM] : '',
+      [APPROVAL_FILTER.TO]: typeof filters[APPROVAL_FILTER.TO] === 'string' ? filters[APPROVAL_FILTER.TO] : '',
+      [APPROVAL_FILTER.REOPENED]: reopened ? 'true' : '',
+    }
+  }, [filters])
+  const list = useQuery({ queryKey: ['approvals', tab, search, query], queryFn: ({ signal }) => listApprovals(tab, search, query, signal), placeholderData: keepPreviousData })
   const rows = useMemo(() => (list.data?.data ?? []).map(toRow), [list.data])
   const counts = list.data?.meta.counts ?? {}
   const canDecide = list.data?.meta.canDecide ?? false
+  const options = list.data?.meta.filterOptions
+  const filterDefs: FilterDef[] = useMemo(() => [
+    { key: APPROVAL_FILTER.CHANNEL, label: 'Channel', type: 'multi', options: options?.channels ?? [] },
+    { key: APPROVAL_FILTER.KIND, label: 'Approval type', type: 'multi', options: [...Object.values(APPROVAL_KIND).map((k) => APPROVAL_KIND_LABEL[k]), APPROVAL_REOPENED_LABEL] },
+    { key: APPROVAL_FILTER.ISSUE, label: 'Errors fixed', type: 'multi', options: Object.values(ISSUE_LABELS) },
+    { key: APPROVAL_FILTER.SUBMITTED_BY, label: 'Submitted by', type: 'multi', options: (options?.submitters ?? []).map((p) => p.email) },
+    { key: APPROVAL_FILTER.FROM, label: 'Submitted from', type: 'date' },
+    { key: APPROVAL_FILTER.TO, label: 'Submitted to', type: 'date' },
+  ], [options])
+  // Ticks: approvers on Pending only; rows that are no longer listed lose their tick.
+  const canTick = canDecide && tab === APPROVAL_STATUS.PENDING
+  const listedIds = useMemo(() => new Set(rows.map((r) => r.id)), [rows])
+  const tickedNow = useMemo(() => new Set([...ticked].filter((id) => listedIds.has(id))), [ticked, listedIds])
+  const tickedItems = rows.filter((r) => tickedNow.has(r.id)).map((r) => r.item)
   const refresh = () => void qc.invalidateQueries({ queryKey: ['approvals'] })
   // Live (2026-10-15): a new submission or someone else's decision reloads the tabs, counts and the open panel.
   const live = useLiveReview(REVIEW_LIVE.APPROVALS_BASE, useCallback(() => void qc.invalidateQueries({ queryKey: ['approvals'] }), [qc]))
@@ -65,7 +141,7 @@ export default function Approvals() {
   return (
     <div className="space-y-5">
       <PageTitle title="Approvals" sub={APPROVAL_TEXT.SUB} right={<LiveDot mode={live} />} />
-      <SubTabs value={tab} onChange={(t) => { setTab(t); setNotice(null) }} tabs={APPROVAL_TABS.map((t) => ({ ...t, count: counts[t.key] ?? 0 }))} />
+      <SubTabs value={tab} onChange={(t) => { setTab(t); setNotice(null); setTicked(new Set()) }} tabs={APPROVAL_TABS.map((t) => ({ ...t, count: counts[t.key] ?? 0 }))} />
       {notice && (
         <div className={`pf-tab-in flex items-start gap-2 rounded-[var(--radius)] px-3 py-2 text-[12.5px] ${notice.tone === 'ok' ? 'bg-ok-soft text-ok' : 'bg-warn-soft text-warn'}`}>
           {notice.tone === 'ok' ? <Check className="mt-0.5 size-4 shrink-0" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0" />}
@@ -78,8 +154,21 @@ export default function Approvals() {
           <Search className="size-4 text-ink-400" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search PO number, channel or person…" className="w-full bg-transparent text-[13px] outline-none" />
         </label>
+        <button onClick={() => setFiltersOpen(!filtersOpen)}
+          className={`inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border px-3 text-[13px] font-medium ${filtersOpen || countActive(filters) ? 'border-primary text-primary' : 'border-line text-ink-900 hover:bg-alt'}`}>
+          Filters{countActive(filters) > 0 && <span className="rounded-full bg-primary px-1.5 text-[10.5px] font-semibold text-white">{countActive(filters)}</span>}
+        </button>
         {!canDecide && list.data && <span className="text-[12px] text-ink-600">{APPROVAL_TEXT.VIEW_ONLY}</span>}
+        {canTick && tickedNow.size > 0 && (
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={() => setTicked(new Set())} className="text-[12.5px] text-ink-600 hover:text-ink-900">Clear ({tickedNow.size})</button>
+            <Button onClick={() => setBulk('reject')} icon={<X className="size-3.5" />}>{APPROVAL_TEXT.BULK_REJECT(tickedNow.size)}</Button>
+            <Button variant="primary" onClick={() => setBulk('approve')} icon={<Check className="size-3.5" />}>{APPROVAL_TEXT.BULK_APPROVE(tickedNow.size)}</Button>
+          </div>
+        )}
       </div>
+      <Reveal open={filtersOpen}><FilterPanel defs={filterDefs} value={filters} onApply={setFilters} onClose={() => setFiltersOpen(false)} /></Reveal>
+      <FilterChips defs={filterDefs} value={filters} onChange={setFilters} />
       {list.isError ? (
         <div className="rounded-[var(--radius)] bg-crit-soft px-3 py-2 text-[12.5px] text-crit">
           {list.error instanceof ApiError ? list.error.message : String(list.error)} <button onClick={() => void list.refetch()} className="font-semibold underline">Try again</button>
@@ -87,15 +176,86 @@ export default function Approvals() {
       ) : (
         <div key={tab} className="pf-tab-in">
           <DataGrid cols={COLS[tab]} rows={list.isPending ? [] : rows} rowKey={(r) => r.id} onRowClick={(r) => setSel(r.id)} pageSize={25}
-            rowMenu={(r) => [{ label: 'Open', onClick: () => setSel(r.id) }]} />
+            rowMenu={(r) => [{ label: 'Open', onClick: () => setSel(r.id) }]}
+            rowClass={(r) => (r.item.kind === APPROVAL_KIND.MASTER_UPDATE ? 'bg-warn-soft/40' : '')}
+            selected={canTick ? tickedNow : undefined} onSelectedChange={canTick ? setTicked : undefined} />
           {list.isPending && <p className="mt-2 text-[12.5px] text-ink-400">Loading…</p>}
         </div>
+      )}
+      {bulk && (
+        <BulkDialog action={bulk} items={tickedItems} onClose={() => setBulk(null)}
+          onDone={(n) => { setNotice(n); setBulk(null); setTicked(new Set()); refresh() }} />
       )}
       {sel && (
         <ApprovalDrawer id={sel} canDecide={canDecide} onClose={() => setSel(null)}
           onDone={(n) => { setNotice(n); setSel(null); refresh() }} />
       )}
     </div>
+  )
+}
+
+/**
+ * Approve / Reject the ticked rows together (2026-11-02). Approving lists the ones that update the master and needs
+ * the box ticked before it goes on (the server refuses them unconfirmed too); rejecting needs one reason for all.
+ */
+function BulkDialog({ action, items, onClose, onDone }: { action: 'approve' | 'reject'; items: ApprovalItem[]; onClose: () => void; onDone: (n: Notice) => void }) {
+  const [remark, setRemark] = useState('')
+  const [confirmed, setConfirmed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const master = items.filter((i) => i.kind === APPROVAL_KIND.MASTER_UPDATE)
+  const tooMany = items.length > APPROVAL_BULK.MAX
+  const approve = action === 'approve'
+  const ready = !busy && !tooMany && items.length > 0 && (approve ? !master.length || confirmed : remark.trim().length > 0)
+  const go = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      const ids = items.map((i) => i.id)
+      const out = approve
+        ? await bulkApprove(ids, { remark: remark.trim() || undefined, confirmMasterUpdates: master.length > 0 && confirmed })
+        : await bulkReject(ids, remark.trim())
+      onDone(bulkSummary(out))
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal open onClose={onClose} title={approve ? APPROVAL_TEXT.BULK_APPROVE_TITLE(items.length) : APPROVAL_TEXT.BULK_REJECT_TITLE(items.length)}
+      sub={approve ? APPROVAL_TEXT.BULK_APPROVE_SUB : undefined}
+      footer={<>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={!ready} onClick={() => void go()} icon={approve ? <Check className="size-3.5" /> : <X className="size-3.5" />}>
+          {busy ? 'Working…' : approve ? APPROVAL_TEXT.BULK_APPROVE(items.length) : APPROVAL_TEXT.BULK_REJECT(items.length)}
+        </Button>
+      </>}>
+      {tooMany && <p className="mb-3 text-[12.5px] text-crit">{APPROVAL_TEXT.BULK_TOO_MANY(APPROVAL_BULK.MAX)}</p>}
+      <ul className="mb-3 max-h-48 space-y-1 overflow-y-auto text-[12.5px]">
+        {items.map((i) => (
+          <li key={i.id} className="flex items-center gap-2">
+            <span className="font-mono">{i.poNumber ?? i.id}</span>
+            <span className="text-ink-600">{i.channel}</span>
+            {i.kind === APPROVAL_KIND.MASTER_UPDATE && <Badge tone="warn">{APPROVAL_KIND_LABEL.master_update}</Badge>}
+          </li>
+        ))}
+      </ul>
+      {approve && master.length > 0 && (
+        <div className="mb-3 rounded-[var(--radius)] bg-warn-soft px-3 py-2 text-[12.5px] text-warn">
+          <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 size-4 shrink-0" /><span>{APPROVAL_TEXT.BULK_MASTER_WARN(master.length)}</span></div>
+          <ul className="ml-6 mt-1 list-disc">
+            {master.map((i) => <li key={i.id}>PO {i.poNumber} ({i.channel}): {i.masterUpdates} master change(s)</li>)}
+          </ul>
+          <label className="mt-2 flex cursor-pointer items-center gap-2 font-semibold">
+            <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="accent-[var(--color-primary)]" />
+            {APPROVAL_TEXT.BULK_MASTER_CONFIRM}
+          </label>
+        </div>
+      )}
+      <textarea value={remark} onChange={(e) => setRemark(e.target.value.slice(0, PO_REVIEW_REMARK_MAX))} rows={3}
+        placeholder={approve ? APPROVAL_TEXT.APPROVE_REMARK : APPROVAL_TEXT.REJECT_PROMPT} className={`${inputCls} h-auto py-2`} />
+      {error && <p className="mt-2 text-[12.5px] text-crit">{error}</p>}
+    </Modal>
   )
 }
 
@@ -276,6 +436,28 @@ function ApprovalBody({ a }: { a: ApprovalDetail }) {
           </div>
         )}
       </Section>
+
+      {!!fixes?.choices?.length && (
+        <Section title={APPROVAL_PRICE_TEXT.TITLE(fixes.choices.length)}>
+          <div className="overflow-hidden rounded-[var(--radius)] border border-line">
+            <table className="w-full text-[12.5px]">
+              <thead className="bg-alt"><tr>{APPROVAL_PRICE_TEXT.COLS.map((h) => <th key={h} className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">{h}</th>)}</tr></thead>
+              <tbody>
+                {fixes.choices.map((c) => (
+                  <tr key={`${c.lineNo}-${c.field}`} className="border-t border-line">
+                    <td className="px-3 py-2 text-ink-600">Line {c.lineNo}<div className="max-w-[220px] truncate font-mono text-[11px] text-ink-400" title={c.description ?? undefined}>{c.channelSku}</div></td>
+                    <td className="px-3 py-2">{PRICE_CHECK_TEXT.FIELD[c.field] ?? c.field}</td>
+                    <td className="tnum px-3 py-2">{money(c.ours)}</td>
+                    <td className="tnum px-3 py-2">{money(c.channel)}</td>
+                    <td className="px-3 py-2"><Badge tone={c.from === PRICE_CHOICE.CHANNEL ? 'info' : 'neutral'}>{APPROVAL_PRICE_TEXT.USES[c.from] ?? c.from}</Badge></td>
+                    <td className="px-3 py-2">{c.updateMaster ? <span className="font-medium text-warn">{APPROVAL_PRICE_TEXT.WILL_UPDATE(PRICE_CHECK_TEXT.FIELD[c.field] ?? c.field, money(c.ours), money(c.channel))}</span> : <span className="text-ink-400">–</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
 
       <Section title={`Issues resolved (${fixes?.issues.length ?? 0})`}>
         <ul className="space-y-1.5">

@@ -1,6 +1,7 @@
 import { api, apiUrl, ApiError } from './client'
 import { ERROR_CODE } from '../constants/auth'
-import { PO_REVIEW_ENDPOINT } from '../constants/poReview'
+import { LINE_ITEMS, PO_REVIEW_ENDPOINT, PO_REVIEW_MAX_PAGE_SIZE, PO_REVIEW_MAX_PAGES } from '../constants/poReview'
+import type { PriceChoice } from '../constants/priceDifferences'
 
 /* GET /po-review: one row per PO upload (API contract "PO review"). */
 
@@ -11,10 +12,20 @@ export type PoReviewItem = {
   status: string
   ocrStatus: string
   source: string
+  /** Email subject; for an API PO the channel's name for it (Amazon: the shipment name). */
+  subject: string | null
+  /** Uniware hand-off (completed POs): first CSV download and the uploaded-into-Uniware mark. */
+  csvDownloadedAt: string | null
+  csvDownloadedBy: string | null
+  uniwareUploadedAt: string | null
+  uniwareUploadedBy: string | null
   fileName: string
+  /** The PO's own date (YYYY-MM-DD): the saved PO's, else as read from the PO (In Review). */
   poDate: string | null
   receivedAt: string | null
   completedAt: string | null
+  /** When the system processed it: completed = completedAt; else when the PO was read (OCR done) or the row was made. */
+  processedAt: string | null
   brand: string | null
   saleOrderCode: string | null
   lines: number | null
@@ -22,6 +33,14 @@ export type PoReviewItem = {
   poValue: number | null
   openIssues: number
   issueTypes: string[]
+  /** Failed POs (2026-11-02): the step that failed (FAIL_STEP), its code and reason, when; null otherwise. */
+  failure?: { step: string | null; code: string | null; reason: string | null; at: string | null; ocrAttempts: number } | null
+  /** Rejected POs: the latest rejection, by the reviewer (PO review) or the approver (Approvals). */
+  rejection?: { by: string | null; byEmail: string | null; at: string | null; reason: string | null; from: 'review' | 'approval' } | null
+  /** Processed POs (2026-11-03): the verification state comes with the list (no separate call with every id). */
+  verify?: { state: string; required: boolean; by: string | null; at: string | null; remark: string | null } | null
+  /** Reopened after a rejection (2026-11-03): the latest reopen and the rejection it undid; null = never. */
+  reopened?: { at: string; remark: string; rejectedReason: string | null; rejectedFrom: string | null; times: number } | null
 }
 
 export type PoReviewListParams = {
@@ -38,6 +57,17 @@ export function listPoReview(params: PoReviewListParams, signal?: AbortSignal) {
   const qs = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') qs.set(k, String(v))
   return api<PoReviewItem[]>(`${PO_REVIEW_ENDPOINT}?${qs}`, { signal })
+}
+
+/* Every PO of a status: GET /po-review page by page (500 each) until a short page (2026-10-26, Processed tab shows all). */
+export async function listAllPoReview(params: Omit<PoReviewListParams, 'page' | 'pageSize'>, signal?: AbortSignal) {
+  const all: PoReviewItem[] = []
+  for (let page = 1; page <= PO_REVIEW_MAX_PAGES; page++) {
+    const items = await listPoReview({ ...params, page, pageSize: PO_REVIEW_MAX_PAGE_SIZE }, signal)
+    all.push(...items)
+    if (items.length < PO_REVIEW_MAX_PAGE_SIZE) break
+  }
+  return all
 }
 
 /* GET /po-review/:uploadId: one PO for the review panel. A number field is "" when the PO doesn't have it. */
@@ -64,6 +94,8 @@ export type PoReviewLine = {
   poUnitPrice: Num
   poLineValue: Num
   pepCode: string
+  /** The code the sale order is punched with: the _S code of a combo when our master has it, else pepCode. */
+  punchCode: string
   skuName: string
   ourMrp: Num
   ourRate: Num
@@ -172,7 +204,11 @@ export async function getPoFile(uploadId: string, signal?: AbortSignal): Promise
  * pass completely -> pending_approval; an approver creates the PO on the Approvals page.
  */
 
-export type LineCorrection = { lineNo: string; pepCode?: string; qty?: number; mrp?: number; rate?: number }
+export type LineCorrection = {
+  lineNo: string; pepCode?: string; qty?: number; mrp?: number; rate?: number
+  /** Price check (2026-10-30): a price / MRP mismatch decided by a click; updateMaster with a channel choice. */
+  priceFrom?: PriceChoice; mrpFrom?: PriceChoice; updateMaster?: boolean
+}
 
 export type ResubmitBody = {
   location?: { detailsChannelId: string }
@@ -193,4 +229,90 @@ export function submitPo(uploadId: string, body: ResubmitBody) {
 /* POST /po-review/:uploadId/reject: the reviewer rejects directly; the PO leaves the list (who / why kept). */
 export function rejectPo(uploadId: string, remark: string) {
   return api<{ status: string; rejectedIssues: string[] }>(`${one(uploadId)}/reject`, { method: 'POST', body: JSON.stringify({ remark }) })
+}
+
+/* POST /po-review/uniware-uploaded: mark POs uploaded into Uniware (or undo); they then show in PO Overview. */
+export function markUniwareUploaded(uploadIds: string[], undo = false) {
+  return api<{ changed: string[] }>(`${PO_REVIEW_ENDPOINT}/uniware-uploaded`, { method: 'POST', body: JSON.stringify({ uploadIds, undo }) })
+}
+
+
+/* POST /po-review/line-items (2026-10-26): every line of the ticked processed POs (DB lines + the PO's JSON in S3),
+   for the line items CSV / Excel. Read only. */
+type LineNum = number | '' | null
+export interface LineItemRow {
+  uploadId: string
+  poNumber: string | null
+  poDate: string | null
+  channel: string | null
+  location: string | null
+  facility: string | null
+  saleOrderCode: string | null
+  processedAt: string | null
+  srNo: string | null
+  lineNo: LineNum
+  pepSkuCode: string | null
+  channelSkuCode: string | null
+  ean: string | null
+  skuName: string | null
+  description: string | null
+  brand: string | null
+  hsn: string | null
+  qty: number | null
+  freeQty: LineNum
+  channelMrp: LineNum
+  ourMrp: number | null
+  ourRate: number | null
+  landingRate: LineNum
+  unitCost: LineNum
+  gstPercent: LineNum
+  lineTotal: LineNum
+  margin: LineNum
+  gmv: number | null
+  poValue: number | null
+  /** True only when the PO was verified. */
+  isVerified: boolean
+  /** The PO's JSON could not be read from S3: only the DB columns are filled. */
+  s3Missing: boolean
+}
+
+export function getLineItems(uploadIds: string[]) {
+  return api<LineItemRow[]>(LINE_ITEMS.ENDPOINT, { method: 'POST', body: JSON.stringify({ uploadIds }) })
+}
+
+
+/* POST /po-review/recheck (2026-10-22): re-check every PO in review against today's master now; issues the master
+   fixed close, POs with nothing left pass (sale order + CSV). The server also does it every 30 min and after a master
+   load. */
+export function recheckReview() {
+  return api<{ checked: number; issuesClosed: number; completed: { uploadId: string; poNumber: string | null; saleOrder: string }[]; partly: number; failed: number }>(
+    `${PO_REVIEW_ENDPOINT}/recheck`, { method: 'POST' },
+  )
+}
+
+/* Rejected POs (2026-11-03): why it was rejected, and reopen it for review (POST_FG po-review-reopen.service). */
+export type RejectionDetail = {
+  uploadId: string; poNumber: string | null; channel: string | null; status: string
+  rejection: { from: 'review' | 'approval'; by: string | null; byEmail: string | null; at: string | null; reason: string | null } | null
+  rejectedIssues: { type: string; lineNo: number | null; field: string | null; details: string | null; values: Record<string, unknown> | null }[]
+  reviewerFixes: {
+    location: { from: string | null; to: string | null } | null
+    lines: { lineNo: string; channelSku: string | null; description: string | null; changes: { field: string; from: unknown; to: unknown }[] }[]
+  } | null
+  reopens: { at: string; by: string | null; remark: string; rejectedReason: string | null }[]
+}
+export const getRejection = (uploadId: string, signal?: AbortSignal) => api<RejectionDetail>(`${one(uploadId)}/rejection`, { signal })
+export const reopenPo = (uploadId: string, remark: string) =>
+  api<{ status: string; openIssues: number }>(`${one(uploadId)}/reopen`, { method: 'POST', body: JSON.stringify({ remark }) })
+
+/* POST /po-review/review-line-items (2026-11-03): lines of POs in review (as read) with each line's open issues. */
+export type ReviewIssueText = { type: string; details: string | null }
+export type ReviewLineItemRow = {
+  uploadId: string; poNumber: string | null; poDate: string | null; channel: string | null; receivedAt: string | null
+  lineNo: Num | null; channelSkuCode: string | null; ean: string | null; description: string | null; hsn: string | null
+  qty: Num | null; freeQty: Num | null; channelMrp: Num | null; landingRate: Num | null; unitCost: Num | null; gstPercent: Num | null; lineTotal: Num | null
+  issues: ReviewIssueText[]; poIssues: ReviewIssueText[]; s3Missing: boolean
+}
+export function getReviewLineItems(uploadIds: string[]) {
+  return api<ReviewLineItemRow[]>(LINE_ITEMS.REVIEW_ENDPOINT, { method: 'POST', body: JSON.stringify({ uploadIds }) })
 }

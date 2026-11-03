@@ -14,6 +14,8 @@ import { LiveDot } from '../../components/LiveDot'
 import { ShipmentDrawer } from './ShipmentDrawer'
 import { HistoryDrawer } from './ShipmentHistory'
 import { NOT_AVAILABLE_YET } from '../../constants/masters'
+import { PATHS, URL_PARAM } from '../../constants/pages'
+import { oneOf, useUrlParam } from '../../lib/urlState'
 
 /*
  * PO Overview from the backend (GET /po-overview/shipments, /lines, /filter-options, /columns): our POs, filtered and
@@ -99,9 +101,10 @@ function useServerList<I, R>(
 }
 
 export default function POOverview() {
-  const [tab, setTab] = useState<'shipment' | 'lines'>('lines')
+  // PO Format Data / Shipment Status and the team tab are in the address (?tab=, ?team=), so a refresh keeps them
+  const [tab, setTab] = useUrlParam<'shipment' | 'lines'>(PATHS.PO_OVERVIEW, URL_PARAM.TAB, oneOf(['shipment', 'lines']), 'lines')
   // Both tabs stay mounted once opened, so switching keeps each one's filters and rows.
-  const [seen, setSeen] = useState<Record<string, boolean>>({ lines: true })
+  const [seen, setSeen] = useState<Record<string, boolean>>({ lines: true, [tab]: true })
   const [full, setFull] = useState(false)
   // Live updates for the whole page (SSE, automatic 60 s polling fallback): rows changed by others swap in place.
   const live = useLiveShipments()
@@ -139,7 +142,7 @@ export default function POOverview() {
         ))}
       </div>
       <div hidden={tab !== 'shipment'} className="pf-slide-from-right"><ShipmentTab options={options} columns={columns} onTotal={shipmentTotal} tableHeight={tableHeight} flash={live.flash} /></div>
-      {seen.lines && <div hidden={tab !== 'lines'} className="pf-slide-from-left"><LinesTab options={options} columns={columns} onTotal={linesTotal} tableHeight={tableHeight} /></div>}
+      {(seen.lines || tab === 'lines') && <div hidden={tab !== 'lines'} className="pf-slide-from-left"><LinesTab options={options} columns={columns} onTotal={linesTotal} tableHeight={tableHeight} /></div>}
     </div>
   )
 }
@@ -220,7 +223,7 @@ function FacilityNote({ mine, filters, setFilters, editHere }: { mine: string[];
 }
 
 
-/** Widths (px) of the fixed key columns: PO Number, Channel, Location, Final Status. */
+/** Most width (px) of the fixed key columns: PO Number, Channel, Location, Final Status (stickyFit narrows them to their values). */
 const KEY_FIXED_WIDTHS = [150, 116, 160, 140]
 
 function TeamTabs({ teams, value, onChange }: { teams: TeamColumns[]; value: string; onChange: (k: string) => void }) {
@@ -252,9 +255,10 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
   const s = useServerList('po-overview-shipments', listShipments, shipmentToRow)
   const [sel, setSel] = useState<Row | null>(null)
   const [historyOf, setHistoryOf] = useState<Row | null>(null)
-  const [tab, setTab] = useState<string>(OVERVIEW_TAB.KEY)
-  const defs = useMemo(() => shipFilters(options), [options])
   const teams = useMemo(() => (columns ? orderedTeams(columns.teams) : []), [columns])
+  // a team from the address counts once the person's teams are loaded (an unknown one shows Overview)
+  const [tab, setTab] = useUrlParam<string>(PATHS.PO_OVERVIEW, URL_PARAM.TEAM, (v) => !columns || v === OVERVIEW_TAB.KEY || teams.some((t) => t.key === v), OVERVIEW_TAB.KEY)
+  const defs = useMemo(() => shipFilters(options), [options])
   const parts = useMemo(() => (columns ? partsOf(columns, tab) : []), [columns, tab])
   const cols = useMemo(() => parts.flatMap((p) => asCols(p.cols)), [parts])
   const groups = useMemo(() => parts.filter((p) => p.cols.length).map((p) => ({ label: p.label, span: p.cols.length, edit: p.edit })), [parts])
@@ -281,7 +285,7 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
       {/* key = the team tab: the grid fades in with the new columns on every team switch */}
       <div key={tab} className="pf-tab-in">
       <DataGrid
-        cols={cols} rows={s.rows} rowKey={(r) => String(r.uid)} sticky={fixedCols} stickyWidths={KEY_FIXED_WIDTHS} onRowClick={setSel} groups={groups} editable={editable} rowEditable={(r) => r.canEdit === true} onRowHistory={setHistoryOf} rowClass={(r) => (flash[String(r.uid)] ? 'pf-row-flash' : '')} maxHeight={tableHeight} pageSize={50}
+        cols={cols} rows={s.rows} rowKey={(r) => String(r.uid)} sticky={fixedCols} stickyWidths={KEY_FIXED_WIDTHS} stickyFit onRowClick={setSel} groups={groups} editable={editable} rowEditable={(r) => r.canEdit === true} onRowHistory={setHistoryOf} rowClass={(r) => (flash[String(r.uid)] ? 'pf-row-flash' : '')} maxHeight={tableHeight} pageSize={50}
         rowMenu={(r) => [{ label: 'View details', onClick: () => setSel(r) }, { label: 'History', onClick: () => setHistoryOf(r) }]}
       />
       </div>
@@ -294,7 +298,7 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
 
 /** PO Format Data: the columns up to and including PO Number stay fixed; the rest scroll (user, 2026-10-14). */
 const LINE_FIXED_COLS = PO_LINE_COLS.findIndex(([, key]) => key === 'poNumber') + 1
-/** Compact widths (px) of those fixed columns: UID, Entry Date, Brand, Channel, Location, PO Date, PO Number. */
+/** Most width (px) of those fixed columns (stickyFit narrows them to their values): UID, Entry Date, Brand, Channel, Location, PO Date, PO Number. */
 const LINE_FIXED_WIDTHS = [96, 104, 100, 110, 150, 104, 150]
 
 function LinesTab({ options, columns, onTotal, tableHeight }: { options: FilterOptions | null; columns: PoOverviewColumns | null; onTotal: (n: number) => void; tableHeight: string }) {
@@ -313,7 +317,7 @@ function LinesTab({ options, columns, onTotal, tableHeight }: { options: FilterO
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={(f) => { s.setFilters(f); s.setOpen(false) }} onClose={() => s.setOpen(false)} /></Reveal>
       <ListStatus s={s} entity="PO lines" />
       <DataGrid
-        cols={PO_LINE_COLS} rows={s.rows} rowKey={(r) => `${r.shipmentUid}-${r.srNo}`} sticky={LINE_FIXED_COLS} stickyWidths={LINE_FIXED_WIDTHS} maxHeight={tableHeight} pageSize={50} onRowClick={setSel}
+        cols={PO_LINE_COLS} rows={s.rows} rowKey={(r) => `${r.shipmentUid}-${r.srNo}`} sticky={LINE_FIXED_COLS} stickyWidths={LINE_FIXED_WIDTHS} stickyFit maxHeight={tableHeight} pageSize={50} onRowClick={setSel}
         trailing={[{ label: 'Status', render: (r) => <Cell kind="status" v={r.status} /> }]}
         rowMenu={(r) => [{ label: 'View details', onClick: () => setSel(r) }]}
       />

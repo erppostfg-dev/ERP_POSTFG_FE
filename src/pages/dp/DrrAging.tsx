@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts'
 import { Badge, Card, PageTitle, SubTabs } from '../../components/ui'
 import { DataGrid, FilterPanel, SectionToolbar, exportRows, useSection } from '../../components/kit'
+import { Reveal } from '../../components/shell'
 import { DRR_HISTORY, DRR_ROWS, type ColKind, type DrrRow } from '../../lib/ops'
 
 const COLS: [string, keyof DrrRow, ColKind][] = [['SKU', 'sku', 'mono'], ['Name', 'name', 'text'], ['SOH', 'soh', 'num'], ['DRR 3d', 'drr3', 'num'], ['DRR 7d', 'drr7', 'num'], ['DRR 30d', 'drr30', 'num']]
@@ -36,7 +37,7 @@ function Grid({ rows, name }: { rows: DrrRow[]; name: string }) {
   return (
     <div className="space-y-3">
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search SKU…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active} entity="DRR overrides" onExport={(e) => exportRows(name, e, COLS, s.filtered)} />
-      {s.open && <FilterPanel defs={[{ key: 'sku', label: 'SKU Code', type: 'text', placeholder: 'Enter SKU code' }, { key: 'name', label: 'Name contains', type: 'text' }]} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} />}
+      <Reveal open={s.open}><FilterPanel defs={[{ key: 'sku', label: 'SKU Code', type: 'text', placeholder: 'Enter SKU code' }, { key: 'name', label: 'Name contains', type: 'text' }]} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       <DataGrid cols={COLS} rows={s.filtered} rowKey={(r) => r.sku}
         trailing={[{ label: 'Deviation', render: (r) => <Dev v={r.deviation} /> }, { label: 'Current aging', render: (r) => <AgingBadge d={r.aging} /> }]} />
     </div>

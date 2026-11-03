@@ -55,6 +55,8 @@ export const LIVE_FLASH_MS = 2_500
 export const LIVE_EVENT = { SHIPMENT: 'shipment', PING: 'ping' } as const
 /** Action of a new shipment (lists reload instead of a row swap). */
 export const CREATED_ACTION = 'created'
+/** Actions that add a shipment to PO Overview or take it out (uploaded into Uniware / mark removed): lists reload. */
+export const LIST_ACTIONS: readonly string[] = [CREATED_ACTION, 'uniware_uploaded', 'uniware_upload_undone']
 
 /** History: how each shipment_logs action and source reads on screen (POST_FG SHIPMENT_LOG_ACTION / _SOURCE). */
 export const LOG_ACTION_LABEL: Record<string, string> = {
@@ -64,6 +66,8 @@ export const LOG_ACTION_LABEL: Record<string, string> = {
   line_qty_requested: 'Requested a line quantity change',
   line_qty_approved: 'Approved a line quantity change',
   line_qty_rejected: 'Rejected a line quantity change',
+  uniware_uploaded: 'Uploaded to Uniware',
+  uniware_upload_undone: 'Uniware upload mark removed',
 }
 export const LOG_SOURCE_LABEL: Record<string, string> = {
   screen: 'PO Overview',

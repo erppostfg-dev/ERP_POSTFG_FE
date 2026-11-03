@@ -1,0 +1,55 @@
+[
+  {
+    "type": "dependency",
+    "from": "src/constants/pages.ts",
+    "to": "src/lib/data.ts",
+    "rule": {
+      "severity": "error",
+      "name": "constants-are-leaves"
+    }
+  },
+  {
+    "type": "cycle",
+    "from": "src/api/intransit.ts",
+    "to": "src/dev/intransitPreview.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/dev/intransitPreview.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/api/intransit.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "dependency",
+    "from": "src/api/intransit.ts",
+    "to": "src/dev/intransitPreview.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-dev-only-in-app"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/auth/AuthContext.tsx",
+    "to": "src/dev/intransitPreview.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-dev-only-in-app"
+    }
+  }
+]

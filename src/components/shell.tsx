@@ -33,9 +33,15 @@ export function Reveal({ open, children }: { open: boolean; children: ReactNode 
     if (!render || !open || shown) return
     let second = 0
     const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => setShown(true)) })
-    const t = setTimeout(() => setSettled(true), ANIMATION_MS + 50)
-    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); clearTimeout(t) }
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second) }
   }, [render, open, shown])
+  // Once open, stop clipping, so dropdowns / calendars can hang outside the panel. (Its own effect: the timer used to
+  // live in the effect above, whose cleanup cancelled it as soon as `shown` turned true, so the panel stayed clipped.)
+  useEffect(() => {
+    if (!open || !shown) return
+    const t = setTimeout(() => setSettled(true), ANIMATION_MS + 50)
+    return () => clearTimeout(t)
+  }, [open, shown])
   if (!render) return null
   return (
     <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${shown ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>

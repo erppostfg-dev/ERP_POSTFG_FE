@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronUp, Maximize2, Minus, Plus } from 'lucide-react'
-import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist'
+import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { PDF_VIEWER } from '../constants/poReview'
+import { FILE_VIEWER_TEXT, PDF_VIEWER } from '../constants/poReview'
+import { FindBox, findAll, findTerms, useDebounced, type ExternalFind, type FindResult } from './FindBox'
 
 GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -11,7 +12,15 @@ GlobalWorkerOptions.workerSrc = workerUrl
  *   toolbar  title · ↑ ↓ page n / N · − zoom % + fit · actions (open in new tab, download)
  *   body     the page, fit to the box's width; zoomed in, drag it (or scroll) to move around.
  * Keys when the viewer has focus: ↑ / PageUp previous page, ↓ / PageDown next, + / − zoom, 0 fit to width.
+ * Find (2026-10-21): the text of every page is read once (on the first search), each match is highlighted on the
+ * page, "n of m" with ↑ / ↓ (Enter / Shift+Enter) jumps across pages. Scanned PDFs have no text: the box says so.
+ * A match split across two text pieces of the PDF is not found (rare: pieces are usually whole lines).
  */
+
+/** One text piece of a page: its text, position (PDF units) and size. */
+type TextPiece = { str: string; x: number; y: number; w: number; h: number }
+type Match = { page: number; piece: number; start: number; len: number }
+type View = { page: number; viewport: ReturnType<PDFPageProxy['getViewport']> }
 
 type Props = {
   /** Loads the file's bytes (aborted when the viewer closes). */
@@ -20,16 +29,37 @@ type Props = {
   actions?: ReactNode
   loadingText: string
   failedText: string
+  /** Opening zoom (a multiple of fit to width); default fit to width. */
+  initialZoom?: number
+  /** A search asked for from outside (Verify panel); the count found goes back through onFindResult. */
+  externalFind?: ExternalFind
+  onFindResult?: FindResult
 }
 
 const btn = 'rounded p-1 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent'
 
-export function PdfViewer({ load, title, actions, loadingText, failedText }: Props) {
+export function PdfViewer({ load, title, actions, loadingText, failedText, initialZoom = PDF_VIEWER.FIT, externalFind, onFindResult }: Props) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null)
   const [failed, setFailed] = useState(false)
   const [pageNo, setPageNo] = useState(1)
   const [pageInput, setPageInput] = useState('1')
-  const [zoom, setZoom] = useState<number>(PDF_VIEWER.FIT)
+  const [zoom, setZoom] = useState<number>(initialZoom)
+  // The page as drawn (CSS-pixel viewport), so highlights sit on the right words.
+  const [view, setView] = useState<View | null>(null)
+  const [find, setFind] = useState('')
+  const q = useDebounced(find.trim().toLowerCase())
+  // Terms from outside (a click in the Verify panel) win until the person types in the box.
+  const [outside, setOutside] = useState<string[] | null>(null)
+  useEffect(() => {
+    if (!externalFind) return
+    setOutside(externalFind.terms.map((t) => t.toLowerCase()))
+    setFind(externalFind.terms[0] ?? '')
+  }, [externalFind])
+  const [texts, setTexts] = useState<TextPiece[][] | null>(null)
+  const [reading, setReading] = useState(false)
+  const [cur, setCur] = useState(0)
+  const curRef = useRef<HTMLDivElement>(null)
+  const readingFor = useRef<PDFDocumentProxy | null>(null)
   const [boxWidth, setBoxWidth] = useState(0)
   const boxRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -49,7 +79,9 @@ export function PdfViewer({ load, title, actions, loadingText, failedText }: Pro
       .then((d) => {
         if (ctrl.signal.aborted) return void d.loadingTask.destroy()
         loaded = d
+        readingFor.current = null
         setDoc(d)
+        setTexts(null)
         setPageNo(1)
       })
       .catch(() => {
@@ -99,6 +131,7 @@ export function PdfViewer({ load, title, actions, loadingText, failedText }: Pro
       canvas.style.width = `${viewport.width / dpr}px`
       canvas.style.height = `${viewport.height / dpr}px`
       canvas.getContext('2d')?.drawImage(off, 0, 0)
+      setView({ page: pageNo, viewport: page.getViewport({ scale }) })
       if (anchor.current) {
         box.scrollLeft = anchor.current.fx * box.scrollWidth - box.clientWidth / 2
         box.scrollTop = anchor.current.fy * box.scrollHeight - box.clientHeight / 2
@@ -111,6 +144,47 @@ export function PdfViewer({ load, title, actions, loadingText, failedText }: Pro
     }
   }, [doc, pageNo, zoom, boxWidth])
 
+  // Read every page's text once, on the first search (a ref guards against starting twice; a newer file wins).
+  useEffect(() => {
+    if (!doc || !(q || outside?.length) || texts || readingFor.current === doc) return
+    readingFor.current = doc
+    setReading(true)
+    void (async () => {
+      const all: TextPiece[][] = []
+      try {
+        for (let n = 1; n <= doc.numPages; n++) {
+          const content = await (await doc.getPage(n)).getTextContent()
+          all.push(content.items.flatMap((it) => ('str' in it && it.str ? [{
+            str: it.str, x: it.transform[4], y: it.transform[5], w: it.width,
+            h: it.height || Math.hypot(it.transform[2], it.transform[3]),
+          }] : [])))
+        }
+      } catch {
+        // a page that cannot be read counts as no text
+      }
+      if (readingFor.current !== doc) return
+      readingFor.current = null
+      setTexts(all)
+      setReading(false)
+    })()
+  }, [doc, q, outside, texts])
+
+  const matches = useMemo<Match[]>(() => {
+    if (!texts) return []
+    if (outside) return texts.flatMap((pieces, p) => pieces.flatMap((t, i) => findTerms(t.str.toLowerCase(), outside).map((h) => ({ page: p + 1, piece: i, ...h }))))
+    if (!q) return []
+    return texts.flatMap((pieces, p) => pieces.flatMap((t, i) => findAll(t.str, q).map((start) => ({ page: p + 1, piece: i, start, len: q.length }))))
+  }, [texts, q, outside])
+  const hasText = !!texts?.some((p) => p.length)
+  useEffect(() => setCur(0), [matches])
+  // An outside search: say how many were found and go to the first one's page.
+  useEffect(() => {
+    if (!outside || !texts) return
+    onFindResult?.(hasText ? matches.length : null)
+    if (matches.length) { setPageNo(matches[0].page); setPageInput(String(matches[0].page)) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matches, outside, texts])
+
   const pages = doc?.numPages ?? 0
   const goTo = useCallback(
     (n: number) => {
@@ -122,6 +196,28 @@ export function PdfViewer({ load, title, actions, loadingText, failedText }: Pro
     },
     [pages],
   )
+  const jump = (i: number) => {
+    if (!matches.length) return
+    const next = (i + matches.length) % matches.length
+    setCur(next)
+    if (matches[next].page !== pageNo) goTo(matches[next].page)
+  }
+  // Bring the current match into view once its page is drawn.
+  useEffect(() => {
+    curRef.current?.scrollIntoView({ block: 'center', inline: 'nearest' })
+  }, [view, cur, matches])
+  const highlights = view && texts ? matches.flatMap((m, i) => {
+    if (m.page !== view.page) return []
+    const t = texts[m.page - 1][m.piece]
+    const x0 = t.x + (t.w * m.start) / t.str.length
+    const x1 = t.x + (t.w * (m.start + m.len)) / t.str.length
+    const [a, b] = view.viewport.convertToViewportPoint(x0, t.y - t.h * 0.2) as number[]
+    const [c, d] = view.viewport.convertToViewportPoint(x1, t.y + t.h * 0.85) as number[]
+    return [{ i, left: Math.min(a, c), top: Math.min(b, d), width: Math.abs(c - a), height: Math.abs(d - b) }]
+  }) : []
+  const findStatus = !q && !outside ? undefined : reading || !texts ? FILE_VIEWER_TEXT.SEARCHING : !hasText ? FILE_VIEWER_TEXT.PDF_NO_TEXT
+    : matches.length ? FILE_VIEWER_TEXT.MATCH(cur + 1, matches.length) : FILE_VIEWER_TEXT.NO_MATCHES
+
   const zoomTo = (z: number) => {
     const box = boxRef.current
     if (box && box.scrollWidth && box.scrollHeight) {
@@ -205,6 +301,13 @@ export function PdfViewer({ load, title, actions, loadingText, failedText }: Pro
             </div>
           </>
         )}
+        {doc && (
+          <>
+            <span className="h-4 w-px shrink-0 bg-white/20" />
+            <FindBox value={find} onChange={(v) => { setOutside(null); setFind(v) }} placeholder={FILE_VIEWER_TEXT.FIND_PDF} status={findStatus}
+              onPrev={() => jump(cur - 1)} onNext={() => jump(cur + 1)} disabled={texts !== null && !hasText} />
+          </>
+        )}
         {actions && <span className="flex shrink-0 items-center gap-3 border-l border-white/20 pl-3 opacity-80">{actions}</span>}
       </div>
       <div
@@ -221,7 +324,14 @@ export function PdfViewer({ load, title, actions, loadingText, failedText }: Pro
           <div className="p-6 text-center text-[13px] text-white/80">{loadingText}</div>
         ) : (
           <div className="flex min-h-full w-max min-w-full items-start justify-center" style={{ padding: PDF_VIEWER.PADDING }}>
-            <canvas ref={canvasRef} className="bg-white shadow-xl" />
+            <div className="relative">
+              <canvas ref={canvasRef} className="bg-white shadow-xl" />
+              {highlights.map((h) => (
+                <div key={h.i} ref={h.i === cur ? curRef : undefined}
+                  className={`pointer-events-none absolute rounded-[2px] mix-blend-multiply ${h.i === cur ? 'bg-orange-400/70 ring-2 ring-orange-500' : 'bg-yellow-300/60'}`}
+                  style={{ left: h.left, top: h.top, width: h.width, height: h.height }} />
+              ))}
+            </div>
           </div>
         )}
       </div>
