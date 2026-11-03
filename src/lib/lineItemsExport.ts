@@ -67,7 +67,12 @@ const rCells = (r: ReviewLineItemRow) => RCOLS.map(([name, get]) => {
 })
 const RED = [RCOLS.length - 2, RCOLS.length - 1]
 
-export function downloadReviewLineItems(rows: ReviewLineItemRow[], as: 'excel' | 'csv') {
+/** The PO's own issues once per PO, on its first line (user, 2026-11-03: repeated on every line it looked terrible). */
+const poIssuesOnce = (rows: ReviewLineItemRow[]) =>
+  rows.map((r, i) => (i > 0 && rows[i - 1].uploadId === r.uploadId ? { ...r, poIssues: [] } : r))
+
+export function downloadReviewLineItems(all: ReviewLineItemRow[], as: 'excel' | 'csv') {
+  const rows = poIssuesOnce(all)
   if (as === 'excel') return downloadExcel(`${LINE_ITEMS.REVIEW_FILE}_${stamp()}`, [{ name: LINE_ITEMS.SHEET, header: rHeader, rows: rows.map(rCells), redCols: RED }])
   const esc = (v: string | number) => { const s = String(v); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
   const csv = `\ufeff${[rHeader, ...rows.map(rCells)].map((r) => r.map(esc).join(',')).join('\r\n')}\r\n`
