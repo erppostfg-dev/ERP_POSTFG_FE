@@ -474,6 +474,55 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
 
           {/* Parsed form */}
           <div className="min-h-0 overflow-y-auto px-5 py-4">
+            {/* Errors at the top (user, 2026-11-03): every open error of the PO first, ticked as it is handled below;
+                the ones accepted with a tick (Other checks) come right after; the marks next to fields / lines stay. */}
+            {open.length > 0 && (
+              <>
+                <Sec>{`Errors (${open.length - unresolved.length} of ${open.length} handled)`}</Sec>
+                <ul className="space-y-1.5">
+                  {open.map((i) => (
+                    <li key={i.issueId} className={`flex items-start gap-2 rounded-md border px-3 py-2 text-[12.5px] ${handled(i) ? 'border-line bg-alt text-ink-400' : 'border-crit/30 bg-crit-soft'}`}>
+                      {handled(i) ? <Check className="mt-0.5 size-3.5 shrink-0 text-ok" /> : <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-crit" />}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={handled(i) ? 'neutral' : 'crit'}>{label(i.type)}</Badge>
+                          {i.lineNo !== null && <span className="text-ink-600">Line {i.lineNo}</span>}
+                        </div>
+                        {i.details && <div className={`mt-1 ${handled(i) ? 'line-through' : 'text-ink-900'}`}>{i.details}</div>}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+            {otherIssues.length > 0 && (
+              <>
+                <Sec>Other checks</Sec>
+                <ul className="space-y-2">
+                  {otherIssues.map((i) => (
+                    <li key={i.issueId} className={`flex items-start gap-3 rounded-md border px-3 py-2 text-[12.5px] ${handled(i) ? 'border-line bg-alt' : 'border-crit/30 bg-crit-soft'}`}>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2"><Badge tone={handled(i) ? 'neutral' : 'crit'}>{label(i.type)}</Badge>{i.lineNo !== null && <span className="text-ink-600">Line {i.lineNo}</span>}<ResolvedMark ok={handled(i)} /></div>
+                        {i.details && <div className="mt-1 text-ink-900">{i.details}</div>}
+                      </div>
+                      {i.canAccept && canEdit && (
+                        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 pt-0.5 text-[12px] font-medium text-ink-900">
+                          <input type="checkbox" checked={accepted.has(i.issueId)} onChange={(e) => {
+                            const next = new Set(accepted)
+                            if (e.target.checked) next.add(i.issueId); else next.delete(i.issueId)
+                            setAccepted(next)
+                          }} />
+                          Accept
+                        </label>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+
             <Sec>Purchase order</Sec>
             <div className="grid gap-3 sm:grid-cols-3">
               {field({ title: 'PO Number', value: data.po.poNumber, issueField: ISSUE_FIELD.PO_NUMBER, mono: true, req: true })}
@@ -555,32 +604,6 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
               Lines total <span className="tnum font-semibold text-ink-900">{money(linesTotal)}</span>
               {' · '}at our rates <span className={`tnum font-semibold ${differs(linesTotal, ourTotal) ? 'text-crit' : 'text-ink-900'}`}>{money(ourTotal)}</span>
             </div>
-
-            {otherIssues.length > 0 && (
-              <>
-                <Sec>Other checks</Sec>
-                <ul className="space-y-2">
-                  {otherIssues.map((i) => (
-                    <li key={i.issueId} className={`flex items-start gap-3 rounded-md border px-3 py-2 text-[12.5px] ${handled(i) ? 'border-line bg-alt' : 'border-crit/30 bg-crit-soft'}`}>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2"><Badge tone={handled(i) ? 'neutral' : 'crit'}>{label(i.type)}</Badge>{i.lineNo !== null && <span className="text-ink-600">Line {i.lineNo}</span>}<ResolvedMark ok={handled(i)} /></div>
-                        {i.details && <div className="mt-1 text-ink-900">{i.details}</div>}
-                      </div>
-                      {i.canAccept && canEdit && (
-                        <label className="flex shrink-0 cursor-pointer items-center gap-1.5 pt-0.5 text-[12px] font-medium text-ink-900">
-                          <input type="checkbox" checked={accepted.has(i.issueId)} onChange={(e) => {
-                            const next = new Set(accepted)
-                            if (e.target.checked) next.add(i.issueId); else next.delete(i.issueId)
-                            setAccepted(next)
-                          }} />
-                          Accept
-                        </label>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
 
             {data.warnings.length > 0 && (
               <>
