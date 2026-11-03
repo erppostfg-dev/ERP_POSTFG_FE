@@ -37,6 +37,8 @@ export type PoReviewItem = {
   failure?: { step: string | null; code: string | null; reason: string | null; at: string | null; ocrAttempts: number } | null
   /** Rejected POs: the latest rejection, by the reviewer (PO review) or the approver (Approvals). */
   rejection?: { by: string | null; byEmail: string | null; at: string | null; reason: string | null; from: 'review' | 'approval' } | null
+  /** Processed POs (2026-11-03): the verification state comes with the list (no separate call with every id). */
+  verify?: { state: string; required: boolean; by: string | null; at: string | null; remark: string | null } | null
   /** Reopened after a rejection (2026-11-03): the latest reopen and the rejection it undid; null = never. */
   reopened?: { at: string; remark: string; rejectedReason: string | null; rejectedFrom: string | null; times: number } | null
 }

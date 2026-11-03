@@ -7,11 +7,6 @@
 
 export const PO_VERIFY_ENDPOINT = '/po-verify'
 export const PO_VERIFY_SETTINGS_ENDPOINT = `${PO_VERIFY_ENDPOINT}/settings`
-/**
- * Verification states are asked for this many POs per call (POST_FG PO_VERIFY.MAX_IDS = 500 per call; 2026-11-03: dev
- * passed 500 processed POs, the one big call was refused and the Check column vanished). The calls run together.
- */
-export const VERIFY_STATES_BATCH = 400
 
 export const VERIFY_STATE = { VERIFIED: 'verified', TO_VERIFY: 'to_verify', NOT_NEEDED: 'not_needed', NOT_REQUIRED: 'not_required' } as const
 export type VerifyState = (typeof VERIFY_STATE)[keyof typeof VERIFY_STATE]
@@ -27,8 +22,6 @@ export const VERIFY_TEXT = {
   DIFFERENCE: 'Difference',
   RATE_BEFORE_GST: (v: string) => `Before GST ${v}; with GST shown`,
   COLUMN: 'Check',
-  /** The verification states could not be read: say so instead of hiding the Check column (2026-11-03). */
-  STATES_FAILED: (why: string) => `Could not read the verification states, so the Check column is hidden for now: ${why}`,
   VERIFIED: 'Verified',
   TO_VERIFY: 'To verify',
   NOT_NEEDED: 'In Uniware',
