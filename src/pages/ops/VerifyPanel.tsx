@@ -81,6 +81,10 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
   const can = canEdit && !!data?.canAct
   const toggle = (n: number) => setTicked((s) => { const x = new Set(s); if (x.has(n)) x.delete(n); else x.add(n); return x })
   const po = data?.poNumber ?? uploadId
+  // a PO priced before GST (Purplle): its value vs the sale order only makes sense with GST added
+  const beforeGst = data?.totals.po.valueBasis === 'before_gst'
+  const withGst = data?.totals.po.valueWithGst
+  const gstDiff = data && typeof withGst === 'number' ? Math.round((withGst - data.totals.saved.value) * 100) / 100 : null
 
   const run = async (what: 'verify' | 'back') => {
     setBusy(what)
@@ -175,6 +179,18 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
                     <>
                       <p className="text-[12px] text-ink-600">{VERIFY_TEXT.CLICK_HINT}</p>
                       <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{VERIFY_TEXT.HEADER}</div>
+                      {beforeGst && (
+                        <div className="rounded-[var(--radius)] border border-info/30 bg-info-soft px-3 py-2 text-[12.5px] text-ink-900">
+                          <div className="font-semibold text-info">{VERIFY_TEXT.BEFORE_GST}</div>
+                          <div className="text-ink-600">{VERIFY_TEXT.BEFORE_GST_HINT}</div>
+                          <div className="mt-1 grid grid-cols-2 gap-x-4 sm:grid-cols-4">
+                            <span>{VERIFY_TEXT.PO_BEFORE_GST}: <b className="tnum">{money(data.totals.po.value)}</b></span>
+                            <span>{VERIFY_TEXT.PO_WITH_GST}: <b className="tnum">{money(data.totals.po.valueWithGst)}</b></span>
+                            <span>{VERIFY_TEXT.SAVED}: <b className="tnum">{money(data.totals.saved.value)}</b></span>
+                            <span>{VERIFY_TEXT.DIFFERENCE}: <b className="tnum">{gstDiff === null ? '—' : money(gstDiff)}</b></span>
+                          </div>
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 gap-x-4 gap-y-1 rounded-[var(--radius)] bg-alt/60 p-3 sm:grid-cols-2">
                         {VERIFY_HEADER_FIELDS.map(([key, label, kind]) => (
                           <div key={key} className="flex min-w-0 items-center gap-2 text-[12.5px]">
@@ -249,7 +265,7 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
                                   {l.name && <div className="max-w-[220px] truncate text-[11px] text-ink-600" title={l.name}>{l.name}</div>}
                                 </td>
                                 <td className={`${td} tnum text-right ${diff(l.qtyDiffers)}`} title={l.qtyDiffers ? VERIFY_TEXT.QTY_DIFF : undefined}>{num(l.po?.qty)} → {num(l.qty)}</td>
-                                <td className={`${td} tnum text-right ${diff(l.rateDiffers)}`} title={l.rateDiffers ? VERIFY_TEXT.RATE_DIFF : undefined}>{money(l.po?.rate)} → {money(l.rate)}</td>
+                                <td className={`${td} tnum text-right ${diff(l.rateDiffers)}`} title={l.rateDiffers ? VERIFY_TEXT.RATE_DIFF : l.po?.rateBeforeGst != null ? VERIFY_TEXT.RATE_BEFORE_GST(money(l.po.rateBeforeGst)) : undefined}>{money(l.po?.rate)} → {money(l.rate)}</td>
                                 <td className={`${td} tnum text-right`}>{money(l.value)}</td>
                               </tr>
                             ))}
@@ -262,7 +278,7 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
                             <tr><th className={th}>{VERIFY_TEXT.TOTALS}</th><th className={`${th} text-right`}>{VERIFY_TEXT.LINES}</th><th className={`${th} text-right`}>{VERIFY_TEXT.UNITS}</th><th className={`${th} text-right`}>{VERIFY_TEXT.VALUE}</th></tr>
                           </thead>
                           <tbody>
-                            {([[VERIFY_TEXT.PO_SAYS, data.totals.po], [VERIFY_TEXT.SAVED, data.totals.saved]] as const).map(([label, t]) => (
+                            {([[beforeGst ? VERIFY_TEXT.PO_BEFORE_GST : VERIFY_TEXT.PO_SAYS, data.totals.po], [VERIFY_TEXT.SAVED, data.totals.saved]] as const).map(([label, t]) => (
                               <tr key={label}>
                                 <td className={`${td} font-semibold text-ink-900`}>{label}</td>
                                 <td className={`${td} tnum text-right ${diff(data.totals.po.lines !== data.totals.saved.lines)}`}>{num(t.lines)}</td>
@@ -270,6 +286,14 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
                                 <td className={`${td} tnum text-right`}>{money(t.value)}</td>
                               </tr>
                             ))}
+                            {beforeGst && (
+                              <tr>
+                                <td className={`${td} font-semibold text-info`}>{VERIFY_TEXT.PO_WITH_GST}</td>
+                                <td className={`${td} text-right text-ink-400`}>—</td>
+                                <td className={`${td} text-right text-ink-400`}>—</td>
+                                <td className={`${td} tnum text-right font-semibold text-info`}>{money(data.totals.po.valueWithGst)}</td>
+                              </tr>
+                            )}
                           </tbody>
                         </table>
                       </div>

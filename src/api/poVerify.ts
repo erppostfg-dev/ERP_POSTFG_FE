@@ -13,7 +13,8 @@ export interface VerifyLine {
   qty: number
   rate: number
   value: number
-  po: { description: string; qty: number; rate: number | null; mrp: number | null; channelSkuCode: string } | null
+  /** rate = the PO's unit price with GST; rateBeforeGst = its unit cost when the PO is priced before GST (Purplle). */
+  po: { description: string; qty: number; rate: number | null; rateBeforeGst?: number | null; mrp: number | null; channelSkuCode: string } | null
   qtyDiffers: boolean
   rateDiffers: boolean
 }
@@ -33,7 +34,11 @@ export interface VerifyDetail {
     customerCode: string | null; facilityCode: string | null; uniwareChannel: string | null
   }
   lines: VerifyLine[]
-  totals: { po: { lines: number; units: number; value: number }; saved: { lines: number; units: number; value: number } }
+  /** po.value as the PO says; valueBasis = with or before GST (2026-11-03); valueWithGst = the PO with GST, to compare with saved. */
+  totals: {
+    po: { lines: number; units: number; value: number; valueBasis?: 'with_gst' | 'before_gst'; valueWithGst?: number | null }
+    saved: { lines: number; units: number; value: number }
+  }
   /** processed.json as the OCR / API made it. */
   processed: Record<string, unknown> & { line_items: Record<string, unknown>[] }
 }

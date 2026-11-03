@@ -19,6 +19,13 @@ export type VerifyState = (typeof VERIFY_STATE)[keyof typeof VERIFY_STATE]
 export const VERIFY_REMARK_MAX = 500
 
 export const VERIFY_TEXT = {
+  // A PO priced before GST (Purplle, 2026-11-03): its own value is without GST, the sale order's with GST
+  BEFORE_GST: 'This PO is priced before GST',
+  BEFORE_GST_HINT: 'The PO value and net amount above are before GST. The sale order is with GST: compare it with the PO value with GST.',
+  PO_BEFORE_GST: 'PO says (before GST)',
+  PO_WITH_GST: 'PO with GST (worked out)',
+  DIFFERENCE: 'Difference',
+  RATE_BEFORE_GST: (v: string) => `Before GST ${v}; with GST shown`,
   COLUMN: 'Check',
   /** The verification states could not be read: say so instead of hiding the Check column (2026-11-03). */
   STATES_FAILED: (why: string) => `Could not read the verification states, so the Check column is hidden for now: ${why}`,
