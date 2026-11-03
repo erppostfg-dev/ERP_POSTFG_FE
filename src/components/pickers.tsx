@@ -156,72 +156,76 @@ export function DatePicker({ value, onChange, placeholder = 'Pick a date', class
   )
 }
 
-/**
- * A from - to date range in ONE field (2026-11-03, user: "a continuous single from to for the PO date"): the first
- * click on the calendar sets From, the second sets To (picking a day before From starts again from it); the days in
- * between are shaded. Values as YYYY-MM-DD ('' = open end). The calendar stays open until To is picked.
- */
-export function DateRangePicker({ from, to, onChange, placeholder = 'From – To', className = '' }: {
-  from: string; to: string; onChange: (from: string, to: string) => void; placeholder?: string; className?: string
+/** One month of days to click, with its own month arrows (DateRangePicker's From and To sides). */
+function MonthGrid({ title, value, lo, hi, min, max, onPick, startIso }: {
+  title: string; value: string; lo: string; hi: string; min?: string; max?: string; onPick: (v: string) => void; startIso: string
 }) {
-  const p = usePopover()
-  const start = from || todayIso()
-  const [view, setView] = useState({ y: Number(start.slice(0, 4)), m: Number(start.slice(5, 7)) - 1 })
-  // waiting for the To day after a From click
-  const [picking, setPicking] = useState<string | null>(null)
-  const [hover, setHover] = useState('')
-  useEffect(() => {
-    if (p.open) { const s = from || todayIso(); setView({ y: Number(s.slice(0, 4)), m: Number(s.slice(5, 7)) - 1 }); setPicking(null) }
-  }, [p.open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [view, setView] = useState({ y: Number(startIso.slice(0, 4)), m: Number(startIso.slice(5, 7)) - 1 })
   const first = new Date(view.y, view.m, 1)
   const lead = (first.getDay() + 6) % 7
   const days = new Date(view.y, view.m + 1, 0).getDate()
   const cells = [...Array(lead).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)]
   const move = (n: number) => setView((v) => { const d = new Date(v.y, v.m + n, 1); return { y: d.getFullYear(), m: d.getMonth() } })
-  const pick = (v: string) => {
-    if (!picking || v < picking) { setPicking(v); onChange(v, ''); return }
-    onChange(picking, v)
-    setPicking(null)
-    p.close()
-  }
-  // the range on show: the saved one, or the one being picked (From .. the day under the mouse)
-  const lo = picking ?? from
-  const hi = picking ? (hover && hover >= picking ? hover : picking) : to
   const today = todayIso()
+  return (
+    <div className="w-[248px]">
+      <div className="mb-1 flex items-center justify-between text-[12px]">
+        <span className="font-semibold uppercase tracking-wide text-ink-600">{title}</span>
+        <span className={value ? 'font-semibold text-ink-900' : 'text-ink-400'}>{value ? shown(value) : 'not set'}</span>
+      </div>
+      <div className="mb-1 flex items-center justify-between">
+        <button type="button" onClick={() => move(-1)} className="rounded p-1 text-ink-600 hover:bg-alt"><ChevronLeft className="size-4" /></button>
+        <div className="text-[13px] font-semibold text-ink-900">{MONTHS[view.m]} {view.y}</div>
+        <button type="button" onClick={() => move(1)} className="rounded p-1 text-ink-600 hover:bg-alt"><ChevronRight className="size-4" /></button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 text-center text-[11px] text-ink-400">
+        {WEEKDAYS.map((w) => <div key={w} className="py-1">{w}</div>)}
+      </div>
+      <div key={`${view.y}-${view.m}`} className="pf-tab-in grid grid-cols-7 gap-0.5 text-center text-[12.5px]">
+        {cells.map((d, i) => {
+          if (d === null) return <div key={`e${i}`} />
+          const v = iso(view.y, view.m, d)
+          const off = (!!min && v < min) || (!!max && v > max)
+          const end = v === value
+          const inside = !!lo && !!hi && v > lo && v < hi
+          return (
+            <button type="button" key={v} disabled={off} onClick={() => onPick(v)}
+              className={`h-8 rounded transition-colors disabled:cursor-not-allowed disabled:text-ink-300 ${end ? 'bg-primary font-semibold text-white' : inside ? 'bg-primary-soft text-primary' : v === today ? 'font-semibold text-primary hover:bg-alt' : 'text-ink-900 hover:bg-alt'}`}>{d}</button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A from - to date range in ONE field (2026-11-03, user: "when I click one, two come side by side"): the field opens
+ * two calendars next to each other, From on the left and To on the right, each with its own month; the days between
+ * are shaded, To cannot be before From. Values YYYY-MM-DD ('' = open end). Done closes it; Clear empties both.
+ */
+export function DateRangePicker({ from, to, onChange, placeholder = 'From → To', className = '' }: {
+  from: string; to: string; onChange: (from: string, to: string) => void; placeholder?: string; className?: string
+}) {
+  const p = usePopover()
   const text = from || to ? `${from ? shown(from) : '…'} → ${to ? shown(to) : '…'}` : placeholder
+  const today = todayIso()
   return (
     <div ref={p.ref} className="relative">
       <button type="button" onClick={p.toggle} className={`${boxCls(p.open)} ${className}`}>
         <span className={`min-w-0 flex-1 truncate ${from || to ? 'text-ink-900' : 'text-ink-400'}`}>{text}</span>
-        {(from || to) && <X className="size-3.5 shrink-0 text-ink-400 hover:text-ink-900" onClick={(e) => { e.stopPropagation(); setPicking(null); onChange('', '') }} />}
+        {(from || to) && <X className="size-3.5 shrink-0 text-ink-400 hover:text-ink-900" onClick={(e) => { e.stopPropagation(); onChange('', '') }} />}
         <Calendar className="size-3.5 shrink-0 text-ink-400" />
       </button>
       {p.open && (
-        <Pop leaving={p.leaving} className="w-[264px] p-2">
-          <div className="mb-1 text-center text-[11.5px] text-ink-600">{picking ? 'Now pick the To day' : 'Pick the From day'}</div>
-          <div className="mb-1 flex items-center justify-between">
-            <button type="button" onClick={() => move(-1)} className="rounded p-1 text-ink-600 hover:bg-alt"><ChevronLeft className="size-4" /></button>
-            <div className="text-[13px] font-semibold text-ink-900">{MONTHS[view.m]} {view.y}</div>
-            <button type="button" onClick={() => move(1)} className="rounded p-1 text-ink-600 hover:bg-alt"><ChevronRight className="size-4" /></button>
+        <Pop leaving={p.leaving} className="w-max p-3">
+          <div className="flex flex-col gap-4 sm:flex-row">
+            <MonthGrid title="From" value={from} lo={from} hi={to} max={to || undefined} startIso={from || today} onPick={(v) => onChange(v, to)} />
+            <div className="hidden w-px bg-line sm:block" />
+            <MonthGrid title="To" value={to} lo={from} hi={to} min={from || undefined} startIso={to || from || today} onPick={(v) => onChange(from, v)} />
           </div>
-          <div className="grid grid-cols-7 gap-0.5 text-center text-[11px] text-ink-400">
-            {WEEKDAYS.map((w) => <div key={w} className="py-1">{w}</div>)}
-          </div>
-          <div key={`${view.y}-${view.m}`} className="pf-tab-in grid grid-cols-7 gap-0.5 text-center text-[12.5px]" onMouseLeave={() => setHover('')}>
-            {cells.map((d, i) => {
-              if (d === null) return <div key={`e${i}`} />
-              const v = iso(view.y, view.m, d)
-              const end = v === lo || v === hi
-              const inside = !!lo && !!hi && v > lo && v < hi
-              return (
-                <button type="button" key={v} onClick={() => pick(v)} onMouseEnter={() => setHover(v)}
-                  className={`h-8 rounded transition-colors ${end ? 'bg-primary font-semibold text-white' : inside ? 'bg-primary-soft text-primary' : v === today ? 'font-semibold text-primary hover:bg-alt' : 'text-ink-900 hover:bg-alt'}`}>{d}</button>
-              )
-            })}
-          </div>
-          <div className="mt-1 flex justify-between border-t border-line pt-1.5 text-[12px]">
-            <button type="button" onClick={() => { setPicking(null); onChange('', ''); p.close() }} className="rounded px-2 py-1 text-ink-600 hover:bg-alt">Clear</button>
-            <button type="button" onClick={() => pick(today)} className="rounded px-2 py-1 font-semibold text-primary hover:bg-alt">Today</button>
+          <div className="mt-2 flex items-center justify-between border-t border-line pt-2 text-[12px]">
+            <button type="button" onClick={() => onChange('', '')} className="rounded px-2 py-1 text-ink-600 hover:bg-alt">Clear</button>
+            <button type="button" onClick={p.close} className="rounded bg-primary px-3 py-1 font-semibold text-white hover:opacity-90">Done</button>
           </div>
         </Pop>
       )}

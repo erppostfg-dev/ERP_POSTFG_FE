@@ -91,7 +91,7 @@ export function PrimaryBtn({ children, onClick, icon }: { children: ReactNode; o
 // ---- Filters ------------------------------------------------------------
 export type FilterDef =
   | { key: string; label: string; type: 'date' }
-  /** One from - to field (2026-11-03): the values stay under fromKey / toKey (applyFilters' <field>From / <field>To). */
+  /** One from - to field opening a From and a To calendar side by side (2026-11-03); the values stay under fromKey / toKey. */
   | { key: string; label: string; type: 'dateRange'; fromKey: string; toKey: string }
   | { key: string; label: string; type: 'multi'; options: readonly string[]; placeholder?: string }
   | { key: string; label: string; type: 'text'; placeholder?: string }
@@ -185,6 +185,7 @@ export function FilterPanel({ defs, value, onApply, onClose }: { defs: FilterDef
             ) : d.type === 'date' ? (
               <DateInput value={(draft[d.key] as string) ?? ''} onChange={(v) => set(d.key, v)} className={draft[d.key] ? '' : 'text-ink-400'} />
             ) : d.type === 'dateRange' ? (
+              // one field; it opens a From and a To calendar side by side (user, 2026-11-03)
               <DateRangePicker from={(draft[d.fromKey] as string) ?? ''} to={(draft[d.toKey] as string) ?? ''}
                 onChange={(f, t) => setDraft((x) => ({ ...x, [d.fromKey]: f, [d.toKey]: t }))} />
             ) : d.type === 'sort' ? (
