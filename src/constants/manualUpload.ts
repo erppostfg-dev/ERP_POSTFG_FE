@@ -34,6 +34,9 @@ export const AMAZON_ACCEPT = '.tsv'
 export const FLIPKART_CHANNEL = 'flipkart'
 export const FLIPKART_ACCEPT = '.csv'
 export const FLIPKART_FILE = /^(?:Consignment_Details_\d+_\d{2}-\d{2}-\d{4}|\d{6,})(?:\s*\(\d+\))?\.csv$/i
+/** Myntra STRs (2026-11-03): the STR's CSV from the partner portal, <STR>-summary.csv (POST_FG MYNTRA_STR.MANUAL_FILE). */
+export const MYNTRA_CHANNEL = 'myntra'
+export const MYNTRA_FILE = /^STN[A-Z]{4}[A-Z]{2,6}\d{6}-\d{2}(?:-summary)?(?:\s*\(\d+\))?\.csv$/i
 
 /**
  * Channel list groups (user, 2026-10-22): Manual (channels that only come by hand, used every day) open at the top,
@@ -79,6 +82,9 @@ export const MANUAL_TEXT = {
   WRONG_TYPE_FLIPKART: (name: string) => `${name}: for Flipkart, upload the consignment CSV as downloaded: from Seller Hub (Consignment_Details_<id>_<date>.csv) or from POST_FG (<id>.csv)`,
   FLIPKART_HINT: 'One consignment CSV per PO, as downloaded from Seller Hub (Consignment_Details_<id>_<date>.csv) or from POST_FG (<id>.csv): the id is read from the file name. The warehouse comes from the robot\'s last Bulk Consignment File; if it is not there, the PO waits in review for the location. A consignment the robot fetched or POST_FG already has is refused. No OCR.',
   DROP_HINT_FLIPKART: `Flipkart consignment .csv files · up to ${MANUAL_MAX_FILES} files`,
+  WRONG_TYPE_MYNTRA: (name: string) => `${name}: for Myntra, upload the STR's CSV as the partner portal gives it (<STR>-summary.csv, e.g. STNCPWEBP271026-01-summary.csv)`,
+  MYNTRA_HINT: 'One STR CSV per PO, as downloaded from the Myntra partner portal (STR Details > Download CSV, <STR>-summary.csv): the STR number and its date are read from the file name, the location from its Destination WH. Our price and GST are used (not Myntra’s); MRP is checked. An STR already taken from an STR email or already a PO is refused. No OCR.',
+  DROP_HINT_MYNTRA: `Myntra STR .csv files · up to ${MANUAL_MAX_FILES} files`,
   DROP_HINT_AMAZON: `Amazon shipment .tsv files · up to ${MANUAL_MAX_FILES} files`,
   TOO_BIG: (name: string) => `${name}: larger than ${MANUAL_MAX_MB} MB`,
   VIEW_ONLY: 'View only: ask an admin for editor access to upload.',
