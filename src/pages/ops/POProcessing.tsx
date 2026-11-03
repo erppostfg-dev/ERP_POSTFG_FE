@@ -69,7 +69,7 @@ export default function POProcessing() {
       {tab === 'manual' && <ManualUpload canEdit={canEditRoot} liveTick={liveTick} />}
       {tab === 'issues' && <PoIssues />}
       {tab === 'prices' && <PriceDifferences canEdit={canEditRoot} />}
-      {tab === 'ended' && <RejectedFailed liveTick={liveTick} />}
+      {tab === 'ended' && <RejectedFailed liveTick={liveTick} canEdit={canEditRoot} />}
     </div>
   )
 }

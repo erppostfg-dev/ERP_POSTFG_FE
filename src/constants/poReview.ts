@@ -38,6 +38,16 @@ export const ENDED_TEXT = {
   REJECTED_SUB: 'POs rejected by a reviewer (PO review) or an approver (Approvals): no PO and no sale order were made; their files are kept.',
   FAILED_SUB: 'POs the system could not finish, with the step that failed and why. Nothing was sent anywhere.',
   NO_REASON: 'no reason saved',
+  OPEN_HINT: 'Click a rejected PO to see why it was rejected and reopen it for review.',
+  WHY_TITLE: 'Why it was rejected',
+  ERRORS_TITLE: 'Errors rejected with it',
+  FIXES_TITLE: 'What the reviewer had changed (rejected by the approver)',
+  REOPENS_TITLE: 'Reopened before',
+  REOPEN: 'Reopen for review',
+  REOPEN_HINT: 'It goes back to In Review: the checks run again against today\'s masters, then fix it there and submit it for approval (tagged Reopened).',
+  REOPEN_REMARK: 'Why are you reopening it? (required)',
+  REOPENED: (po: string, n: number) => `PO ${po} reopened: it is in In Review with ${n} issue(s) to check.`,
+  TAG: 'Reopened',
 } as const
 
 /** The backend's largest page; the lists load every PO in pages of this size. */
@@ -245,7 +255,9 @@ export type ApprovalKind = (typeof APPROVAL_KIND)[keyof typeof APPROVAL_KIND]
 export const APPROVAL_KIND_LABEL: Record<ApprovalKind, string> = { review: 'From review', master_update: 'Master update' }
 
 /** The Approvals Filters panel's keys = the list's query names (POST_FG APPROVAL_QUERY / PO_REVIEW_QUERY). */
-export const APPROVAL_FILTER = { CHANNEL: 'channel', KIND: 'kind', ISSUE: 'issue', SUBMITTED_BY: 'submittedBy', FROM: 'from', TO: 'to' } as const
+export const APPROVAL_FILTER = { CHANNEL: 'channel', KIND: 'kind', ISSUE: 'issue', SUBMITTED_BY: 'submittedBy', FROM: 'from', TO: 'to', REOPENED: 'reopened' } as const
+/** The Approval type filter's extra choice: only POs submitted after a reopen from Rejected (2026-11-03). */
+export const APPROVAL_REOPENED_LABEL = 'Reopened (was rejected)'
 
 /** Bulk approve / reject (POST_FG APPROVAL_BULK): up to MAX per call; each one decided like the single action. */
 export const APPROVAL_BULK = {

@@ -12,7 +12,7 @@ import {
 } from '../../api/poReview'
 import { ApiError } from '../../api/client'
 import {
-  ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED, PRICE_ISSUES,
+  ENDED_TEXT, ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED, PRICE_ISSUES,
 } from '../../constants/poReview'
 import { PRICE_CHECK_TEXT, PRICE_CHOICE, TOTAL_TOLERANCE, type PriceChoice } from '../../constants/priceDifferences'
 import { PriceCheck, type PriceRow } from './PriceCheck'
@@ -39,6 +39,8 @@ type ReviewRow = {
   subject: string | null
   /** When it was processed (ISO): the Processed At header's Newest / Oldest sorts by this. */
   processedIso: string
+  /** Reopened after a rejection (2026-11-03): tag + the earlier rejection reason on hover. */
+  reopened: PoReviewItem['reopened']
 }
 
 const RCOLS: [string, keyof ReviewRow, ColKind][] = [
@@ -53,6 +55,7 @@ const toRow = (r: PoReviewItem): ReviewRow => ({
   id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', poDate: r.poDate ?? '', processedAt: istDateTime(r.processedAt), lines: r.lines, value: r.poValue,
   openIssues: r.openIssues, issueTypes: r.issueTypes, source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, subject: r.subject,
   processedIso: r.processedAt ?? '',
+  reopened: r.reopened ?? null,
 })
 
 const distinct = (values: string[]) => [...new Set(values.filter(Boolean))].sort()
@@ -176,7 +179,16 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
             : k === 'processedAt' ? <ColumnSort filters={s.filters} setFilters={s.setFilters} field="processedAt" title={LIST_FILTER.PROCESSED_AT} /> : null)}
           rowClass={() => '[&>td:first-child]:shadow-[inset_3px_0_0_var(--color-crit)]'}
           trailing={[
-            { label: 'Issues', render: (r) => <span className="flex flex-wrap gap-1">{r.issueTypes.map((t) => <Badge key={t} tone="crit">{label(t)}</Badge>)}</span> },
+            { label: 'Issues', render: (r) => (
+              <span className="flex flex-wrap gap-1">
+                {r.reopened && (
+                  <span title={`Rejected before: ${r.reopened.rejectedReason ?? '—'} · reopened: ${r.reopened.remark}${r.reopened.times > 1 ? ` (${r.reopened.times} times)` : ''}`}>
+                    <Badge tone="warn">{ENDED_TEXT.TAG}{r.reopened.times > 1 ? ` ×${r.reopened.times}` : ''}</Badge>
+                  </span>
+                )}
+                {r.issueTypes.map((t) => <Badge key={t} tone="crit">{label(t)}</Badge>)}
+              </span>
+            ) },
             { label: 'Open issues', render: (r) => <span className="tnum text-crit">{r.openIssues}</span> },
             { label: 'Source', render: (r) => <SourceCell source={r.source} subject={r.subject} fallback={r.poNumber} icon={srcIcon[r.source] ?? Mail} /> },
             { label: 'Original file', render: (r) => <FileCell uploadId={r.id} name={r.file} /> },

@@ -10,7 +10,7 @@ import { approveSubmission, bulkApprove, bulkReject, getApproval, listApprovals,
 import type { Num } from '../api/poReview'
 import {
   APPROVAL_BULK, APPROVAL_BULK_RESULT, APPROVAL_ERROR, APPROVAL_FILTER, APPROVAL_KIND, APPROVAL_KIND_LABEL, APPROVAL_STATUS, APPROVAL_TABS, APPROVAL_TEXT,
-  FIX_FIELD_LABEL, ISSUE_LABELS, PO_REVIEW_REMARK_MAX, type ApprovalKind, type ApprovalStatus,
+  APPROVAL_REOPENED_LABEL, FIX_FIELD_LABEL, ISSUE_LABELS, PO_REVIEW_REMARK_MAX, type ApprovalKind, type ApprovalStatus,
 } from '../constants/poReview'
 import { SEARCH_DELAY_MS } from '../constants/poOverview'
 import { APPROVAL_PRICE_TEXT, PRICE_CHECK_TEXT, PRICE_CHOICE } from '../constants/priceDifferences'
@@ -47,7 +47,10 @@ const fixedText = (a: ApprovalItem) =>
 
 const who = (p: { name: string | null; email: string | null } | null) => p?.name || p?.email || '—'
 const toRow = (a: ApprovalItem): Row => ({
-  id: a.id, poNumber: a.poNumber ?? '—', channel: a.channel ?? '—', kind: APPROVAL_KIND_LABEL[a.kind] ?? a.kind, fixed: fixedText(a),
+  id: a.id, poNumber: a.poNumber ?? '—', channel: a.channel ?? '—',
+  // "From review · Reopened (was: <reason>)" when it was submitted after a reopen from Rejected (2026-11-03)
+  kind: `${APPROVAL_KIND_LABEL[a.kind] ?? a.kind}${a.reopened ? ` · Reopened${a.reopened.rejectedReason ? ` (was: ${a.reopened.rejectedReason})` : ''}` : ''}`,
+  fixed: fixedText(a),
   submittedBy: who(a.submittedBy), submittedAt: istDateTime(a.submittedAt), decidedBy: who(a.decidedBy), decidedAt: istDateTime(a.decidedAt),
   saleOrder: a.saleOrderCode ?? '—', reason: a.decisionRemark ?? '—', item: a,
 })
@@ -101,6 +104,7 @@ export default function Approvals() {
   const query = useMemo(() => {
     const arr = (k: string) => (Array.isArray(filters[k]) ? filters[k] : [])
     const kinds = arr(APPROVAL_FILTER.KIND).map((l) => KIND_BY_LABEL[l]).filter(Boolean)
+    const reopened = arr(APPROVAL_FILTER.KIND).includes(APPROVAL_REOPENED_LABEL)
     return {
       [APPROVAL_FILTER.CHANNEL]: arr(APPROVAL_FILTER.CHANNEL),
       // both kinds ticked = every kind
@@ -109,6 +113,7 @@ export default function Approvals() {
       [APPROVAL_FILTER.SUBMITTED_BY]: arr(APPROVAL_FILTER.SUBMITTED_BY),
       [APPROVAL_FILTER.FROM]: typeof filters[APPROVAL_FILTER.FROM] === 'string' ? filters[APPROVAL_FILTER.FROM] : '',
       [APPROVAL_FILTER.TO]: typeof filters[APPROVAL_FILTER.TO] === 'string' ? filters[APPROVAL_FILTER.TO] : '',
+      [APPROVAL_FILTER.REOPENED]: reopened ? 'true' : '',
     }
   }, [filters])
   const list = useQuery({ queryKey: ['approvals', tab, search, query], queryFn: ({ signal }) => listApprovals(tab, search, query, signal), placeholderData: keepPreviousData })
@@ -118,7 +123,7 @@ export default function Approvals() {
   const options = list.data?.meta.filterOptions
   const filterDefs: FilterDef[] = useMemo(() => [
     { key: APPROVAL_FILTER.CHANNEL, label: 'Channel', type: 'multi', options: options?.channels ?? [] },
-    { key: APPROVAL_FILTER.KIND, label: 'Approval type', type: 'multi', options: Object.values(APPROVAL_KIND).map((k) => APPROVAL_KIND_LABEL[k]) },
+    { key: APPROVAL_FILTER.KIND, label: 'Approval type', type: 'multi', options: [...Object.values(APPROVAL_KIND).map((k) => APPROVAL_KIND_LABEL[k]), APPROVAL_REOPENED_LABEL] },
     { key: APPROVAL_FILTER.ISSUE, label: 'Errors fixed', type: 'multi', options: Object.values(ISSUE_LABELS) },
     { key: APPROVAL_FILTER.SUBMITTED_BY, label: 'Submitted by', type: 'multi', options: (options?.submitters ?? []).map((p) => p.email) },
     { key: APPROVAL_FILTER.FROM, label: 'Submitted from', type: 'date' },

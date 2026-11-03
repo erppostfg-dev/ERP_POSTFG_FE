@@ -22,6 +22,8 @@ export type ApprovalItem = {
   fixedIssues: { type: string; fixed: number; accepted: number }[]
   /** Price check lines that change the master on approval. */
   masterUpdates: number
+  /** Submitted after a reopen from Rejected (2026-11-03): the tag + the rejection it undid. */
+  reopened: { rejectedReason: string | null; rejectedFrom: string | null } | null
   issueCount: number
   changeCount: number
   decidedBy: ApprovalPerson | null

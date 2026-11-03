@@ -37,6 +37,8 @@ export type PoReviewItem = {
   failure?: { step: string | null; code: string | null; reason: string | null; at: string | null; ocrAttempts: number } | null
   /** Rejected POs: the latest rejection, by the reviewer (PO review) or the approver (Approvals). */
   rejection?: { by: string | null; byEmail: string | null; at: string | null; reason: string | null; from: 'review' | 'approval' } | null
+  /** Reopened after a rejection (2026-11-03): the latest reopen and the rejection it undid; null = never. */
+  reopened?: { at: string; remark: string; rejectedReason: string | null; rejectedFrom: string | null; times: number } | null
 }
 
 export type PoReviewListParams = {
@@ -285,3 +287,18 @@ export function recheckReview() {
     `${PO_REVIEW_ENDPOINT}/recheck`, { method: 'POST' },
   )
 }
+
+/* Rejected POs (2026-11-03): why it was rejected, and reopen it for review (POST_FG po-review-reopen.service). */
+export type RejectionDetail = {
+  uploadId: string; poNumber: string | null; channel: string | null; status: string
+  rejection: { from: 'review' | 'approval'; by: string | null; byEmail: string | null; at: string | null; reason: string | null } | null
+  rejectedIssues: { type: string; lineNo: number | null; field: string | null; details: string | null; values: Record<string, unknown> | null }[]
+  reviewerFixes: {
+    location: { from: string | null; to: string | null } | null
+    lines: { lineNo: string; channelSku: string | null; description: string | null; changes: { field: string; from: unknown; to: unknown }[] }[]
+  } | null
+  reopens: { at: string; by: string | null; remark: string; rejectedReason: string | null }[]
+}
+export const getRejection = (uploadId: string, signal?: AbortSignal) => api<RejectionDetail>(`${one(uploadId)}/rejection`, { signal })
+export const reopenPo = (uploadId: string, remark: string) =>
+  api<{ status: string; openIssues: number }>(`${one(uploadId)}/reopen`, { method: 'POST', body: JSON.stringify({ remark }) })
