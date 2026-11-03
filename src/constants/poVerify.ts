@@ -15,6 +15,12 @@ export const VERIFY_REMARK_MAX = 500
 
 export const VERIFY_TEXT = {
   // A PO priced before GST (Purplle, 2026-11-03): its own value is without GST, the sale order's with GST
+  // Myntra STRs (2026-11-03): our rate + GST are used, the channel's own price is information only
+  OUR_PRICE: 'Our price used (master margin + our GST)',
+  OUR_PRICE_HINT: "The sale order uses our rate. What the channel's PO says is shown for information only; it is not checked and not used.",
+  CHANNEL_SAYS: 'Channel PO says (with GST)',
+  WE_USED: 'We used (sale order)',
+  CHANNEL_RATE: (v: string, gst: number | null | undefined) => `Channel PO: ${v}${gst != null ? ` (GST ${gst}%)` : ''}; not used`,
   BEFORE_GST: 'This PO is priced before GST',
   BEFORE_GST_HINT: 'The PO value and net amount above are before GST. The sale order is with GST: compare it with the PO value with GST.',
   PO_BEFORE_GST: 'PO says (before GST)',

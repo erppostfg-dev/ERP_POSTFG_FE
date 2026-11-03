@@ -179,6 +179,16 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
                     <>
                       <p className="text-[12px] text-ink-600">{VERIFY_TEXT.CLICK_HINT}</p>
                       <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{VERIFY_TEXT.HEADER}</div>
+                      {data.totals.channelPrice && (
+                        <div className="rounded-[var(--radius)] border border-info/30 bg-info-soft px-3 py-2 text-[12.5px] text-ink-900">
+                          <div className="font-semibold text-info">{VERIFY_TEXT.OUR_PRICE}</div>
+                          <div className="text-ink-600">{VERIFY_TEXT.OUR_PRICE_HINT}</div>
+                          <div className="mt-1 grid grid-cols-2 gap-x-4">
+                            <span>{VERIFY_TEXT.WE_USED}: <b className="tnum">{money(data.totals.saved.value)}</b></span>
+                            <span>{VERIFY_TEXT.CHANNEL_SAYS}: <b className="tnum">{money(data.totals.channelPrice.value)}</b></span>
+                          </div>
+                        </div>
+                      )}
                       {beforeGst && (
                         <div className="rounded-[var(--radius)] border border-info/30 bg-info-soft px-3 py-2 text-[12.5px] text-ink-900">
                           <div className="font-semibold text-info">{VERIFY_TEXT.BEFORE_GST}</div>
@@ -265,7 +275,7 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
                                   {l.name && <div className="max-w-[220px] truncate text-[11px] text-ink-600" title={l.name}>{l.name}</div>}
                                 </td>
                                 <td className={`${td} tnum text-right ${diff(l.qtyDiffers)}`} title={l.qtyDiffers ? VERIFY_TEXT.QTY_DIFF : undefined}>{num(l.po?.qty)} → {num(l.qty)}</td>
-                                <td className={`${td} tnum text-right ${diff(l.rateDiffers)}`} title={l.rateDiffers ? VERIFY_TEXT.RATE_DIFF : l.po?.rateBeforeGst != null ? VERIFY_TEXT.RATE_BEFORE_GST(money(l.po.rateBeforeGst)) : undefined}>{money(l.po?.rate)} → {money(l.rate)}</td>
+                                <td className={`${td} tnum text-right ${diff(l.rateDiffers)}`} title={l.rateDiffers ? VERIFY_TEXT.RATE_DIFF : l.po?.channelPrice != null ? VERIFY_TEXT.CHANNEL_RATE(money(l.po.channelPrice), l.po.channelGst) : l.po?.rateBeforeGst != null ? VERIFY_TEXT.RATE_BEFORE_GST(money(l.po.rateBeforeGst)) : undefined}>{money(l.po?.rate)} → {money(l.rate)}</td>
                                 <td className={`${td} tnum text-right`}>{money(l.value)}</td>
                               </tr>
                             ))}

@@ -14,7 +14,7 @@ export interface VerifyLine {
   rate: number
   value: number
   /** rate = the PO's unit price with GST; rateBeforeGst = its unit cost when the PO is priced before GST (Purplle). */
-  po: { description: string; qty: number; rate: number | null; rateBeforeGst?: number | null; mrp: number | null; channelSkuCode: string } | null
+  po: { description: string; qty: number; rate: number | null; rateBeforeGst?: number | null; /** Myntra STRs: the channel's own price + GST %, information only. */ channelPrice?: number | null; channelGst?: number | null; mrp: number | null; channelSkuCode: string } | null
   qtyDiffers: boolean
   rateDiffers: boolean
 }
@@ -38,6 +38,8 @@ export interface VerifyDetail {
   totals: {
     po: { lines: number; units: number; value: number; valueBasis?: 'with_gst' | 'before_gst'; valueWithGst?: number | null }
     saved: { lines: number; units: number; value: number }
+    /** A channel whose own price is not used (Myntra STRs): what its PO says, for information. */
+    channelPrice?: { value: number | null; note: string } | null
   }
   /** processed.json as the OCR / API made it. */
   processed: Record<string, unknown> & { line_items: Record<string, unknown>[] }

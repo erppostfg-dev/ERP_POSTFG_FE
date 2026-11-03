@@ -55,7 +55,7 @@ export const PULLS_TEXT = {
   // Myntra STRs (2026-11-03): the robot starts with the "Request to Raise STRs" email; CSV + processed.json kept in S3
   STARTED_BY_EMAIL: 'Starts by itself when a "Request to Raise STRs" email comes; Run robot now tries the waiting STRs again',
   STARTS_WITH: 'Starts with',
-  NO_PROCESSING: 'STRs are stored in S3 (CSV + processed.json); making POs / sale orders from them comes next',
+  NO_PROCESSING: 'STRs are stored in S3 (CSV + processed.json); making POs from them is switched off',
   STR_RUN_RESULT: (listed: number, stored: number, failed: number) => `${listed} STR(s) · ${stored} stored in S3${failed ? ` · ${failed} not yet (tried again)` : ''}`,
   STR_COUNTS: (c: { fetched: number; waiting: number; stored?: number; failed?: number }) => `${c.fetched} STR(s) · ${c.stored ?? 0} stored in S3 · ${c.waiting} waiting${c.failed ? ` · ${c.failed} failed` : ''}`,
   RECENT_STRS: 'Recent STRs',

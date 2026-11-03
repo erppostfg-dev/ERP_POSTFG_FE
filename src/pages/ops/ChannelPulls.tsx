@@ -49,7 +49,7 @@ function PoCell({ item }: { item: PullItem }) {
     const s = UPLOAD_STATE[item.upload.status] ?? { label: item.upload.status, tone: 'neutral' as const }
     return <Badge tone={s.tone}>{s.label}</Badge>
   }
-  if (!item.status) return <span className="text-[12px] text-ink-400">waiting for Flipkart's details</span>
+  if (!item.status) return <span className="text-[12px] text-ink-400">{item.label?.startsWith('STN') ? '—' : "waiting for Flipkart's details"}</span>
   return <span className="text-[12px] text-ink-400">{item.takenAt ? '—' : 'not taken yet'}</span>
 }
 
@@ -206,7 +206,7 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
           <div className="rounded-md border border-dashed border-line px-4 py-6 text-center text-[12.5px] text-ink-400">{byEmail ? T.NO_STRS : T.NO_ITEMS}</div>
         ) : byEmail ? (
           <DataGrid cols={STR_COLS} rows={(items.data ?? []).map(toStrRow)} rowKey={(row) => row.id} pageSize={10}
-            trailing={[{ label: 'State', render: (row) => <StrStateCell item={row.raw} /> }]} />
+            trailing={[{ label: 'State', render: (row) => <StrStateCell item={row.raw} /> }, { label: 'PO', render: (row) => <PoCell item={row.raw} /> }]} />
         ) : (
           <DataGrid cols={COLS} rows={(items.data ?? []).map(toRow)} rowKey={(row) => row.id} pageSize={10}
             trailing={[{ label: 'PO', render: (row) => <PoCell item={row.raw} /> }]} />
