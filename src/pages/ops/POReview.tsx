@@ -106,8 +106,8 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
   const defs: FilterDef[] = [
     { key: 'channel', label: 'Channel', type: 'multi', options: channelOptions },
     // PO Date range (user, 2026-11-02; next to the Newest / Oldest header sort)
-    { key: 'poDateFrom', label: LIST_FILTER.PO_DATE_FROM, type: 'date' },
-    { key: 'poDateTo', label: LIST_FILTER.PO_DATE_TO, type: 'date' },
+    // one from - to field (user, 2026-11-03); values stay poDateFrom / poDateTo
+    { key: 'poDate', label: LIST_FILTER.PO_DATE, type: 'dateRange', fromKey: 'poDateFrom', toKey: 'poDateTo' },
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows.map((r) => r.source)) },
     { key: 'issue', label: 'Issue', type: 'multi', options: distinct(rows.flatMap((r) => r.issueTypes.map(label))) },
     { key: SORT_FILTER_KEY, label: LIST_FILTER.SORT, type: 'sort', options: [{ value: LIST_SORT.CHANNEL, label: LIST_FILTER.SORT_CHANNEL }], placeholder: LIST_FILTER.SORT_DEFAULT_REVIEW },

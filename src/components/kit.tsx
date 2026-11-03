@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowDown, ArrowUp, ArrowUpDown, Calendar, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, Filter, History, MoreHorizontal, Pencil, Search, Upload, X } from 'lucide-react'
 import { Badge, BulkUpload, downloadCsv } from './ui'
-import { DatePicker, Pop, SelectBox, usePopover } from './pickers'
+import { DatePicker, DateRangePicker, Pop, SelectBox, usePopover } from './pickers'
 import { fmtDate, statusTone, type ColKind } from '../lib/ops'
 import { NOT_IN_DB } from '../constants/masters'
 import { copyText } from '../lib/clipboard'
@@ -91,6 +91,8 @@ export function PrimaryBtn({ children, onClick, icon }: { children: ReactNode; o
 // ---- Filters ------------------------------------------------------------
 export type FilterDef =
   | { key: string; label: string; type: 'date' }
+  /** One from - to field (2026-11-03): the values stay under fromKey / toKey (applyFilters' <field>From / <field>To). */
+  | { key: string; label: string; type: 'dateRange'; fromKey: string; toKey: string }
   | { key: string; label: string; type: 'multi'; options: readonly string[]; placeholder?: string }
   | { key: string; label: string; type: 'text'; placeholder?: string }
   /**
@@ -103,7 +105,9 @@ export type FilterValues = Record<string, string | string[]>
 /** A multi-select gets a search box when it has more options than this. */
 const MULTI_SEARCH_FROM = 6
 
-export const countActive = (v: FilterValues) => Object.values(v).filter((x) => (Array.isArray(x) ? x.length : x)).length
+/** Filters in use; a from / to pair (<field>From, <field>To) counts once (one date range field, 2026-11-03). */
+export const countActive = (v: FilterValues) =>
+  new Set(Object.entries(v).filter(([, x]) => (Array.isArray(x) ? x.length : x)).map(([k]) => k.replace(/(From|To)$/, ''))).size
 
 export function MultiSelect({ value, onChange, options, placeholder }: { value: string[]; onChange: (v: string[]) => void; options: readonly string[]; placeholder: string }) {
   // Our popover: opens / closes with the same animation as the other pickers (components/pickers.tsx).
@@ -180,6 +184,9 @@ export function FilterPanel({ defs, value, onApply, onClose }: { defs: FilterDef
               <MultiSelect value={(draft[d.key] as string[]) ?? []} onChange={(v) => set(d.key, v)} options={d.options} placeholder={d.placeholder ?? `Select ${d.label.toLowerCase()}`} />
             ) : d.type === 'date' ? (
               <DateInput value={(draft[d.key] as string) ?? ''} onChange={(v) => set(d.key, v)} className={draft[d.key] ? '' : 'text-ink-400'} />
+            ) : d.type === 'dateRange' ? (
+              <DateRangePicker from={(draft[d.fromKey] as string) ?? ''} to={(draft[d.toKey] as string) ?? ''}
+                onChange={(f, t) => setDraft((x) => ({ ...x, [d.fromKey]: f, [d.toKey]: t }))} />
             ) : d.type === 'sort' ? (
               <SelectBox value={d.options.find((o) => o.value === draft[d.key])?.label ?? ''} options={d.options.map((o) => o.label)}
                 onChange={(l) => set(d.key, d.options.find((o) => o.label === l)?.value ?? '')} placeholder={d.placeholder ?? '—'} />
@@ -753,6 +760,12 @@ export function ColumnSort({ filters, setFilters, field, title }: { filters: Fil
 export function FilterChips({ defs, value, onChange }: { defs: FilterDef[]; value: FilterValues; onChange: (v: FilterValues) => void }) {
   const chips: { key: string; label: string; text: string; remove: () => void }[] = []
   for (const d of defs) {
+    if (d.type === 'dateRange') {
+      const f = (value[d.fromKey] as string) || ''
+      const t = (value[d.toKey] as string) || ''
+      if (f || t) chips.push({ key: d.key, label: d.label, text: `${f ? fmtDate(f) : '…'} → ${t ? fmtDate(t) : '…'}`, remove: () => onChange({ ...value, [d.fromKey]: '', [d.toKey]: '' }) })
+      continue
+    }
     const v = value[d.key]
     if (Array.isArray(v)) {
       for (const one of v) chips.push({ key: `${d.key}|${one}`, label: d.label, text: one, remove: () => onChange({ ...value, [d.key]: v.filter((x) => x !== one) }) })

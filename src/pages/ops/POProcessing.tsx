@@ -223,8 +223,8 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
     { key: DATE_SORT_KEY, label: LIST_FILTER.DATE_SORT, type: 'sort', options: LIST_FILTER.DATE_SORT_OPTIONS, inPanel: false },
     { key: 'channel', label: 'Channel', type: 'multi', options: channelOptions },
     // PO Date range (user, 2026-11-02; next to the Newest / Oldest header sort)
-    { key: 'poDateFrom', label: LIST_FILTER.PO_DATE_FROM, type: 'date' },
-    { key: 'poDateTo', label: LIST_FILTER.PO_DATE_TO, type: 'date' },
+    // one from - to field (user, 2026-11-03); values stay poDateFrom / poDateTo
+    { key: 'poDate', label: LIST_FILTER.PO_DATE, type: 'dateRange', fromKey: 'poDateFrom', toKey: 'poDateTo' },
     { key: 'brand', label: 'Brand', type: 'multi', options: distinct(rows, 'brand') },
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows, 'source') },
     { key: 'uniware', label: 'Uniware', type: 'multi', options: Object.values(UNIWARE_STATE_LABEL) },

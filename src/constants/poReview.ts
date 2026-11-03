@@ -61,10 +61,8 @@ export const PROCESSED_FILTER = {
  * the list's own, inside each channel).
  */
 export const LIST_FILTER = {
+  /** The PO Date column, and its one from - to range field in the Filters panel (Processed + In Review, 2026-11-03). */
   PO_DATE: 'PO Date',
-  /** PO Date range in the Filters panel (user, 2026-11-02; Processed + In Review). */
-  PO_DATE_FROM: 'PO Date from',
-  PO_DATE_TO: 'PO Date to',
   PROCESSED_AT: 'Processed At',
   SORT: 'Sort by',
   SORT_CHANNEL: 'Channel (grouped, A–Z)',
