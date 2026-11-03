@@ -302,3 +302,15 @@ export type RejectionDetail = {
 export const getRejection = (uploadId: string, signal?: AbortSignal) => api<RejectionDetail>(`${one(uploadId)}/rejection`, { signal })
 export const reopenPo = (uploadId: string, remark: string) =>
   api<{ status: string; openIssues: number }>(`${one(uploadId)}/reopen`, { method: 'POST', body: JSON.stringify({ remark }) })
+
+/* POST /po-review/review-line-items (2026-11-03): lines of POs in review (as read) with each line's open issues. */
+export type ReviewIssueText = { type: string; details: string | null }
+export type ReviewLineItemRow = {
+  uploadId: string; poNumber: string | null; poDate: string | null; channel: string | null; receivedAt: string | null
+  lineNo: Num | null; channelSkuCode: string | null; ean: string | null; description: string | null; hsn: string | null
+  qty: Num | null; freeQty: Num | null; channelMrp: Num | null; landingRate: Num | null; unitCost: Num | null; gstPercent: Num | null; lineTotal: Num | null
+  issues: ReviewIssueText[]; poIssues: ReviewIssueText[]; s3Missing: boolean
+}
+export function getReviewLineItems(uploadIds: string[]) {
+  return api<ReviewLineItemRow[]>(LINE_ITEMS.REVIEW_ENDPOINT, { method: 'POST', body: JSON.stringify({ uploadIds }) })
+}

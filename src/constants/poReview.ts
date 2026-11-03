@@ -334,7 +334,11 @@ export const UNIWARE_TEXT = {
 
 /* ---- Line items download on the Processed tab (2026-10-26): every line of the ticked POs as CSV or Excel ---- */
 /** POST_FG LINE_ITEMS: route + most POs per download (keeps it under ~2 s). */
-export const LINE_ITEMS = { ENDPOINT: `${PO_REVIEW_ENDPOINT}/line-items`, MAX: 100, FILE: 'po_line_items', SHEET: 'Line items' } as const
+export const LINE_ITEMS = {
+  ENDPOINT: `${PO_REVIEW_ENDPOINT}/line-items`, MAX: 100, FILE: 'po_line_items', SHEET: 'Line items',
+  /** In Review (2026-11-03): lines as read + their open issues. */
+  REVIEW_ENDPOINT: `${PO_REVIEW_ENDPOINT}/review-line-items`, REVIEW_FILE: 'in_review_line_items', REVIEW_POS_FILE: 'in_review_pos',
+} as const
 
 export const LINE_ITEMS_TEXT = {
   /** The one Download button: its main click = the POs (the table) as Excel; line items under the arrow (user, 2026-10-26). */

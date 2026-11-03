@@ -3,16 +3,18 @@ import type { ComponentType } from 'react'
 import { useChannelOptions } from '../../lib/channels'
 import { AlertTriangle, Check, ExternalLink, Link2, Mail, RefreshCw, X } from 'lucide-react'
 import { Badge, Button } from '../../components/ui'
-import { DataGrid, DownloadMenu, FilterChips, FilterPanel, ColumnSort, SectionToolbar, applyFilters, exportRows, exportRowsExcel, inputCls, useSection, type FilterDef } from '../../components/kit'
+import { DataGrid, DownloadMenu, FilterChips, FilterPanel, ColumnSort, SectionToolbar, applyFilters, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
 import type { ColKind } from '../../lib/ops'
 import {
   getPoFile, getPoReview, listPoReview, recheckReview, rejectPo, submitPo,
   type LineCorrection, type Num, type PoReviewDetail, type PoReviewIssue, type PoReviewItem, type PoReviewLine, type ResubmitBody, type StillOpen,
-} from '../../api/poReview'
+getReviewLineItems, } from '../../api/poReview'
 import { ApiError } from '../../api/client'
+import { downloadExcel } from '../../lib/excelExport'
+import { downloadReviewLineItems } from '../../lib/lineItemsExport'
 import {
-  ENDED_TEXT, ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED, PRICE_ISSUES,
+  ENDED_TEXT, LINE_ITEMS, ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED, PRICE_ISSUES,
 } from '../../constants/poReview'
 import { PRICE_CHECK_TEXT, PRICE_CHOICE, TOTAL_TOLERANCE, type PriceChoice } from '../../constants/priceDifferences'
 import { PriceCheck, type PriceRow } from './PriceCheck'
@@ -41,6 +43,8 @@ type ReviewRow = {
   processedIso: string
   /** Reopened after a rejection (2026-11-03): tag + the earlier rejection reason on hover. */
   reopened: PoReviewItem['reopened']
+  /** The issue types as text, for the download's Issues column (2026-11-03). */
+  issuesText: string
 }
 
 const RCOLS: [string, keyof ReviewRow, ColKind][] = [
@@ -51,11 +55,15 @@ const RCOLS: [string, keyof ReviewRow, ColKind][] = [
   ['Lines', 'lines', 'num'], ['Value', 'value', 'money'],
 ]
 
+/** The table download: the columns on screen + Source, File, open issues and the Issues column (red in Excel) last. */
+const REXPORT: [string, keyof ReviewRow, ColKind][] = [...RCOLS, ['Source', 'source', 'text'], ['File', 'file', 'text'], ['Open issues', 'openIssues', 'num'], ['Issues', 'issuesText', 'text']]
+
 const toRow = (r: PoReviewItem): ReviewRow => ({
   id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', poDate: r.poDate ?? '', processedAt: istDateTime(r.processedAt), lines: r.lines, value: r.poValue,
   openIssues: r.openIssues, issueTypes: r.issueTypes, source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, subject: r.subject,
   processedIso: r.processedAt ?? '',
   reopened: r.reopened ?? null,
+  issuesText: [...(r.reopened ? [ENDED_TEXT.TAG] : []), ...r.issueTypes.map((t) => ISSUE_LABELS[t] ?? t)].join(' | '),
 })
 
 const distinct = (values: string[]) => [...new Set(values.filter(Boolean))].sort()
@@ -130,6 +138,26 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
       .finally(() => setRechecking(false))
   }
 
+  // Downloads (2026-11-03): the ticked POs, else every PO shown; the table with its issues, or their line items.
+  const forDownload = picked.length ? picked : shown
+  const tooManyLines = forDownload.length > LINE_ITEMS.MAX
+  const [linesBusy, setLinesBusy] = useState(false)
+  const downloadPosExcel = () =>
+    downloadExcel(LINE_ITEMS.REVIEW_POS_FILE, [{
+      name: 'In review', header: REXPORT.map((c) => c[0]), redCols: [REXPORT.length - 1],
+      rows: forDownload.map((r) => REXPORT.map(([, k, kind]) => { const v = r[k]; return v === null || v === undefined ? '' : (kind === 'num' || kind === 'money') && typeof v === 'number' ? v : typeof v === 'string' ? v : JSON.stringify(v) })),
+    }])
+  const downloadLines = async (as: 'excel' | 'csv') => {
+    setLinesBusy(true)
+    try {
+      await downloadReviewLineItems(await getReviewLineItems(forDownload.map((r) => r.id)), as)
+    } catch (e) {
+      setNotice(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setLinesBusy(false)
+    }
+  }
+
   // Created or rejected: the PO leaves this list (and the list is read again, someone else may have acted too).
   const done = (message: string) => {
     setSel(null)
@@ -147,11 +175,14 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
       )}
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search PO number, ingest ID, channel, file…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
         entity="In-review POs" onExport={(e) => exportRows('in_review', e, RCOLS, picked.length ? picked : shown)}
-        // One Download button (2026-10-26): Excel by default, CSV under the arrow.
+        // One Download button like Processed (2026-11-03): the POs (with an Issues column) by default; under the arrow
+        // CSV, and the line items of these POs with each line's issues (the Issues columns red in Excel).
         exportMenu={
-          <DownloadMenu label={LINE_ITEMS_TEXT.TABLE_BUTTON} title={LINE_ITEMS_TEXT.TABLE_ONLY_HINT} items={[
-            { group: LINE_ITEMS_TEXT.GROUP_TABLE((picked.length ? picked : shown).length, picked.length > 0), label: LINE_ITEMS_TEXT.EXCEL, onClick: () => void exportRowsExcel('in_review', RCOLS, picked.length ? picked : shown) },
-            { group: LINE_ITEMS_TEXT.GROUP_TABLE((picked.length ? picked : shown).length, picked.length > 0), label: LINE_ITEMS_TEXT.CSV, onClick: () => exportRows('in_review', 'csv', RCOLS, picked.length ? picked : shown) },
+          <DownloadMenu busy={linesBusy} label={LINE_ITEMS_TEXT.POS_BUTTON(forDownload.length)} title={LINE_ITEMS_TEXT.POS_HINT} items={[
+            { group: LINE_ITEMS_TEXT.GROUP_TABLE(forDownload.length, picked.length > 0), label: LINE_ITEMS_TEXT.EXCEL, onClick: () => void downloadPosExcel(), disabled: !forDownload.length },
+            { group: LINE_ITEMS_TEXT.GROUP_TABLE(forDownload.length, picked.length > 0), label: LINE_ITEMS_TEXT.CSV, onClick: () => exportRows(LINE_ITEMS.REVIEW_POS_FILE, 'csv', REXPORT, forDownload), disabled: !forDownload.length },
+            { group: LINE_ITEMS_TEXT.GROUP_LINES(forDownload.length, picked.length > 0), label: LINE_ITEMS_TEXT.EXCEL, onClick: () => void downloadLines('excel'), disabled: !forDownload.length || tooManyLines, hint: tooManyLines ? LINE_ITEMS_TEXT.TOO_MANY(LINE_ITEMS.MAX, forDownload.length, picked.length > 0) : undefined },
+            { group: LINE_ITEMS_TEXT.GROUP_LINES(forDownload.length, picked.length > 0), label: LINE_ITEMS_TEXT.CSV, onClick: () => void downloadLines('csv'), disabled: !forDownload.length || tooManyLines, hint: tooManyLines ? LINE_ITEMS_TEXT.TOO_MANY(LINE_ITEMS.MAX, forDownload.length, picked.length > 0) : undefined },
           ]} />
         }
         selectedCount={picked.length} onClearSelection={() => setSelected(new Set())}
