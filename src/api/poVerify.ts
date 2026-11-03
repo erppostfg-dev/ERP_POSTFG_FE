@@ -1,5 +1,5 @@
 import { api } from './client'
-import { PO_VERIFY_ENDPOINT, PO_VERIFY_SETTINGS_ENDPOINT, type VerifyState } from '../constants/poVerify'
+import { PO_VERIFY_ENDPOINT, PO_VERIFY_SETTINGS_ENDPOINT, VERIFY_STATES_BATCH, type VerifyState } from '../constants/poVerify'
 
 /* PO verification before Uniware (2026-10-22): backend routes/po-verify.routes.ts. */
 
@@ -41,8 +41,13 @@ export interface VerifyDetail {
 const one = (uploadId: string) => `${PO_VERIFY_ENDPOINT}/${encodeURIComponent(uploadId)}`
 
 /* GET /po-verify?uploadIds=…: Verified / To verify per PO, and whether the check is switched on. */
-export function getVerifyStates(uploadIds: string[], signal?: AbortSignal) {
-  return api<{ required: boolean; items: VerifyStateItem[] }>(`${PO_VERIFY_ENDPOINT}?uploadIds=${uploadIds.map(encodeURIComponent).join(',')}`, { signal })
+/** States of any number of POs: asked in batches of VERIFY_STATES_BATCH (the server takes at most 500 per call), merged. */
+export async function getVerifyStates(uploadIds: string[], signal?: AbortSignal) {
+  const batches: string[][] = []
+  for (let i = 0; i < uploadIds.length; i += VERIFY_STATES_BATCH) batches.push(uploadIds.slice(i, i + VERIFY_STATES_BATCH))
+  const parts = await Promise.all(batches.map((ids) =>
+    api<{ required: boolean; items: VerifyStateItem[] }>(`${PO_VERIFY_ENDPOINT}?uploadIds=${ids.map(encodeURIComponent).join(',')}`, { signal })))
+  return { required: parts.some((p) => p.required), items: parts.flatMap((p) => p.items) }
 }
 
 export function getVerifyDetail(uploadId: string, signal?: AbortSignal) {

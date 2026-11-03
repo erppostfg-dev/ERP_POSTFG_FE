@@ -121,6 +121,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   const [baseRows, setRows] = useState<ProcessedRow[]>([])
   // Verification (2026-10-22): states of the loaded POs; `required` false = the check is switched off on the server.
   const [verify, setVerify] = useState<{ required: boolean; items: Map<string, VerifyStateItem> }>({ required: false, items: new Map() })
+  const [verifyError, setVerifyError] = useState('')
   const [verifyOpen, setVerifyOpen] = useState<string | null>(null)
   const [state, setState] = useState<{ loading: boolean; error?: string }>({ loading: true })
   const [reload, setReload] = useState(0)
@@ -156,8 +157,10 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
     if (!baseRows.length) return
     const ctrl = new AbortController()
     getVerifyStates(baseRows.map((r) => r.id), ctrl.signal)
-      .then((v) => setVerify({ required: v.required, items: new Map(v.items.map((i) => [i.uploadId, i])) }))
-      .catch(() => { /* the column shows nothing; the server still locks unverified CSVs */ })
+      .then((v) => { setVerifyError(''); setVerify({ required: v.required, items: new Map(v.items.map((i) => [i.uploadId, i])) }) })
+      // shown, not swallowed (2026-11-03: a refused call hid the Check column without a word); the server still locks
+      // unverified CSVs either way
+      .catch((e: unknown) => { if (!ctrl.signal.aborted) setVerifyError(e instanceof ApiError ? e.message : String(e)) })
     return () => ctrl.abort()
   }, [baseRows])
   const rows = useMemo(() => baseRows.map((r) => {
@@ -280,6 +283,11 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   const box = 'rounded-[var(--radius)] border border-line bg-surface px-4 py-10 text-center text-[13px] text-ink-600'
   return (
     <div className="space-y-3">
+      {verifyError && (
+        <div className="flex items-start gap-2 rounded-[var(--radius)] bg-warn-soft px-3 py-2 text-[12.5px] text-warn">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />{VERIFY_TEXT.STATES_FAILED(verifyError)}
+        </div>
+      )}
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search PO number, ingest ID, file, sale order…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
         entity="Processed POs" onExport={(e) => exportRows('processed_pos', e, PEXPORT, tableRows)}
         exportMenu={
