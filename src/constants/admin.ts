@@ -8,6 +8,9 @@ export const ADMIN_ENDPOINT = {
   ROLES: '/admin/roles',
   ROLE_PAGES: '/admin/roles/pages',
   ROLE: (key: string) => `/admin/roles/${encodeURIComponent(key)}`,
+  // Server: disk + local cleanup (2026-11-04; developers only)
+  SERVER: '/admin/server',
+  SERVER_CLEANUP: '/admin/server/cleanup',
   // Users & Roles -> Email (2026-10-30; POST_FG routes/mail-lists.routes.ts)
   MAIL_LISTS: '/admin/mail-lists',
   MAIL_LIST: (key: string) => `/admin/mail-lists/${encodeURIComponent(key)}`,
@@ -16,6 +19,9 @@ export const ADMIN_ENDPOINT = {
   MAIL_HISTORY: (key: string) => `/admin/mail-lists/${encodeURIComponent(key)}/history`,
   MAIL_TEST: (key: string) => `/admin/mail-lists/${encodeURIComponent(key)}/test`,
 } as const
+
+/** Only this role sees Admin > Server (2026-11-04; POST_FG ROLES.DEVELOPER). */
+export const DEVELOPER_ROLE = 'developer'
 
 export const ACCESS_LABEL: Record<string, string> = { none: 'Hidden', viewer: 'View', editor: 'Edit' }
 export const ACCESS_LEVELS = ['none', 'viewer', 'editor'] as const
@@ -62,3 +68,32 @@ export const SETTINGS_SECTIONS = [
   { key: 'review-rules', label: 'PO review rules', hint: 'Dummy: tolerances and approval', dummy: true },
 ] as const
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]['key']
+
+/** Admin > Server (2026-11-04; developers only): disk + local cleanup. */
+export const SERVER_TEXT = {
+  TAB: 'Server',
+  SUB: 'The server disk where POs are worked on, and the cleanup that removes local copies once they are safe in S3 (S3 keeps everything). Developers only.',
+  DISK: 'Server disk',
+  USED: 'used',
+  FREE: (free: string, total: string) => `${free} free of ${total}`,
+  THRESHOLDS: (warn: number, err: number) => `Checked every hour: a warning in the server log at ${warn}% used, an error at ${err}%.`,
+  NO_DISK: 'The server could not read its disk size.',
+  CLEANUP: 'Local cleanup',
+  ON: 'Switched on',
+  OFF: 'Switched off',
+  NO_S3: 'S3 off: nothing is removed',
+  OFF_HINT: 'LOCAL_CLEANUP_ENABLED is not true on this server: nothing is removed by itself and the disk keeps filling. Set it to true in the server settings (SSM) and restart, or run it here now.',
+  RULE_FINISHED: (h: number) => `Finished POs (completed / rejected / not a PO): their local copy goes ${h} h after they finished.`,
+  RULE_STALE: (d: number) => `Failed (or dismissed), in review or waiting for approval for ${d} days: the local copy goes too (review, approval and Try again read S3).`,
+  RULE_S3: 'Never removed unless every file is confirmed in S3 (else it is uploaded again and removed on a later run).',
+  RULE_EVERY: (h: number) => `Runs every ${h} h by itself when switched on.`,
+  LAST_RUN: 'Last run',
+  NEVER: 'Not run yet on this server.',
+  REMOVED: (n: number, size: string) => `removed ${n} folder(s), ${size}`,
+  WOULD_REMOVE: (n: number, size: string) => `check only: would remove ${n} folder(s), ${size}`,
+  KEPT: (n: number, size: string) => `kept ${n} (${size})`,
+  CHECK: 'Check now (removes nothing)',
+  CHECKING: 'Checking…',
+  RUN: 'Run cleanup now',
+  RUNNING: 'Cleaning…',
+} as const

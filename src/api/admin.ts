@@ -65,3 +65,13 @@ export const updateMailRecipient = (key: string, id: number, body: { kind?: Reci
 export const removeMailRecipient = (key: string, id: number) => api<MailList>(ADMIN_ENDPOINT.MAIL_RECIPIENT(key, id), { method: 'DELETE' })
 export const getMailListHistory = (key: string, signal?: AbortSignal) => api<MailListChange[]>(ADMIN_ENDPOINT.MAIL_HISTORY(key), { signal })
 export const sendMailListTest = (key: string, onlyMe: boolean) => api<MailTestResult>(ADMIN_ENDPOINT.MAIL_TEST(key), json('POST', { onlyMe }))
+
+/* Admin > Server (2026-11-04; developers only): GET /admin/server, POST /admin/server/cleanup { apply }. */
+export type CleanupRun = { at: string; apply: boolean; folders: number; removed: number; removedBytes: number; keptBytes: number; kept: { reason: string; n: number }[] }
+export type ServerView = {
+  disk: { path: string; totalBytes: number; freeBytes: number; usedPct: number; at: string } | null
+  thresholds: { warnPct: number; errorPct: number }
+  cleanup: { enabled: boolean; s3: boolean; minAgeHours: number; staleDays: number; everyHours: number; last: CleanupRun | null }
+}
+export const getServer = (signal?: AbortSignal) => api<ServerView>(ADMIN_ENDPOINT.SERVER, { signal })
+export const runServerCleanup = (apply: boolean) => api<ServerView & { run: CleanupRun | null }>(ADMIN_ENDPOINT.SERVER_CLEANUP, json('POST', { apply }))
