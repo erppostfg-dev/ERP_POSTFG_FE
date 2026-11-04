@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Bot, Check, Cloud, Loader2, Play, RefreshCw, ScrollText, X as XIcon } from 'lucide-react'
+import { AlertTriangle, Bot, Check, Cloud, Download, Loader2, Play, RefreshCw, ScrollText, X as XIcon } from 'lucide-react'
 import { Badge, Button, Drawer } from '../../components/ui'
-import { DataGrid } from '../../components/kit'
+import { DataGrid, exportRowsExcel } from '../../components/kit'
 import { ApiError } from '../../api/client'
 import { getRobotRun, listChannelPulls, listPullItems, processPull, pullsKey, runRobot, setRobotSchedule, type ChannelPull, type PullItem } from '../../api/channelPulls'
 import { PULLS_REFRESH_BUSY_MS, PULLS_REFRESH_IDLE_MS, PULLS_TEXT as T, ROBOT_SCHEDULE_HOURS, UPLOAD_STATE } from '../../constants/channelPulls'
@@ -24,6 +24,17 @@ const COLS: [string, keyof Row, ColKind][] = [
 ]
 const toRow = (i: PullItem): Row => ({
   id: i.externalId, consignment: i.externalId, warehouse: i.warehouse ?? '', created: i.createdOn ?? '', status: i.status ?? '', fetched: istDateTime(i.fetchedAt), po: i.upload?.status ?? '', raw: i,
+})
+
+/** The failed-STR list for the team (2026-11-04): what to download from the portal and upload in Manual Upload. */
+type FailedRow = { str: string; group: string; destination: string; date: string; email: string; emailAt: string; tries: string; reason: string }
+const FAILED_COLS: [string, keyof FailedRow, ColKind][] = [
+  ['STR', 'str', 'mono'], ['Group', 'group', 'text'], ['Destination', 'destination', 'mono'], ['STR date', 'date', 'date'],
+  ['Email', 'email', 'text'], ['Email came', 'emailAt', 'mono'], ['Tries', 'tries', 'num'], ['Why it failed', 'reason', 'text'],
+]
+const toFailedRow = (i: PullItem): FailedRow => ({
+  str: i.externalId, group: (i.label ?? '').split(' · ')[1] ?? '', destination: i.warehouse ?? '', date: i.createdOn ?? '',
+  email: i.email?.subject ?? '', emailAt: i.email?.receivedAt ? istDateTime(i.email.receivedAt) : '', tries: String(i.runs ?? ''), reason: i.error ?? '',
 })
 
 /** Myntra STRs (2026-11-03): STR, its group (NON TC / TC, P0 - P3), destination, the date in its code, when the email came. */
@@ -99,6 +110,14 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
   // Myntra STRs: started by its email, stored in S3 only (no POs yet)
   const byEmail = r?.startedBy === 'email'
   const processes = p.processes !== false
+  // Myntra: All / Failed on the STR table; the failed list (all of them) downloads as Excel for the team
+  const [onlyFailed, setOnlyFailed] = useState(false)
+  const failed = useQuery({
+    queryKey: [...pullsKey, 'items', p.key, 'failed'], queryFn: ({ signal }) => listPullItems(p.key, signal, 'failed'), enabled: byEmail,
+    refetchInterval: busy(p) ? PULLS_REFRESH_BUSY_MS : PULLS_REFRESH_IDLE_MS,
+  })
+  const failedRows = failed.data ?? []
+  const shownItems = byEmail && onlyFailed ? failedRows : (items.data ?? [])
   return (
     <section className="space-y-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
       <div className="flex flex-wrap items-start gap-3">
@@ -201,11 +220,23 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
         )}
       </dl>
 
+      {byEmail && (
+        <div className="flex flex-wrap items-center gap-2">
+          {([[false, T.SHOW_ALL], [true, T.SHOW_FAILED(failedRows.length)]] as const).map(([v, label]) => (
+            <button key={String(v)} type="button" onClick={() => setOnlyFailed(v)}
+              className={`rounded-full px-3 py-1 text-[12px] font-semibold ${onlyFailed === v ? (v ? 'bg-crit text-white' : 'bg-primary text-white') : 'bg-alt text-ink-600 hover:text-ink-900'}`}>{label}</button>
+          ))}
+          <span title={T.DOWNLOAD_FAILED_HINT}>
+            <Button disabled={!failedRows.length} icon={<Download className="size-4" />}
+              onClick={() => void exportRowsExcel(T.FAILED_FILE, FAILED_COLS, failedRows.map(toFailedRow))}>{T.DOWNLOAD_FAILED}</Button>
+          </span>
+        </div>
+      )}
       {p.kind === 'robot' && (
-        (items.data ?? []).length === 0 ? (
-          <div className="rounded-md border border-dashed border-line px-4 py-6 text-center text-[12.5px] text-ink-400">{byEmail ? T.NO_STRS : T.NO_ITEMS}</div>
+        shownItems.length === 0 ? (
+          <div className="rounded-md border border-dashed border-line px-4 py-6 text-center text-[12.5px] text-ink-400">{byEmail ? (onlyFailed ? T.NO_FAILED : T.NO_STRS) : T.NO_ITEMS}</div>
         ) : byEmail ? (
-          <DataGrid cols={STR_COLS} rows={(items.data ?? []).map(toStrRow)} rowKey={(row) => row.id} pageSize={10}
+          <DataGrid cols={STR_COLS} rows={shownItems.map(toStrRow)} rowKey={(row) => row.id} pageSize={10}
             trailing={[{ label: 'State', render: (row) => <StrStateCell item={row.raw} /> }, { label: 'PO', render: (row) => <PoCell item={row.raw} /> }]} />
         ) : (
           <DataGrid cols={COLS} rows={(items.data ?? []).map(toRow)} rowKey={(row) => row.id} pageSize={10}

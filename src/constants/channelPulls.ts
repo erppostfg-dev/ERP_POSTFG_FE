@@ -59,6 +59,13 @@ export const PULLS_TEXT = {
   STR_RUN_RESULT: (listed: number, stored: number, failed: number) => `${listed} STR(s) · ${stored} stored in S3${failed ? ` · ${failed} not yet (tried again)` : ''}`,
   STR_COUNTS: (c: { fetched: number; waiting: number; stored?: number; failed?: number }) => `${c.fetched} STR(s) · ${c.stored ?? 0} stored in S3 · ${c.waiting} waiting${c.failed ? ` · ${c.failed} failed` : ''}`,
   RECENT_STRS: 'Recent STRs',
+  // the robot's failed STRs (2026-11-04): the team downloads them from the portal and uploads them in Manual Upload
+  SHOW_ALL: 'All',
+  SHOW_FAILED: (n: number) => `Failed (${n})`,
+  DOWNLOAD_FAILED: 'Download failed STRs',
+  DOWNLOAD_FAILED_HINT: 'Excel list of the STRs the robot could not download: download each from the Myntra portal and upload it in Manual Upload > Myntra STR',
+  NO_FAILED: 'No failed STRs.',
+  FAILED_FILE: 'myntra_failed_strs',
   NO_STRS: 'No STR email yet.',
   STR_STATE: {
     stored: { label: 'Stored in S3', tone: 'ok' },
