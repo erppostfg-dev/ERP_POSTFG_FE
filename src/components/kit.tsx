@@ -701,7 +701,7 @@ export function DateInput({ value, onChange, className = '' }: { value: string; 
  * a sort mark after the column name (blue arrow while it sorts) opens Newest first / Oldest first / Clear. The menu
  * floats over the page (a portal: header cells cut off what is inside them).
  */
-export function HeaderSort({ title, value, onChange }: { title: string; value: DateSortDir | ''; onChange: (v: DateSortDir | '') => void }) {
+function HeaderSort({ title, value, onChange }: { title: string; value: DateSortDir | ''; onChange: (v: DateSortDir | '') => void }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const btn = useRef<HTMLButtonElement>(null)

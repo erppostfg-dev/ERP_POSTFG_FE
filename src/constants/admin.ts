@@ -17,9 +17,6 @@ export const ADMIN_ENDPOINT = {
   MAIL_TEST: (key: string) => `/admin/mail-lists/${encodeURIComponent(key)}/test`,
 } as const
 
-/** Only these roles can open the page's actions (backend USER_ADMIN_ROLES). */
-export const USER_ADMIN_ROLES = ['admin', 'developer'] as const
-
 export const ACCESS_LABEL: Record<string, string> = { none: 'Hidden', viewer: 'View', editor: 'Edit' }
 export const ACCESS_LEVELS = ['none', 'viewer', 'editor'] as const
 

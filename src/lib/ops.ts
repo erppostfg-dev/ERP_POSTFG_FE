@@ -1,5 +1,5 @@
 // Ops + Demand Planning mock data layered on top of data.ts
-import { POS, computeInventory, overallInventory, type PO, type Channel } from './data'
+import { computeInventory, overallInventory, type Channel } from './data'
 
 // ---- deterministic pseudo-random -------------------------------------
 let seed = 7
@@ -19,14 +19,13 @@ const addDays = (iso: string, n: number) => {
 }
 export const TODAY = '2026-10-05'
 
-export const BRANDS = ['mCaffeine', 'Hyphen'] as const
+const BRANDS = ['mCaffeine', 'Hyphen'] as const
 export const FACILITIES = ['MUM_WAREHOUSE2', 'GGN_WAREHOUSE', 'HYP_SRGGN', 'BLR_WAREHOUSE'] as const
 export const CITIES = ['Hyderabad', 'Mumbai', 'Bengaluru', 'Gurgaon', 'Delhi', 'Pune', 'Chennai', 'Kolkata'] as const
 export const OPS_CHANNELS = ['Zepto', 'Blinkit', 'Swiggy', 'BigBasket', 'Amazon', 'Flipkart', 'Myntra', 'Nykaa', 'Firstcry', 'Purplle'] as const
-export const ST_PLANNING = ['Confirmed', 'Hold', 'Partial', 'Cancelled'] as const
+const ST_PLANNING = ['Confirmed', 'Hold', 'Partial', 'Cancelled'] as const
 export const ST_WAREHOUSE = ['Pending', 'Picking', 'Packed', 'RTS', 'Dispatched'] as const
-export const ST_LOGISTICS = ['Not booked', 'Booked', 'In transit', 'Delivered', 'Reattempt'] as const
-export const FINAL_STATUSES = ['Open', 'Working', 'RTS', 'In transit', 'Delivered', 'Closed', 'Cancelled'] as const
+const FINAL_STATUSES = ['Open', 'Working', 'RTS', 'In transit', 'Delivered', 'Closed', 'Cancelled'] as const
 export const TRANSPORTERS = ['Delhivery', 'Blue Dart', 'Safexpress', 'Gati', 'Xpressbees', 'Own Fleet'] as const
 const CHANNEL_TYPE: Record<string, string> = { Zepto: 'Quick-commerce', Blinkit: 'Quick-commerce', Swiggy: 'Quick-commerce', BigBasket: 'Quick-commerce', Amazon: 'Marketplace', Flipkart: 'Marketplace', Myntra: 'Marketplace', Nykaa: 'Beauty', Purplle: 'Beauty', Firstcry: 'Baby & kids' }
 
@@ -107,32 +106,6 @@ export const SHIPMENTS: Shipment[] = Array.from({ length: 64 }, (_, i) => mkShip
 
 // [label, key, kind]
 export type ColKind = 'text' | 'mono' | 'date' | 'num' | 'money' | 'link' | 'status'
-export const SHIPMENT_COLS: [string, keyof Shipment, ColKind][] = [
-  ['UID', 'uid', 'mono'], ['Entry Date', 'entryDate', 'date'], ['PO Date', 'poDate', 'date'], ['Facility', 'facility', 'mono'], ['Channel', 'channel', 'text'],
-  ['Location', 'location', 'text'], ['PO Number', 'poNumber', 'mono'], ['Total Units', 'totalUnits', 'num'], ['Updated Qty', 'updatedQty', 'num'],
-  ['Updated GMV', 'updatedGmv', 'money'], ['Updated PoValue', 'updatedPoValue', 'money'], ['Remarks (Planning)', 'remarksPlanning', 'text'],
-  ['Special Remarks (COPT)', 'specialRemarksCopt', 'text'], ['New Shipment Reference', 'newShipmentRef', 'mono'], ['Status (Planning)', 'statusPlanning', 'status'],
-  ['Status (Warehouse)', 'statusWarehouse', 'status'], ['Status (Logistics)', 'statusLogistics', 'status'], ['Channel Inwarding Remarks', 'channelInwardingRemarks', 'text'],
-  ['Dispatch Remarks (Logistics)', 'dispatchRemarksLogistics', 'text'], ['Dispatch Remarks (Warehouse)', 'dispatchRemarksWarehouse', 'text'],
-  ['Dispatch Date - Tentative (Planning)', 'dispatchTentative', 'date'], ['Working Date', 'workingDate', 'date'], ['RTS Date', 'rtsDate', 'date'],
-  ['Dispatch Date', 'dispatchDate', 'date'], ['Current Appointment Date', 'currentApptDate', 'date'], ['First Appointment Date', 'firstApptDate', 'date'],
-  ['No of Boxes', 'boxes', 'num'], ['Order No 1', 'orderNo1', 'mono'], ['Order No 2', 'orderNo2', 'mono'], ['Order No 3', 'orderNo3', 'mono'],
-  ['PO Number (Inward - CWH)', 'poInwardCwh', 'mono'], ['Pick List No', 'pickListNo', 'mono'], ['Working Type (Warehouse)', 'workingType', 'text'],
-  ['Inventory Remarks (Warehouse)', 'inventoryRemarks', 'text'], ['B2B Working Team Remarks', 'b2bRemarks', 'text'], ['Volumetric Weight', 'volumetricWeight', 'num'],
-  ['Channel Type', 'channelType', 'text'], ['1st Transporter (First Mile)', 't1', 'text'], ['1st Docket No/ Vehicle Number (First Mile)', 'd1', 'mono'],
-  ['2nd Transporter (Mid Mile)', 't2', 'text'], ['2nd Docket No/ Vehicle Number (Mid Mile)', 'd2', 'mono'], ['3rd Transporter (Last Mile)', 't3', 'text'],
-  ['3rd Docket No/ Vehicle Number (Last Mile)', 'd3', 'mono'], ['Appointment Letter/STN', 'apptLetter', 'link'], ['PO Expiry Date', 'poExpiry', 'date'],
-  ['Invoice Date', 'invoiceDate', 'date'], ['Invoice Link', 'invoiceLink', 'link'], ['CN Link', 'cnLink', 'link'], ['E-Way Link', 'ewayLink', 'link'],
-  ['Invoice Value (Check with Invoice Link)', 'invoiceValue', 'money'], ['Remarks by Accounts Team', 'accountsRemarks', 'text'],
-  ['Invoice / Challan Number', 'invoiceNo', 'mono'], ['Invoice Checked By', 'invoiceCheckedBy', 'text'], ['Customer Code', 'customerCode', 'mono'],
-  ['PO Entry Count', 'poEntryCount', 'num'], ['Delivery Date', 'deliveryDate', 'date'], ['Reschedule Lag (Remarks)', 'rescheduleLag', 'text'],
-  ['Final Remarks', 'finalRemarks', 'text'], ['Shipment Weight', 'shipmentWeight', 'num'], ['Chargable Weight', 'chargeableWeight', 'num'],
-  ['Delivery Charges', 'deliveryCharges', 'money'], ['halting', 'halting', 'money'], ['Unloading Charges', 'unloading', 'money'],
-  ['Dedicated Vehicle', 'dedicatedVehicle', 'text'], ['Other Charges', 'otherCharges', 'money'], ['Document', 'document', 'link'],
-  ['Proof Of Dispatch', 'pod', 'link'], ['Proof Of Delivery', 'proofDelivery', 'link'], ['TAT', 'tat', 'num'], ['Critical Dispatch Date', 'criticalDispatch', 'date'],
-  ['Rates/kg', 'ratePerKg', 'money'], ['DeliveryType', 'deliveryType', 'text'], ['Appointment Shooted Date', 'apptShootedDate', 'date'],
-  ['Appointment Requested Date', 'apptRequestedDate', 'date'], ['Remarks (Warehouse)', 'remarksWarehouse', 'text'],
-]
 
 // ---- PO Format Data (line level) -------------------------------------
 export interface POLineRow {
@@ -178,29 +151,8 @@ export function statusTone(s: string): 'ok' | 'warn' | 'crit' | 'info' | 'neutra
 // ---- PO Processing & Review ------------------------------------------
 export type IngestSource = 'API' | 'Webhook' | 'Email' | 'Manual'
 export interface ProcessedPO { id: string; poNumber: string; channel: string; brand: string; source: IngestSource; processedAt: string; lines: number; units: number; value: number; file: string; parser: string }
-export const PROCESSED_POS: ProcessedPO[] = Array.from({ length: 34 }, (_, i) => {
-  const ch = pick(OPS_CHANNELS)
-  const day = addDays(TODAY, -Math.floor(i / 3))
-  return {
-    id: `IN-${7800 + i}`, poNumber: String(4500000238000 + int(100, 9999)), channel: ch, brand: pick(BRANDS), source: pick(['API', 'Webhook', 'Email'] as const),
-    processedAt: `${day} ${String(int(6, 21)).padStart(2, '0')}:${String(int(0, 59)).padStart(2, '0')}`, lines: int(1, 18), units: int(200, 4200),
-    value: int(80, 900) * 1000, file: `${ch.toLowerCase()}_po_${day.replace(/-/g, '')}.${pick(['pdf', 'xlsx', 'csv'])}`, parser: `${ch} v${int(2, 4)}`,
-  }
-})
 export interface ReviewField { field: string; parsed: string; expected?: string; error?: string }
 export interface ReviewPO { id: string; poNumber: string; channel: string; brand: string; source: IngestSource; receivedAt: string; file: string; labels: string[]; fields: ReviewField[] }
-export const REVIEW_POS: ReviewPO[] = [
-  { id: 'IN-7771', poNumber: '4500000239110', channel: 'Firstcry', brand: 'mCaffeine', source: 'Email', receivedAt: '2026-10-05 08:14', file: 'firstcry_po_20261005.pdf', labels: ['SKU not found'],
-    fields: [{ field: 'PO Number', parsed: '4500000239110' }, { field: 'Channel SKU', parsed: 'FC-88213', error: 'No internal mapping in Channel SKU master' }, { field: 'Quantity', parsed: '850' }, { field: 'MRP', parsed: '349' }, { field: 'Delivery location', parsed: 'Bhiwandi' }] },
-  { id: 'IN-7772', poNumber: '4500000239301', channel: 'Swiggy', brand: 'Hyphen', source: 'API', receivedAt: '2026-10-05 08:31', file: 'swiggy_po_20261005.xlsx', labels: ['Wrong MRP'],
-    fields: [{ field: 'PO Number', parsed: '4500000239301' }, { field: 'SKU', parsed: 'HYP-SUNSCR-50' }, { field: 'MRP', parsed: '499', expected: '449', error: 'Differs from channel master' }, { field: 'Quantity', parsed: '1800' }] },
-  { id: 'IN-7773', poNumber: 'PUR-PO-11029', channel: 'Purplle', brand: 'mCaffeine', source: 'Webhook', receivedAt: '2026-10-04 19:02', file: 'purplle_11029.pdf', labels: ['Customer not found'],
-    fields: [{ field: 'PO Number', parsed: 'PUR-PO-11029' }, { field: 'Customer code', parsed: 'PUR-WH-07', error: 'Missing in Channel / Customer master' }, { field: 'Quantity', parsed: '640' }] },
-  { id: 'IN-7774', poNumber: '3100496011', channel: 'Myntra', brand: 'mCaffeine', source: 'Email', receivedAt: '2026-10-04 17:10', file: 'myntra_330911.pdf', labels: ['OCR read issue', 'Missing pincode'],
-    fields: [{ field: 'PO Number', parsed: '3100496011' }, { field: 'Pincode', parsed: '4O0O7', error: 'OCR — invalid characters' }, { field: 'PO Date', parsed: '31-09-2026', error: 'Invalid date' }, { field: 'Quantity', parsed: '500' }] },
-  { id: 'IN-7775', poNumber: '4500000238777', channel: 'BigBasket', brand: 'Hyphen', source: 'API', receivedAt: '2026-10-04 15:22', file: 'bb_238777.csv', labels: ['Multiple WH eligible'],
-    fields: [{ field: 'PO Number', parsed: '4500000238777' }, { field: 'Facility', parsed: 'GGN_WAREHOUSE | MUM_WAREHOUSE2', error: 'Ambiguous fulfilment facility' }, { field: 'Quantity', parsed: '1600' }] },
-]
 
 // ---- PO Working ------------------------------------------------------
 export const CHANNEL_PRIORITY_DEFAULT: Record<string, number> = { Zepto: 1, Blinkit: 2, Swiggy: 3, BigBasket: 4, Amazon: 5, Flipkart: 6, Nykaa: 7, Myntra: 8, Firstcry: 9, Purplle: 10 }
@@ -215,34 +167,10 @@ export function shipmentCriticality(s: Shipment, priority: number): { score: num
   if (s.statusWarehouse === 'Pending') score += 10
   return { score, level: score >= 65 ? 'Critical' : score >= 45 ? 'High' : score >= 25 ? 'Medium' : 'Low' }
 }
-export function shortSkus() {
-  const avail = new Map(overallInventory().map((o) => [o.sku, o]))
-  const req = new Map<string, { code: string; name: string; required: number; pos: Set<string> }>()
-  for (const l of PO_LINES) {
-    if (['Delivered', 'Closed', 'Cancelled', 'In transit'].includes(l.status)) continue
-    const e = req.get(l.skuCode) ?? { code: l.skuCode, name: l.skuName, required: 0, pos: new Set<string>() }
-    e.required += l.updatedQuantity
-    e.pos.add(l.poNumber)
-    req.set(l.skuCode, e)
-  }
-  return [...req.values()].map((r) => {
-    const a = avail.get(r.code)?.soh ?? 0
-    return { ...r, pos: r.pos.size, available: a, shortfall: Math.max(0, r.required - a) }
-  }).sort((a, b) => b.shortfall - a.shortfall)
-}
 
 // ---- Approvals -------------------------------------------------------
 export type ApprovalType = 'Appointment change' | 'Qty update' | 'Channel priority' | 'Manual PO upload' | 'Master change' | 'Logistics rate'
 export interface Approval { id: string; type: ApprovalType; ref: string; field: string; from: string; to: string; reason: string; by: string; at: string; module: string; status: 'Pending' | 'Approved' | 'Rejected'; comment?: string }
-export const APPROVALS: Approval[] = [
-  { id: 'AP-2201', type: 'Appointment change', ref: '3100495853', field: 'Current Appointment Date', from: '07-10-2026', to: '10-10-2026', reason: 'Channel slot unavailable — Zepto Hyderabad DC', by: 'A. Kulkarni', at: '05-10 09:12', module: 'PO Working', status: 'Pending' },
-  { id: 'AP-2202', type: 'Qty update', ref: '4500000238841 · MCF-UNDER-EYE', field: 'Updated Quantity', from: '1200', to: '900', reason: 'Short inventory at GGN', by: 'R. Nair', at: '05-10 08:47', module: 'PO Overview', status: 'Pending' },
-  { id: 'AP-2203', type: 'Channel priority', ref: 'Myntra', field: 'Priority', from: 'P3', to: 'P2', reason: 'Big Fashion Days — 6 Oct', by: 'S. Iyer', at: '04-10 18:30', module: 'PO Working', status: 'Pending' },
-  { id: 'AP-2204', type: 'Manual PO upload', ref: 'reliance_tira_PO_8812.pdf', field: 'New PO', from: '—', to: '14 lines · ₹3.2L', reason: 'Channel has no API — emailed PO', by: 'P. Shah', at: '04-10 16:05', module: 'PO Processing', status: 'Pending' },
-  { id: 'AP-2205', type: 'Logistics rate', ref: '3100512210', field: 'Rates/kg', from: '₹22', to: '₹31', reason: 'Dedicated vehicle — urgent appt', by: 'M. Rao', at: '04-10 14:20', module: 'PO Working', status: 'Pending' },
-  { id: 'AP-2206', type: 'Master change', ref: 'HYPSUN50_C', field: 'Margin %', from: '28', to: '30', reason: 'New trade terms Q3', by: 'K. Das', at: '03-10 11:00', module: 'Masters', status: 'Approved', comment: 'OK per finance memo' },
-  { id: 'AP-2207', type: 'Appointment change', ref: '3100498120', field: 'Current Appointment Date', from: '01-10-2026', to: '09-10-2026', reason: 'Not ready', by: 'A. Kulkarni', at: '02-10 10:40', module: 'PO Working', status: 'Rejected', comment: 'Reason insufficient — re-raise with stock ETA' },
-]
 
 // ---- Demand planning: DRR & aging ------------------------------------
 export interface DrrRow { sku: string; name: string; soh: number; drr3: number; drr7: number; drr30: number; aging: number; deviation: number }
@@ -268,5 +196,3 @@ export const channelInventory = () => {
   }
   return [...m.values()].map((e) => ({ ...e, aging: Math.round((e.soh + e.inTransit) / e.drr) }))
 }
-
-export const activePOs = (): PO[] => POS.filter((p) => !['Delivered', 'GRN'].includes(p.stage))

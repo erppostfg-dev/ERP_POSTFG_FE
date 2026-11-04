@@ -54,7 +54,7 @@ export const LIVE_FLASH_MS = 2_500
 /** SSE event names (POST_FG constants LIVE). */
 export const LIVE_EVENT = { SHIPMENT: 'shipment', PING: 'ping' } as const
 /** Action of a new shipment (lists reload instead of a row swap). */
-export const CREATED_ACTION = 'created'
+const CREATED_ACTION = 'created'
 /** Actions that add a shipment to PO Overview or take it out (uploaded into Uniware / mark removed): lists reload. */
 export const LIST_ACTIONS: readonly string[] = [CREATED_ACTION, 'uniware_uploaded', 'uniware_upload_undone']
 

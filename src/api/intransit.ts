@@ -1,6 +1,6 @@
 import { api, ApiError, apiUrl } from './client'
 import { ERROR_CODE } from '../constants/auth'
-import { INTRANSIT_ENDPOINT, mailFileName, PEPIMS_CONNECTOR, type RunStatus, type Source } from '../constants/intransit'
+import { INPUTS_BOOK, INTRANSIT_ENDPOINT, mailFileName, PEPIMS_CONNECTOR, type RunStatus, type Source } from '../constants/intransit'
 import * as P from '../dev/intransitPreview'
 
 /* In-transit stock API (POST_FG src/routes/intransit.routes.ts). */
@@ -115,6 +115,8 @@ export interface IntransitRun {
   /** Report: { fetchFirst, toFetch, step: 'fetching <source>' | 'building' | 'done', progress: last log line }. Fetch: { date, only }. */
   options: Record<string, unknown> | null
   createdBy: { id: number; name: string } | null
+  /** Who pressed Stop (POST_FG, 2026-11-02). */
+  stoppedBy?: { id: number; name: string } | null
   createdAt: string
   startedAt: string | null
   finishedAt: string | null
@@ -132,6 +134,12 @@ export interface IntransitRun {
     warnings?: string[]
     /** Report: GMV / Units / COGS per warehouse row, the in-transit mail's table (POST_FG stages/wh-summary.ts). */
     whSummary?: WhSummaryRow[]
+    /** Report: SKUs whose missing MRP / COGS / name the build filled (product master, Uniware, 20% of MRP). */
+    skuFills?: number
+    /** Report: S3 keys of the files it saved (Inputs.xlsx among them when the input files workbook was made). */
+    files?: Record<string, string> | null
+    /** Connector: files uploaded by hand while it ran (kept, not replaced). */
+    keptUploads?: string[]
   } | null
   hasReport: boolean
   /**
@@ -141,6 +149,32 @@ export interface IntransitRun {
   report?: { state: 'stored' | 'expired'; expiresOn: string; weekly: string; monthly: string } | null
   logTail?: string[]
 }
+
+/** One SKU / mapping issue a build waits on (options.pause.items while options.step = 'awaiting-answers'; POST_FG NewSku). */
+export type IssueKind = 'sku' | 'code' | 'combo' | 'final-sku' | 'location'
+export interface NewSku {
+  kind: IssueKind
+  /** sku / combo / final-sku: the SKU; code: the seller's SKU it is counted under; location: '' */
+  sku: string
+  /** code / location: the channel and its listing code / fulfilment centre */
+  channel?: string
+  code?: string
+  /** combo: Uniware's parts; combo variant / final-sku: the base it maps to */
+  components?: { sku: string; qty: number }[]
+  base?: { sku: string; components: { sku: string; qty: number }[] }
+  name: string
+  mrp: number | null
+  cogs: number | null
+  units: number
+  reasons: string[]
+  channelTypes: string
+}
+export type IssueAction = 'consider' | 'not-consider' | 'ignore' | 'add-split1' | 'map' | 'set-location'
+export type IssueAnswer = { kind: IssueKind; sku?: string; channel?: string; code?: string; action: IssueAction; location?: string }
+/** What a paused build waits for (options.pause). */
+export type BuildPause =
+  | { kind: 'issues'; items: NewSku[]; locations: string[]; answerBy: string }
+  | { kind: 'upload'; source: string; files: string[]; error: string | null; fetchRun: string; answerBy: string }
 
 /**
  * Combos missing from Split1, checked after each build against Uniware's item master (Uniware BUNDLE among the SKUs of
@@ -230,6 +264,13 @@ export async function getRunLog(id: string, signal?: AbortSignal): Promise<strin
 export const startReport = (opts: { asOf: string; fetchFirst: boolean }) =>
   pv() ? P.previewStartReport(opts) : api<IntransitRun>(`${E}/runs`, { method: 'POST', body: JSON.stringify(opts) })
 export const deleteRun = (id: string) => pv() ? P.previewDeleteRun(id) : api<void>(`${E}/runs/${id}`, { method: 'DELETE' })
+/** POST /intransit/runs/:id/stop: stop a queued / running build or fetch (2026-11-02). */
+export const stopRun = (id: string) => pv() ? P.previewStopRun(id) : api<IntransitRun>(`${E}/runs/${id}/stop`, { method: 'POST' })
+/** POST /intransit/runs/:id/issues: a fix or Ignore for every SKU / mapping issue the build waits on. */
+export const answerRunIssues = (id: string, answers: IssueAnswer[]) =>
+  pv() ? P.previewAnswerIssues(answers) : api<{ fixed: number; ignored: number }>(`${E}/runs/${id}/issues`, { method: 'POST', body: JSON.stringify({ answers }) })
+/** POST /intransit/runs/:id/continue: a build waiting for a failed fetch's files goes on with the earlier copies. */
+export const continueRun = (id: string) => pv() ? P.previewGetRun(id) : api<IntransitRun>(`${E}/runs/${id}/continue`, { method: 'POST' })
 /** POST /intransit/robots/:source/login: a portal login from this browser (ERP Robot Login extension), then a check fetch. */
 export interface SavedRobotLogin { portal: string; cookies: number; check: IntransitRun | null; checkError: string | null }
 export const saveRobotLogin = (source: 'myntra', login: { cookies: unknown[]; localStorage: { name: string; value: string }[] }) =>
@@ -362,6 +403,9 @@ export const sendRunMail = (id: string) =>
 /** One of the mail's workbooks of a build, under the name it is mailed with. */
 export const downloadMailFile = (id: string, file: string, asOf: string) =>
   saveFrom(`${E}/runs/${id}/files/${enc(file)}/download`, mailFileName(file, asOf))
+/** A build's input files workbook (Inputs.xlsx), named by its day. */
+export const downloadInputsBook = (id: string, asOf: string | null) =>
+  saveFrom(`${E}/runs/${id}/files/${enc(INPUTS_BOOK.FILE)}/download`, `Intransit_Inputs_${(asOf ?? '').replace(/-/g, '')}_run${id}.xlsx`)
 export const downloadLog = (id: string) => saveFrom(`${E}/runs/${id}/log`, `intransit_run${id}.log`)
 
 // ---- CSV viewer ----------------------------------------------------------------------------------------------------

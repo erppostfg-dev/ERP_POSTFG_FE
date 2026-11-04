@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, Download, Eye, History, Layers, Pencil, Plus, Power, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Eye, History, Layers, Pencil, Plus, Power, RefreshCw, X } from 'lucide-react'
 import { ApiError } from '../api/client'
-import { getMasterChanges, getMasterHistory, setMasterActive, listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSkus, listPepWarehouses, type ChannelCustomerItem, type ChannelSkuItem, type ChannelWarehouseItem, type MasterHistoryItem, type PepSkuItem, type PepWarehouseItem } from '../api/masters'
-import { ADD_TEXT, EDIT_TEXT, HISTORY_TEXT, MASTER_ADD_ROLES, SWITCH_OFF_EFFECT, SWITCH_ON_EFFECT, MASTER_HISTORY_DAYS, MASTER_LOG_ACTION_LABEL, MASTER_LOG_SOURCE_LABEL, MASTER_LOG_TYPE, MASTER_LOG_TYPE_LABEL, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS, masterFieldLabel } from '../constants/masters'
-import { Timeline, type TimelineOptions } from './ops/ShipmentHistory'
+import { setMasterActive, listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSkus, listPepWarehouses, type ChannelCustomerItem, type ChannelSkuItem, type ChannelWarehouseItem, type PepSkuItem, type PepWarehouseItem } from '../api/masters'
+import { ADD_TEXT, EDIT_TEXT, HISTORY_TEXT, MASTER_ADD_ROLES, SWITCH_OFF_EFFECT, SWITCH_ON_EFFECT, MASTER_LOG_TYPE, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS, STOCK_FEED_LABEL, STOCK_FORMULA_LABEL, STOCK_NOT_COUNTED } from '../constants/masters'
+import { IconBtn, RecentChangesDrawer, RowHistoryDrawer } from './masters/MasterHistory'
+import TransferRoutes from './masters/TransferRoutes'
 import { useAuth } from '../auth/AuthContext'
 import { ACCESS } from '../constants/auth'
 import { PATHS } from '../constants/pages'
@@ -15,7 +16,7 @@ import FacilityCheckBanner from './dp/intransit/FacilityCheckBanner'
 import { OPS_CHANNELS, type ColKind } from '../lib/ops'
 import { Badge, Button, Drawer, PageTitle } from '../components/ui'
 import { Reveal } from '../components/shell'
-import { DataGrid, FilterPanel, PrimaryBtn, SectionToolbar, exportRows, exportRowsExcel, inputCls, useSection, type FilterDef } from '../components/kit'
+import { DataGrid, FilterPanel, PrimaryBtn, SectionToolbar, exportRows, inputCls, useSection, type FilterDef } from '../components/kit'
 
 type Row = Record<string, string | number>
 type FieldDef = { key: string; label: string; options?: readonly string[]; type?: 'number' }
@@ -69,11 +70,18 @@ const customerRow = (c: ChannelCustomerItem): Row => (remember('customer', c.id,
 const pepWhRow = (w: PepWarehouseItem): Row => (remember('pepWh', w.id, {
   code: w.facilityCode, name: w.name, entity: w.entity, pickupLocation: w.pickupLocation, state: w.state, facilityType: w.facilityType,
   billToGstin: w.billToGstin, shipToGstin: w.shipToGstin, remarks: w.remarks,
+  // in-transit stock settings: all three or "Not counted" (as the backend reads them)
+  stockBucket: w.intransitGroup || STOCK_NOT_COUNTED, stockFeed: w.intransitFeed || STOCK_NOT_COUNTED, stockFormula: w.stockFormula || STOCK_NOT_COUNTED,
+  // D2C internal transfers (2026-11-03): Yes / No as the edit form takes it
+  allowInternalTransfer: w.allowInternalTransfer ? 'Yes' : 'No',
 }), {
   rid: w.id ?? '', facility: w.facilityCode, name: w.name ?? '', spellings: list(w.spellings), locations: w.locationCount, channels: list(w.channels),
   entity: w.entity ?? '', location: w.pickupLocation ?? '', city: NOT_IN_DB, state: w.state ?? '', type: w.facilityType ?? '',
   billTo: w.billToGstin ?? '', shipTo: w.shipToGstin ?? '', remarks: w.remarks ?? '', main: w.mainFacilityCode ?? '',
   group: w.intransitGroup ?? '', itType: w.intransitType ?? '', uniwareExport: w.uniwareExport ? 'Yes' : 'No', source: w.source ?? '',
+  consider: w.intransitGroup ? 'Yes' : 'No', feed: w.intransitGroup ? (STOCK_FEED_LABEL[w.intransitFeed ?? ''] ?? w.intransitFeed ?? '') : '',
+  formula: w.intransitGroup ? (STOCK_FORMULA_LABEL[w.stockFormula ?? ''] ?? w.stockFormula ?? '') : '',
+  allowTransfer: w.allowInternalTransfer ? 'Yes' : 'No',
   status: !w.inMaster ? 'Not in facility master' : w.isActive ? SKU_STATUS.ACTIVE : SKU_STATUS.INACTIVE,
 })
 /* Channel warehouses = details_channels (one delivery location each), incl. city, appointment, status, drop and in-transit
@@ -165,13 +173,13 @@ const CFG: Record<string, Cfg> = {
   pepWh: {
     title: 'Warehouses', sub: 'Our dispatch facilities (the Uniware facility codes the channel locations use)', key: 'facility', entity: 'warehouses', addLabel: 'Add warehouse',
     search: ['facility', 'name', 'location', 'channels', 'group'], placeholder: 'Search facility, location, channel, group…',
-    cols: [['Facility', 'facility', 'mono'], ['Location', 'location', 'text'], ['Locations Served', 'locations', 'num'], ['Channels', 'channels', 'text'], ['In-transit Group', 'group', 'text'], ['Uniware Export', 'uniwareExport', 'text'], ['Main Warehouse', 'main', 'mono'], ['Entity', 'entity', 'text'], ['State', 'state', 'text'], ['Type', 'type', 'text'], ['Bill-To GSTIN', 'billTo', 'mono'], ['Ship-To GSTIN', 'shipTo', 'mono']],
+    cols: [['Facility', 'facility', 'mono'], ['Location', 'location', 'text'], ['Locations Served', 'locations', 'num'], ['Channels', 'channels', 'text'], ['Consider', 'consider', 'text'], ['Channel Name', 'group', 'text'], ['Channel Type', 'itType', 'text'], ['Feed', 'feed', 'text'], ['Units Formula', 'formula', 'text'], ['Uniware Export', 'uniwareExport', 'text'], ['Internal Transfer', 'allowTransfer', 'text'], ['Main Warehouse', 'main', 'mono'], ['Entity', 'entity', 'text'], ['State', 'state', 'text'], ['Type', 'type', 'text'], ['Bill-To GSTIN', 'billTo', 'mono'], ['Ship-To GSTIN', 'shipTo', 'mono']],
     fields: [{ key: 'facility', label: 'Facility code (Unicommerce)' }, { key: 'name', label: 'Name' }, { key: 'spellings', label: 'Codes used by locations' }, { key: 'locations', label: 'Channel locations served' }, { key: 'channels', label: 'Channels served' },
       { key: 'entity', label: 'Entity' }, { key: 'location', label: 'Location' }, { key: 'city', label: 'City' }, { key: 'state', label: 'State' }, { key: 'type', label: 'Type' },
-      { key: 'billTo', label: 'Bill-to GSTIN' }, { key: 'shipTo', label: 'Ship-to GSTIN' }, { key: 'main', label: 'Main warehouse (of a child)' }, { key: 'group', label: 'In-transit group' },
-      { key: 'itType', label: 'In-transit type' }, { key: 'uniwareExport', label: 'Uniware export' }, { key: 'source', label: 'Loaded from' }, { key: 'status', label: 'Status' }, { key: 'remarks', label: 'Remarks' }],
+      { key: 'billTo', label: 'Bill-to GSTIN' }, { key: 'shipTo', label: 'Ship-to GSTIN' }, { key: 'main', label: 'Main warehouse (of a child)' }, { key: 'consider', label: 'Counted in in-transit stock' },
+      { key: 'group', label: 'In-transit channel name' }, { key: 'itType', label: 'In-transit channel type' }, { key: 'feed', label: 'In-transit feed' }, { key: 'formula', label: 'Units formula' }, { key: 'uniwareExport', label: 'Uniware export' }, { key: 'allowTransfer', label: 'Allow internal transfer' }, { key: 'source', label: 'Loaded from' }, { key: 'status', label: 'Status' }, { key: 'remarks', label: 'Remarks' }],
     filters: [],
-    filterKeys: [['group', 'In-transit Group'], ['uniwareExport', 'Uniware Export'], ['status', 'Status']],
+    filterKeys: [['consider', 'Consider'], ['group', 'Channel Name'], ['feed', 'Feed'], ['formula', 'Units Formula'], ['uniwareExport', 'Uniware Export'], ['allowTransfer', 'Internal Transfer'], ['status', 'Status']],
     readOnly: true,
     trailing: [{ label: 'Status', render: status }],
   },
@@ -200,7 +208,12 @@ const TAB_ID: Record<string, string> = {
   [MASTER_TABS[0]]: 'pep', [MASTER_TABS[1]]: 'channelSku', [MASTER_TABS[2]]: 'customer', [MASTER_TABS[3]]: 'chWh', [MASTER_TABS[4]]: 'pepWh',
 }
 
+/** Transfer Routes (2026-11-03) has its own grid and edit form (pages/masters/TransferRoutes.tsx). */
 export default function Masters({ tab = MASTER_TABS[0] }: { tab?: string }) {
+  return tab === MASTER_TABS[5] ? <TransferRoutes /> : <MasterPage tab={tab} />
+}
+
+function MasterPage({ tab }: { tab: string }) {
   const id = TAB_ID[tab] ?? 'pep'
   const queryClient = useQueryClient()
   const query = useQuery({ queryKey: mastersKey(id), queryFn: ({ signal }) => LOADERS[id](signal) })
@@ -340,10 +353,6 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
   )
 }
 
-const IconBtn = ({ children, title, onClick, disabled }: { children: ReactNode; title: string; onClick?: () => void; disabled?: boolean }) => (
-  <button title={title} onClick={onClick} disabled={disabled} className="rounded-md p-1.5 hover:bg-alt hover:text-ink-900 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent">{children}</button>
-)
-
 function EditDrawer({ cfg, row, isNew, onClose, onSave }: { cfg: Cfg; row: Row; isNew: boolean; onClose: () => void; onSave: (r: Row) => void }) {
   const [f, setF] = useState<Row>(row)
   const ok = String(f[cfg.key] ?? '').trim().length > 0
@@ -369,64 +378,6 @@ function EditDrawer({ cfg, row, isNew, onClose, onSave }: { cfg: Cfg; row: Row; 
           </label>
         ))}
       </div>
-    </Drawer>
-  )
-}
-
-// ---- History (2026-10-28) -----------------------------------------------------------------------------------------
-const HISTORY_OPTIONS: TimelineOptions = { actionLabel: MASTER_LOG_ACTION_LABEL, sourceLabel: MASTER_LOG_SOURCE_LABEL, notes: true }
-
-/** One row's history: who added / changed it, when, old -> new, remark (Masters pages + In-transit uploads). */
-function RowHistoryDrawer({ type, row, title, sub, onClose }: { type: string; row: Row; title: string; sub: string; onClose: () => void }) {
-  const rid = String(row.rid)
-  const q = useQuery({ queryKey: ['masters', 'history', type, rid], queryFn: ({ signal }) => getMasterHistory(type, rid, signal) })
-  return (
-    <Drawer open onClose={onClose}
-      title={<span className="inline-flex items-center gap-2"><History className="size-4 text-ink-600" />History · <span className="font-mono">{title}</span></span>}
-      sub={sub} footer={(close) => <Button onClick={close}>Close</Button>}>
-      <Timeline items={q.data} pending={q.isPending} error={q.isError} onRetry={() => void q.refetch()} labelOf={masterFieldLabel} empty={HISTORY_TEXT.EMPTY_ROW} options={HISTORY_OPTIONS} />
-    </Drawer>
-  )
-}
-
-type ChangeRow = Record<'at' | 'by' | 'master' | 'rowKey' | 'action' | 'field' | 'oldValue' | 'newValue' | 'remark' | 'source', string>
-const CHANGE_COLS: [string, keyof ChangeRow, ColKind][] = [['When', 'at', 'text'], ['Who', 'by', 'text'], ['Master', 'master', 'text'], ['Row', 'rowKey', 'mono'],
-  ['Action', 'action', 'text'], ['Field', 'field', 'text'], ['Old value', 'oldValue', 'text'], ['New value', 'newValue', 'text'], ['Remark', 'remark', 'text'], ['Source', 'source', 'text']]
-const changeRow = (h: MasterHistoryItem): ChangeRow => ({
-  at: new Date(h.at).toLocaleString(), by: h.byEmail ?? h.by ?? 'System', master: MASTER_LOG_TYPE_LABEL[h.type] ?? h.type, rowKey: h.rowKey,
-  action: MASTER_LOG_ACTION_LABEL[h.action] ?? h.action, field: h.field ? masterFieldLabel(h.field) : '', oldValue: h.oldValue ?? '', newValue: h.newValue ?? '',
-  remark: h.remark ?? '', source: MASTER_LOG_SOURCE_LABEL[h.source] ?? h.source,
-})
-
-/** Every master's changes of the last n days (filter by master), with an Excel download. */
-function RecentChangesDrawer({ initialType, onClose }: { initialType?: string; onClose: () => void }) {
-  const [type, setType] = useState(initialType ?? '')
-  const [days, setDays] = useState<number>(MASTER_HISTORY_DAYS[0])
-  const q = useQuery({ queryKey: ['masters', 'changes', type, days], queryFn: ({ signal }) => getMasterChanges({ type: type || undefined, days }, signal) })
-  const options = useMemo<TimelineOptions>(() => ({
-    ...HISTORY_OPTIONS,
-    tagOf: (h) => { const m = h as MasterHistoryItem; return `${MASTER_LOG_TYPE_LABEL[m.type] ?? m.type} · ${m.rowKey}` },
-  }), [])
-  return (
-    <Drawer open wide onClose={onClose}
-      title={<span className="inline-flex items-center gap-2"><History className="size-4 text-ink-600" />Recent changes · Masters</span>}
-      sub="Who added or changed what on the Masters pages and the In-transit master uploads"
-      footer={(close) => <>
-        <Button icon={<Download className="size-3.5" />} disabled={!q.data?.length}
-          onClick={() => exportRowsExcel(`masters-changes-${type || 'all'}-${days}d`, CHANGE_COLS, (q.data ?? []).map(changeRow))}>Excel</Button>
-        <Button onClick={close}>Close</Button>
-      </>}>
-      <div className="mb-3 flex flex-wrap gap-2">
-        <select value={type} onChange={(e) => setType(e.target.value)} className={`${inputCls} w-auto`}>
-          <option value="">All masters</option>
-          {Object.entries(MASTER_LOG_TYPE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
-        <select value={days} onChange={(e) => setDays(Number(e.target.value))} className={`${inputCls} w-auto`}>
-          {MASTER_HISTORY_DAYS.map((d) => <option key={d} value={d}>Last {d} days</option>)}
-        </select>
-        {q.data && <span className="self-center text-[12px] text-ink-400">{q.data.length} change{q.data.length === 1 ? '' : 's'}</span>}
-      </div>
-      <Timeline items={q.data} pending={q.isPending} error={q.isError} onRetry={() => void q.refetch()} labelOf={masterFieldLabel} empty={HISTORY_TEXT.EMPTY_ALL} options={options} />
     </Drawer>
   )
 }
