@@ -325,3 +325,6 @@ export const bulkDismissFailed = (uploadIds: string[], remark: string) =>
   api<BulkEndedResult[]>(`${PO_REVIEW_ENDPOINT}/bulk-dismiss`, { method: 'POST', body: JSON.stringify({ uploadIds, remark }) })
 export const bulkReopenRejected = (uploadIds: string[], remark: string) =>
   api<BulkEndedResult[]>(`${PO_REVIEW_ENDPOINT}/bulk-reopen`, { method: 'POST', body: JSON.stringify({ uploadIds, remark }) })
+/** Read again, no OCR (2026-11-04): POs in review / failed rebuilt from their stored OCR output with today's reader. */
+export const bulkRereadUploads = (uploadIds: string[]) =>
+  api<BulkEndedResult[]>(`${PO_REVIEW_ENDPOINT}/bulk-reread`, { method: 'POST', body: JSON.stringify({ uploadIds }) })

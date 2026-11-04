@@ -9,12 +9,12 @@ import type { ColKind } from '../../lib/ops'
 import {
   getPoFile, getPoReview, listPoReview, recheckReview, rejectPo, submitPo,
   type LineCorrection, type Num, type PoReviewDetail, type PoReviewIssue, type PoReviewItem, type PoReviewLine, type ResubmitBody, type StillOpen,
-getReviewLineItems, } from '../../api/poReview'
+getReviewLineItems, bulkRereadUploads, } from '../../api/poReview'
 import { ApiError } from '../../api/client'
 import { downloadExcel } from '../../lib/excelExport'
 import { downloadReviewLineItems } from '../../lib/lineItemsExport'
 import {
-  ENDED_TEXT, LINE_ITEMS, ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED, PRICE_ISSUES,
+  BULK_ENDED_TEXT, ENDED_TEXT, LINE_ITEMS, ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED, PRICE_ISSUES,
 } from '../../constants/poReview'
 import { PRICE_CHECK_TEXT, PRICE_CHOICE, TOTAL_TOLERANCE, type PriceChoice } from '../../constants/priceDifferences'
 import { PriceCheck, type PriceRow } from './PriceCheck'
@@ -436,6 +436,18 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
       .finally(() => setBusy(false))
   }
 
+  const reread = () => {
+    setBusy(true)
+    setActionError(undefined)
+    bulkRereadUploads([uploadId])
+      .then(([r]) => {
+        if (r?.result === 'queued') onDone(BULK_ENDED_TEXT.REREAD_QUEUED(data?.po.poNumber || poNumber))
+        else setActionError({ message: r?.reason ?? 'Not read again.' })
+      })
+      .catch(fail)
+      .finally(() => setBusy(false))
+  }
+
   const reject = () => {
     if (!rejectRemark.trim()) return
     setBusy(true)
@@ -704,6 +716,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
           <div className="ml-auto flex gap-2">
             {canEdit && data ? (
               <>
+                <span title={BULK_ENDED_TEXT.REREAD_HINT}><Button onClick={reread} disabled={busy || gone}>{BULK_ENDED_TEXT.REREAD_ONE}</Button></span>
                 <Button onClick={() => setRejecting(true)} disabled={busy || gone}>{REVIEW_TEXT.REJECT}</Button>
                 <span title={blockers.length ? `Before submitting: ${blockers.join(' · ')}` : undefined}>
                   <Button variant="primary" onClick={submit} disabled={busy || gone || blockers.length > 0}>

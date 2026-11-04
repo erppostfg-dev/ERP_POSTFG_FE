@@ -5,7 +5,7 @@ import { Badge, Button, Drawer, PillToggle } from '../../components/ui'
 import { DataGrid, FilterChips, FilterPanel, SectionToolbar, exportRows, useSection, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
 import { ApiError } from '../../api/client'
-import { bulkDismissFailed, bulkReopenRejected, bulkRetryFailed, getRejection, listAllPoReview, reopenPo, type BulkEndedResult, type PoReviewItem } from '../../api/poReview'
+import { bulkDismissFailed, bulkReopenRejected, bulkRereadUploads, bulkRetryFailed, getRejection, listAllPoReview, reopenPo, type BulkEndedResult, type PoReviewItem } from '../../api/poReview'
 import { BULK_ENDED_TEXT as B, ENDED_TEXT, FAIL_STEP_HINT, FAIL_STEP_LABEL, FIX_FIELD_LABEL, ISSUE_LABELS, PO_REVIEW_REMARK_MAX, PO_STATUS, REJECTED_FROM_LABEL, SOURCE_LABELS } from '../../constants/poReview'
 import { inputCls } from '../../components/kit'
 import type { ColKind } from '../../lib/ops'
@@ -76,13 +76,13 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
     const name = (id: string) => rows.find((x) => x.id === id)?.poNumber ?? id
     return B.RESULT(ok.length, no.length, what) + no.slice(0, 5).map((x) => `${name(x.uploadId)}: ${x.reason}`).join('; ')
   }
-  const bulk = async (action: 'retry' | 'dismiss' | 'reopen') => {
+  const bulk = async (action: 'retry' | 'reread' | 'dismiss' | 'reopen') => {
     if (picked.length > B.MAX) { setBulkError(B.TOO_MANY(B.MAX)); return }
     setBulkBusy(true)
     setBulkError('')
     try {
-      const r = action === 'retry' ? await bulkRetryFailed(picked) : action === 'dismiss' ? await bulkDismissFailed(picked, remark.trim()) : await bulkReopenRejected(picked, remark.trim())
-      setNotice(summary(r, action === 'retry' ? 'queued again' : action === 'dismiss' ? 'dismissed' : 'back in review'))
+      const r = action === 'retry' ? await bulkRetryFailed(picked) : action === 'reread' ? await bulkRereadUploads(picked) : action === 'dismiss' ? await bulkDismissFailed(picked, remark.trim()) : await bulkReopenRejected(picked, remark.trim())
+      setNotice(summary(r, action === 'retry' ? 'queued again' : action === 'reread' ? 'read again (no OCR)' : action === 'dismiss' ? 'dismissed' : 'back in review'))
       setSelected(new Set())
       setAsk(null)
       setRemark('')
@@ -144,6 +144,7 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
             {view === 'failed' ? (
               <>
                 <span title={B.RETRY_HINT}><Button variant="primary" disabled={bulkBusy} onClick={() => void bulk('retry')} icon={<RotateCcw className="size-3.5" />}>{B.RETRY(picked.length)}</Button></span>
+                <span title={B.REREAD_HINT}><Button disabled={bulkBusy} onClick={() => void bulk('reread')} icon={<RotateCcw className="size-3.5" />}>{B.REREAD(picked.length)}</Button></span>
                 <span title={B.DISMISS_HINT}><Button disabled={bulkBusy} onClick={() => setAsk('dismiss')} icon={<Ban className="size-3.5" />}>{B.DISMISS(picked.length)}</Button></span>
                 <span className="text-ink-600">{B.RETRY_HINT}</span>
               </>
