@@ -4,8 +4,8 @@ import { Link } from 'react-router'
 import { PATHS } from '../../../constants/pages'
 import { AlertTriangle, Check, Download, FileText, Mail, Send } from 'lucide-react'
 import { Button, Card } from '../../../components/ui'
-import { downloadCsvFile, downloadMailFile, downloadReport, getRun, runMailUrl, sendRunMail, type IntransitRun } from '../../../api/intransit'
-import { COMBO_FILES, COMBO_TAB, INTRANSIT_POLL_MS, MAIL_FILE_LABEL, MAIL_FILES, mailFileName } from '../../../constants/intransit'
+import { downloadCsvFile, downloadInputsBook, downloadMailFile, downloadReport, getRun, runMailUrl, sendRunMail, type IntransitRun } from '../../../api/intransit'
+import { COMBO_FILES, COMBO_TAB, INPUTS_BOOK, INTRANSIT_POLL_MS, MAIL_FILE_LABEL, MAIL_FILES, mailFileName } from '../../../constants/intransit'
 import { ComboTable, pendingCombos, useAddToSplit1, useMapVariants } from '../ComboSplit1'
 import RunLog from './RunLog'
 import { dayLabel, errText, isActive, shortDay, StatusBadge, took, whenOn, type OnNotice } from './shared'
@@ -181,6 +181,10 @@ function WhSummary({ run, canEdit, onNotice }: { run: IntransitRun; canEdit: boo
   if (!rows.length) return null
   const head = ['WHs', 'GMV', 'Units', 'COGS (With Tax)', 'COGS Split']
   const inr = (n: number) => Math.round(n).toLocaleString('en-IN')
+  const total = rows.reduce(
+    (t, r) => ({ gmv: t.gmv + r.gmv, units: t.units + r.units, cogs: t.cogs + r.cogs, cogsSplit: t.cogsSplit + r.cogsSplit }),
+    { gmv: 0, units: 0, cogs: 0, cogsSplit: 0 },
+  )
   const asOf = run.asOf ?? ''
   const send = async () => {
     setSending(true)
@@ -206,6 +210,12 @@ function WhSummary({ run, canEdit, onNotice }: { run: IntransitRun; canEdit: boo
               <Download className="size-3.5" /> {MAIL_FILE_LABEL[f]}
             </button>
           ))}
+          {/* every input of the build in one workbook (2026-11-02); S3 builds list it in their files, the disk store does not */}
+          {(!run.result?.files || run.result.files[INPUTS_BOOK.FILE]) && (
+            <button className={link} title={INPUTS_BOOK.TITLE} onClick={() => void downloadInputsBook(run.id, run.asOf).catch((e) => onNotice('warn', errText(e)))}>
+              <Download className="size-3.5" /> {INPUTS_BOOK.BUTTON}
+            </button>
+          )}
           <a href={runMailUrl(run.id)} target="_blank" rel="noreferrer" className={link}>
             <Mail className="size-3.5" /> Mail preview
           </a>
@@ -233,6 +243,16 @@ function WhSummary({ run, canEdit, onNotice }: { run: IntransitRun; canEdit: boo
               </tr>
             ))}
           </tbody>
+          {/* every WH summed up, as the mail's last line (2026-11-03) */}
+          <tfoot>
+            <tr className="border-t-2 border-line bg-ok-soft font-semibold text-ink-900">
+              <td className="px-3 py-1.5">Total</td>
+              <td className="tnum px-3 py-1.5 text-right">{inr(total.gmv)}</td>
+              <td className="tnum px-3 py-1.5 text-right">{inr(total.units)}</td>
+              <td className="tnum px-3 py-1.5 text-right">{inr(total.cogs)}</td>
+              <td className="tnum px-3 py-1.5 text-right">{(total.cogsSplit * 100).toFixed(1)}%</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>

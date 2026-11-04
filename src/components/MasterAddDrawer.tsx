@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Lock } from 'lucide-react'
 import { ApiError } from '../api/client'
 import { addChannel, addChannelLocation, addChannelSku, addPepSku, editMasterRow, getMasterFormOptions, type EditConflict, type FieldProblem, type MasterFormOptions } from '../api/masters'
-import { ADD_RULE, ADD_TEXT, EDIT_TEXT, HISTORY_TEXT, MASTER_LOG_TYPE } from '../constants/masters'
+import { ADD_RULE, ADD_TEXT, EDIT_TEXT, HISTORY_TEXT, MASTER_LOG_TYPE, STOCK_EDIT_KEYS, STOCK_NOT_COUNTED, STOCK_TEXT } from '../constants/masters'
 import { Button, Drawer } from './ui'
 import { inputCls } from './kit'
 
@@ -25,6 +25,8 @@ type Field = {
   rule?: { re: RegExp; rule: string }; upper?: boolean
   /** Edit: a key, shown but not editable. */
   locked?: boolean
+  /** Why a locked field cannot be edited (shown under it and as its tooltip); default: a key. */
+  lockReason?: string
   /** number: allowed range (default: above 0) and whole numbers only */
   range?: { min: number; max: number }; int?: boolean
   options?: (o: MasterFormOptions) => { value: string; label: string }[]
@@ -100,6 +102,9 @@ const FORMS: Record<AddMaster, { title: string; fields: Field[]; send: (b: Recor
   },
 }
 
+/** Warehouse fields locked in local D2C test mode unless the row is a TEST_FACILITY warehouse. */
+const D2C_TEST_LOCKED_KEYS = ['allowInternalTransfer']
+
 /** Edit forms: the Add fields (status is switched from the row instead), keys locked, plus columns only Edit has. */
 const lock = (fields: Field[], keys: string[]): Field[] => fields.filter((f) => f.kind !== 'active').map((f) => (keys.includes(f.key) ? { ...f, locked: true } : f))
 const EDIT_FORMS: Record<EditMaster, { title: string; fields: Field[] }> = {
@@ -127,6 +132,15 @@ const EDIT_FORMS: Record<EditMaster, { title: string; fields: Field[] }> = {
       { key: 'billToGstin', label: 'Bill-to GSTIN', kind: 'text', mono: true, rule: ADD_RULE.GSTIN, upper: true },
       { key: 'shipToGstin', label: 'Ship-to GSTIN', kind: 'text', mono: true, rule: ADD_RULE.GSTIN, upper: true },
       { key: 'remarks', label: 'Remarks', kind: 'textarea', wide: true },
+      // in-transit stock (user's facility sheet, 2026-11-02): saved together; "Not counted" empties all three
+      { key: 'stockBucket', label: 'In-transit channel name', kind: 'select', hint: STOCK_TEXT.BUCKET_HINT,
+        options: (o) => [...o.stockBuckets.map((b) => ({ value: b.group, label: `${b.label} (${b.type})` })), { value: o.stockNotCounted, label: o.stockNotCounted }] },
+      { key: 'stockFeed', label: 'In-transit feed', kind: 'select', hint: STOCK_TEXT.FEED_HINT,
+        options: (o) => [...o.stockFeeds, { value: o.stockNotCounted, label: o.stockNotCounted }] },
+      { key: 'stockFormula', label: 'Units formula', kind: 'select', wide: true,
+        options: (o) => [...o.stockFormulas, { value: o.stockNotCounted, label: o.stockNotCounted }] },
+      // D2C internal transfers (2026-11-03): may send / receive transfers
+      { key: 'allowInternalTransfer', label: 'Allow internal transfer', kind: 'select', options: pick(['Yes', 'No']) },
     ],
   },
 }
@@ -166,8 +180,15 @@ export function MasterAddDrawer({ master, defaultChannelId, edit, onClose, onAdd
   onClose: () => void; onAdded: (message: string) => void
 }) {
   const isEdit = !!edit
-  const form = isEdit ? EDIT_FORMS[master] : { ...FORMS[master as AddMaster] }
   const opts = useQuery({ queryKey: ['masters', 'form-options'], queryFn: ({ signal }) => getMasterFormOptions(signal) })
+  // local D2C test mode (backend D2C_TEST_ONLY): "Allow internal transfer" only on a TEST_FACILITY warehouse
+  const testMode = opts.data?.d2cTestMode
+  const testLocked = isEdit && master === 'pepWh' && !!testMode?.testOnly && !testMode.testFacilities.includes(edit?.values.code ?? '')
+  const form = useMemo(() => {
+    const base = isEdit ? EDIT_FORMS[master] : { ...FORMS[master as AddMaster] }
+    if (!testLocked) return base
+    return { ...base, fields: base.fields.map((f) => (D2C_TEST_LOCKED_KEYS.includes(f.key) ? { ...f, locked: true, lockReason: EDIT_TEXT.D2C_TEST_LOCKED } : f)) }
+  }, [isEdit, master, testLocked])
   const [initial, setInitial] = useState<Record<string, string>>(() => ({ ...(edit?.values ?? {}) }))
   const [conflicts, setConflicts] = useState<EditConflict[]>([])
   const [v, setV] = useState<Record<string, string>>(() => edit ? { ...edit.values } : ({ ...(defaultChannelId ? { channelId: defaultChannelId } : {}), ...(form.fields.some((f) => f.kind === 'active') ? { isActive: 'true' } : {}) }))
@@ -200,6 +221,12 @@ export function MasterAddDrawer({ master, defaultChannelId, edit, onClose, onAdd
       if (s) Object.assign(next, { productName: s.name ?? next.productName ?? '', brand: s.brand ?? next.brand ?? '', mrp: s.mrp !== null ? String(s.mrp) : next.mrp ?? '', eanCode: s.ean ?? next.eanCode ?? '' })
     }
     if (master === 'channelSku' && key === 'rateAfterMargin') setRateEdited(true)
+    // Warehouse: a bucket brings its usual feed and formula; "Not counted" empties both
+    if (master === 'pepWh' && key === 'stockBucket') {
+      const b = opts.data?.stockBuckets.find((x) => x.group === value)
+      if (value === STOCK_NOT_COUNTED) Object.assign(next, { stockFeed: STOCK_NOT_COUNTED, stockFormula: STOCK_NOT_COUNTED })
+      else if (b) Object.assign(next, { stockFeed: b.feed, stockFormula: b.formula })
+    }
     if (master === 'channelSku' && !rateEdited && key !== 'rateAfterMargin') {
       const mrp = Number(next.mrp), margin = Number(next.marginPercent)
       if (next.mrp && next.marginPercent !== undefined && next.marginPercent !== '' && Number.isFinite(mrp) && Number.isFinite(margin)) next.rateAfterMargin = String(round2(mrp * (1 - margin / 100)))
@@ -216,13 +243,15 @@ export function MasterAddDrawer({ master, defaultChannelId, edit, onClose, onAdd
 
   const saveEdit = async () => {
     if (!edit || !changedKeys.length || left || saving) return
+    // the stock settings go together (the backend checks them as one)
+    const sendKeys = changedKeys.some((k) => (STOCK_EDIT_KEYS as readonly string[]).includes(k)) ? [...new Set([...changedKeys, ...STOCK_EDIT_KEYS])] : changedKeys
     setSaving(true)
     setFailed('')
     setConflicts([])
     try {
       const res = await editMasterRow(MASTER_LOG_TYPE[master], edit.id, {
-        changes: Object.fromEntries(changedKeys.map((k) => [k, valueOf(fieldOf(k), v[k] ?? '')])),
-        original: Object.fromEntries(changedKeys.map((k) => [k, valueOf(fieldOf(k), initial[k] ?? '', null)])),
+        changes: Object.fromEntries(sendKeys.map((k) => [k, valueOf(fieldOf(k), v[k] ?? '')])),
+        original: Object.fromEntries(sendKeys.map((k) => [k, valueOf(fieldOf(k), initial[k] ?? '', null)])),
         ...(remark.trim() ? { remark: remark.trim() } : {}),
       })
       onAdded(EDIT_TEXT.SAVED(form.title.replace(/^Edit /, ''), res.changed.length))
@@ -272,7 +301,7 @@ export function MasterAddDrawer({ master, defaultChannelId, edit, onClose, onAdd
     const blur = () => setTouched((t) => ({ ...t, [f.key]: true }))
     if (f.locked) {
       const shown = f.kind === 'select' && opts.data && f.options ? (f.options(opts.data).find((o) => o.value === value)?.label ?? value) : value
-      return <input value={shown} readOnly disabled title={EDIT_TEXT.LOCKED} className={`${cls} cursor-not-allowed bg-alt text-ink-600`} />
+      return <input value={shown} readOnly disabled title={f.lockReason ?? EDIT_TEXT.LOCKED} className={`${cls} cursor-not-allowed bg-alt text-ink-600`} />
     }
     if (f.kind === 'active') {
       return <select value={value} onChange={(e) => set(f.key, e.target.value)} onBlur={blur} className={cls}><option value="true">Active</option><option value="false">Inactive</option></select>
@@ -325,7 +354,7 @@ export function MasterAddDrawer({ master, defaultChannelId, edit, onClose, onAdd
             <label key={f.key} className={f.wide || f.kind === 'textarea' ? 'col-span-2' : ''}>
               <div className="mb-1 flex items-center gap-1 text-[12px] font-medium text-ink-600">{f.label}{f.locked ? <Lock className="size-3 text-ink-400" /> : <span className="text-crit"> *</span>}</div>
               {control(f)}
-              {msg ? <div className="mt-1 text-[11px] text-crit">{msg}</div> : f.hint ? <div className="mt-1 text-[11px] text-ink-400">{f.hint}</div> : null}
+              {msg ? <div className="mt-1 text-[11px] text-crit">{msg}</div> : f.lockReason ? <div className="mt-1 text-[11px] text-warn">{f.lockReason}</div> : f.hint ? <div className="mt-1 text-[11px] text-ink-400">{f.hint}</div> : null}
             </label>
           )
         })}

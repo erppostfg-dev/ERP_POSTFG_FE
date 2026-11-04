@@ -1,6 +1,9 @@
 import type { DailyItem, DayPlan, DaySummary, FetchStep, IntransitRun, InventoryRow, InventoryView, MasterItem, MasterVersion, SavedInput } from '../api/intransit'
 import { PEPIMS_CONNECTOR, SOURCES, type Source } from '../constants/intransit'
+import { setTransferRoutesStandIn, type MasterHistoryItem, type TransferRouteItem } from '../api/masters'
 import { PATHS } from '../constants/pages'
+import { setD2cStandIn } from '../api/d2cTransfers'
+import { d2cStandIn } from './d2cTransfersPreview'
 
 /*
  * DEV-ONLY preview of In-transit Stock and Inventory Calculation without the backend or a login (user, 2026-10-15).
@@ -14,9 +17,11 @@ export const PREVIEW_ENABLED = import.meta.env.DEV && import.meta.env.VITE_INTRA
 
 /** Set by AuthProvider when it falls back to the preview user; the API module then answers from here. */
 export const preview = { on: false }
+// D2C Internal Transfers (2026-11-03): its own made-up data, answering while the preview user is on
+setD2cStandIn(d2cStandIn(() => preview.on))
 
 export const PREVIEW_USER = { id: 'preview', name: 'Preview (no login)', email: 'preview@localhost', roles: ['developer'], team: null }
-export const PREVIEW_ACCESS = { [PATHS.PLANNING]: 'editor', [PATHS.INVENTORY]: 'editor', [PATHS.INTRANSIT_STOCK]: 'editor' } as const
+export const PREVIEW_ACCESS = { [PATHS.PLANNING]: 'editor', [PATHS.INVENTORY]: 'editor', [PATHS.INTRANSIT_STOCK]: 'editor', [PATHS.TRANSFER_ROUTES]: 'viewer', [PATHS.D2C_TRANSFERS]: 'editor' } as const
 
 const wait = <T>(v: T, ms = 250): Promise<T> => new Promise((r) => setTimeout(() => r(structuredClone(v)), ms))
 const now = () => new Date().toISOString()
@@ -334,6 +339,13 @@ export const previewDeleteRun = (id: string) => {
   if (i >= 0) runs.splice(i, 1)
   return wait(undefined)
 }
+export const previewStopRun = (id: string) => {
+  const r = runs.find((x) => x.id === id)
+  if (r) Object.assign(r, { status: 'stopped', finishedAt: new Date().toISOString(), error: 'Stopped by you (preview)' })
+  return wait(r ?? runs[0])
+}
+export const previewAnswerIssues = (answers: { action: string }[]) =>
+  wait({ fixed: answers.filter((a) => a.action !== 'ignore').length, ignored: answers.filter((a) => a.action === 'ignore').length })
 export const previewDownload = () => Promise.reject(new Error('Preview mode: there is no real file to download. Start the backend to build a real report.'))
 
 /** Preview: pretend the variants were mapped. */
@@ -405,3 +417,59 @@ export const previewPeriods = () => wait([
   { kind: 'weekly' as const, fy: 'FY26-27', label: 'W43', from: '2026-10-19', key: 'inventory/Weekly Snapshot/FY26-27/W43.xlsx', size: 41_000_000, modified: now() },
   { kind: 'monthly' as const, fy: 'FY26-27', label: 'September', from: '2026-09-01', key: 'inventory/Monthly Snapshot/FY26-27/September.xlsx', size: 40_500_000, modified: now() },
 ])
+
+// ---- Masters -> Transfer Routes (2026-11-03): MADE-UP routes, edits kept in memory ---------------------------------
+const ROUTE_SENDERS = ['GGN_WH', 'BLR_WH', 'KOL_WH', 'MUM_WH']
+/** channel, location, receiving facility (null = not set), PO prefix */
+const ROUTE_LOCATIONS: [string, string, string | null, string | null][] = [
+  ['Hyphen D2C', 'Nagpur DC', 'NGP_WH', 'HYP_Nagpur'], ['Hyphen D2C', 'Pune DC', 'PNQ_WH', 'HYP_Pune'], ['mCaffeine D2C', 'Bhiwandi FC', 'MUM_WH', 'MCF_Bhiwandi'],
+  ['mCaffeine D2C', 'Hoskote FC', 'BLR_WH', 'MCF_Hoskote'], ['mCaffeine D2C', 'Dankuni FC', 'KOL_WH', 'MCF_Dankuni'], ['Hyphen D2C', 'Gurgaon DC', 'GGN_WH', 'HYP_Gurgaon'],
+  ['mCaffeine D2C', 'Guwahati DC', null, null],
+]
+const routes: TransferRouteItem[] = ROUTE_SENDERS.flatMap((sender, si) => ROUTE_LOCATIONS.map((loc, li) => ({ loc, li })).filter(({ loc }) => loc[2] !== sender).map(({ loc: [channel, location, rec, prefix], li }) => {
+  const vendor = (si + li) % 4 === 0 ? `V_${sender}_${rec ?? 'NA'}` : null
+  const customer = li % 5 === 4 ? null : `C_${rec ?? 'NA'}_${si + 1}`
+  const channelCode = li === 6 ? null : `${channel.startsWith('Hyphen') ? 'HYP' : 'MCF'}_STO`
+  return {
+    id: si * 10 + li + 1, senderFacilityId: si + 1, senderCode: sender, locationId: String(100 + li), channel, location, receivingFacilityId: rec ? 50 + li : null,
+    receivingCode: rec, poPrefix: prefix, uniwareChannelCode: channelCode, customerCode: customer, customerName: customer ? `${location} (${channel})` : null,
+    vendorCode: vendor, isActive: li !== 6, locationActive: true, missingVendor: !vendor, missingCustomer: !customer, missingChannel: !channelCode, updatedAt: now(),
+  }
+}))
+// one sender + location with TWO Uniware channels (as the Motherhub routes of the user's sheet, 2026-11-03)
+{
+  const twin = routes.find((r) => r.senderCode === 'GGN_WH' && r.location === 'Bhiwandi FC')
+  if (twin) routes.push({ ...twin, id: 99, uniwareChannelCode: 'MCF_STO_L', customerCode: twin.customerCode ?? 'C_MUM_WH_L', missingCustomer: false, missingChannel: false })
+}
+const routeLog: MasterHistoryItem[] = []
+const text = (v: unknown) => (v === null || v === undefined ? null : String(v))
+const logRoute = (type: string, recordId: string, rowKey: string, field: string, oldValue: unknown, newValue: unknown, remark?: string) => routeLog.unshift({
+  id: String(routeLog.length + 1), at: now(), by: PREVIEW_USER.name, byEmail: PREVIEW_USER.email, byTeam: null, action: 'field_changed', source: 'screen', field,
+  oldValue: text(oldValue), newValue: text(newValue), remark: remark ?? null, batchId: null, valueHidden: false, type, recordId, rowKey, from: 'masters',
+})
+const blankCode = (v: string | null) => !v || !v.trim()
+setTransferRoutesStandIn({
+  on: () => preview.on,
+  list: () => wait(routes),
+  edit: (id, body) => {
+    const r = routes.find((x) => x.id === id)
+    if (!r) return Promise.reject(new Error('Preview: no such route'))
+    const changed: string[] = []
+    for (const [k, val] of Object.entries(body.changes)) {
+      const key = k as keyof TransferRouteItem
+      if (r[key] === val) continue
+      logRoute('transfer_route', String(id), `${r.senderCode} -> ${r.channel} | ${r.location ?? ''}`, k, r[key], val, body.remark)
+      Object.assign(r, { [k]: val })
+      changed.push(k)
+    }
+    Object.assign(r, { missingVendor: blankCode(r.vendorCode), missingCustomer: blankCode(r.customerCode), missingChannel: blankCode(r.uniwareChannelCode), updatedAt: now() })
+    return wait({ changed })
+  },
+  editPrefix: (locationId, body) => {
+    const prefix = text(body.changes.transferPoPrefix)
+    routes.filter((r) => r.locationId === locationId).forEach((r) => { r.poPrefix = prefix })
+    logRoute('location', locationId, locationId, 'transferPoPrefix', body.original.transferPoPrefix, prefix, body.remark)
+    return wait({ changed: ['transferPoPrefix'] })
+  },
+  history: (type, id) => wait(routeLog.filter((h) => h.type === type && h.recordId === id)),
+})

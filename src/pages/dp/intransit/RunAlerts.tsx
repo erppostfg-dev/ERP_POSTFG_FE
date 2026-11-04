@@ -17,6 +17,8 @@ const whatOf = (r: IntransitRun) => (r.kind === 'report' ? `Report #${r.id}` : `
 /** What went wrong with an ended run, or null when it went well. */
 const problemOf = (r: IntransitRun): string | null => {
   if (r.status === 'failed') return r.error ?? 'It failed without a message: see the log.'
+  // stopped by a person: they know; stopped by itself (no answer on new SKUs, its fetch stopped): say why
+  if (r.status === 'stopped') return r.stoppedBy ? null : r.error ?? 'It stopped: see the log.'
   if (r.status !== 'succeeded') return null
   if (r.kind !== 'report') return r.error ? `Done, but ${r.error}.` : null
   const fetchFailed = (r.result?.fetched ?? []).filter((f) => f.error)

@@ -17,11 +17,6 @@
       "count": 4
     }
   },
-  "src/components/MasterAddDrawer.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 2
-    }
-  },
   "src/components/kit.tsx": {
     "@typescript-eslint/no-base-to-string": {
       "count": 10
