@@ -370,3 +370,19 @@ export const RECHECK_TEXT = {
       ? `Re-checked: ${closed} problem${closed === 1 ? '' : 's'} fixed in the master closed, ${passed} PO${passed === 1 ? '' : 's'} passed to Processed${partly ? `, ${partly} still need a review for something else` : ''}.`
       : 'Re-checked: nothing new fixed in the master yet.',
 } as const
+
+/** Failed + Rejected, many at once (2026-11-04). */
+export const BULK_ENDED_TEXT = {
+  MAX: 50,
+  RETRY: (n: number) => `Try again (${n})`,
+  RETRY_HINT: 'Each PO goes on from the step it failed at, one after another in the background. A PO that failed at the OCR is read by the OCR again (OCR cost, at most 3 tries). A PO that came again meanwhile is not made twice.',
+  DISMISS: (n: number) => `Dismiss (${n})`,
+  DISMISS_HINT: 'Off the Failed list, with who / when / why; nothing is deleted.',
+  REOPEN: (n: number) => `Reopen (${n})`,
+  REOPEN_HINT: 'Back to In Review, each with one issue to accept (like Reopen on one PO); then fixed and approved again.',
+  REMARK: 'Why (required)',
+  GO: 'Go',
+  CANCEL: 'Cancel',
+  TOO_MANY: (max: number) => `At most ${max} at once: tick fewer.`,
+  RESULT: (done: number, skipped: number, what: string) => `${done} ${what}${skipped ? `, ${skipped} not: ` : ''}`,
+} as const

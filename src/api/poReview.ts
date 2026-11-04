@@ -316,3 +316,12 @@ export type ReviewLineItemRow = {
 export function getReviewLineItems(uploadIds: string[]) {
   return api<ReviewLineItemRow[]>(LINE_ITEMS.REVIEW_ENDPOINT, { method: 'POST', body: JSON.stringify({ uploadIds }) })
 }
+
+/* Failed + Rejected, many at once (2026-11-04): Try again / Dismiss failed POs, Reopen rejected POs (1-50 per call). */
+export type BulkEndedResult = { uploadId: string; result: 'queued' | 'done' | 'skipped'; reason: string }
+export const bulkRetryFailed = (uploadIds: string[]) =>
+  api<BulkEndedResult[]>(`${PO_REVIEW_ENDPOINT}/bulk-retry`, { method: 'POST', body: JSON.stringify({ uploadIds }) })
+export const bulkDismissFailed = (uploadIds: string[], remark: string) =>
+  api<BulkEndedResult[]>(`${PO_REVIEW_ENDPOINT}/bulk-dismiss`, { method: 'POST', body: JSON.stringify({ uploadIds, remark }) })
+export const bulkReopenRejected = (uploadIds: string[], remark: string) =>
+  api<BulkEndedResult[]>(`${PO_REVIEW_ENDPOINT}/bulk-reopen`, { method: 'POST', body: JSON.stringify({ uploadIds, remark }) })

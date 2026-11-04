@@ -5,8 +5,8 @@ import { Badge, Button, Drawer, PillToggle } from '../../components/ui'
 import { DataGrid, FilterChips, FilterPanel, SectionToolbar, exportRows, useSection, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
 import { ApiError } from '../../api/client'
-import { getRejection, listAllPoReview, reopenPo, type PoReviewItem } from '../../api/poReview'
-import { ENDED_TEXT, FAIL_STEP_HINT, FAIL_STEP_LABEL, FIX_FIELD_LABEL, ISSUE_LABELS, PO_REVIEW_REMARK_MAX, PO_STATUS, REJECTED_FROM_LABEL, SOURCE_LABELS } from '../../constants/poReview'
+import { bulkDismissFailed, bulkReopenRejected, bulkRetryFailed, getRejection, listAllPoReview, reopenPo, type BulkEndedResult, type PoReviewItem } from '../../api/poReview'
+import { BULK_ENDED_TEXT as B, ENDED_TEXT, FAIL_STEP_HINT, FAIL_STEP_LABEL, FIX_FIELD_LABEL, ISSUE_LABELS, PO_REVIEW_REMARK_MAX, PO_STATUS, REJECTED_FROM_LABEL, SOURCE_LABELS } from '../../constants/poReview'
 import { inputCls } from '../../components/kit'
 import type { ColKind } from '../../lib/ops'
 import { istDateTime } from '../../lib/time'
@@ -19,7 +19,8 @@ import { FileCell } from './SourceCells'
  *   Failed:   a tag for the step that failed (OCR, reading, saving, Uniware CSV, held PO), its code and the reason.
  * Rejected (2026-11-03): a row opens why it was rejected (who, where, reason, the errors rejected with it, what the
  * reviewer had changed) and "Reopen for review" (PO review editors): back to In Review, fixed there, approved again.
- * Failed: read-only for now.
+ * Many at once (2026-11-04): tick rows -> Failed: Try again (from the step it failed at, in the background) / Dismiss
+ * (remark); Rejected: Reopen (remark). The server runs them one by one; the note says what was done and what not, and why.
  */
 
 type View = 'rejected' | 'failed'
@@ -54,6 +55,12 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
   const [view, setView] = useState<View>('rejected')
   const [open, setOpen] = useState<Row | null>(null)
   const [notice, setNotice] = useState('')
+  // many at once (2026-11-04): the ticked rows of this view, and the action asking for a remark
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [ask, setAsk] = useState<'dismiss' | 'reopen' | null>(null)
+  const [remark, setRemark] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkError, setBulkError] = useState('')
   const rejected = useQuery({ queryKey: ['po-ended', PO_STATUS.REJECTED, liveTick], queryFn: ({ signal }) => listAllPoReview({ status: PO_STATUS.REJECTED }, signal) })
   const failed = useQuery({ queryKey: ['po-ended', PO_STATUS.FAILED, liveTick], queryFn: ({ signal }) => listAllPoReview({ status: PO_STATUS.FAILED }, signal) })
   const q = view === 'rejected' ? rejected : failed
@@ -61,7 +68,31 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
   const s = useSection(rows, ['poNumber', 'channel', 'reason', 'file', 'by', 'code'])
   // the search / filters belong to one view
   const { setFilters, setQ } = s
-  useEffect(() => { setFilters({}); setQ('') }, [view, setFilters, setQ])
+  useEffect(() => { setFilters({}); setQ(''); setSelected(new Set()); setAsk(null) }, [view, setFilters, setQ])
+  const picked = [...selected].filter((id) => rows.some((r) => r.id === id))
+  const summary = (r: BulkEndedResult[], what: string) => {
+    const ok = r.filter((x) => x.result !== 'skipped')
+    const no = r.filter((x) => x.result === 'skipped')
+    const name = (id: string) => rows.find((x) => x.id === id)?.poNumber ?? id
+    return B.RESULT(ok.length, no.length, what) + no.slice(0, 5).map((x) => `${name(x.uploadId)}: ${x.reason}`).join('; ')
+  }
+  const bulk = async (action: 'retry' | 'dismiss' | 'reopen') => {
+    if (picked.length > B.MAX) { setBulkError(B.TOO_MANY(B.MAX)); return }
+    setBulkBusy(true)
+    setBulkError('')
+    try {
+      const r = action === 'retry' ? await bulkRetryFailed(picked) : action === 'dismiss' ? await bulkDismissFailed(picked, remark.trim()) : await bulkReopenRejected(picked, remark.trim())
+      setNotice(summary(r, action === 'retry' ? 'queued again' : action === 'dismiss' ? 'dismissed' : 'back in review'))
+      setSelected(new Set())
+      setAsk(null)
+      setRemark('')
+      void qc.invalidateQueries({ queryKey: ['po-ended'] })
+    } catch (e) {
+      setBulkError(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
   const uniq = (k: 'channel' | 'where' | 'by' | 'tag' | 'source') => [...new Set(rows.map((r) => r[k]).filter(Boolean))].sort()
   const filters: FilterDef[] = view === 'rejected'
     ? [{ key: 'channel', label: 'Channel', type: 'multi', options: uniq('channel') }, { key: 'where', label: 'Rejected in', type: 'multi', options: uniq('where') },
@@ -107,6 +138,32 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
         activeFilters={s.active} entity={view === 'rejected' ? 'rejected POs' : 'failed POs'} onExport={(ext) => exportRows(`${view}-pos`, ext, COLS[view], s.filtered)} />
       <Reveal open={s.open}><FilterPanel defs={filters} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       <FilterChips defs={filters} value={s.filters} onChange={s.setFilters} />
+      {canEdit && picked.length > 0 && (
+        <div className="pf-tab-in space-y-2 rounded-[var(--radius)] border border-primary/25 bg-primary-soft/30 px-3 py-2 text-[12.5px]">
+          <div className="flex flex-wrap items-center gap-2">
+            {view === 'failed' ? (
+              <>
+                <span title={B.RETRY_HINT}><Button variant="primary" disabled={bulkBusy} onClick={() => void bulk('retry')} icon={<RotateCcw className="size-3.5" />}>{B.RETRY(picked.length)}</Button></span>
+                <span title={B.DISMISS_HINT}><Button disabled={bulkBusy} onClick={() => setAsk('dismiss')} icon={<Ban className="size-3.5" />}>{B.DISMISS(picked.length)}</Button></span>
+                <span className="text-ink-600">{B.RETRY_HINT}</span>
+              </>
+            ) : (
+              <>
+                <span title={B.REOPEN_HINT}><Button variant="primary" disabled={bulkBusy} onClick={() => setAsk('reopen')} icon={<RotateCcw className="size-3.5" />}>{B.REOPEN(picked.length)}</Button></span>
+                <span className="text-ink-600">{B.REOPEN_HINT}</span>
+              </>
+            )}
+          </div>
+          {ask && (
+            <div className="flex flex-wrap items-center gap-2">
+              <input value={remark} onChange={(e) => setRemark(e.target.value.slice(0, PO_REVIEW_REMARK_MAX))} placeholder={B.REMARK} className={`${inputCls} max-w-md`} />
+              <Button variant="primary" disabled={bulkBusy || !remark.trim()} onClick={() => void bulk(ask)}>{B.GO}</Button>
+              <Button disabled={bulkBusy} onClick={() => { setAsk(null); setRemark('') }}>{B.CANCEL}</Button>
+            </div>
+          )}
+          {bulkError && <p className="text-crit">{bulkError}</p>}
+        </div>
+      )}
       {q.isError ? (
         <div className="rounded-[var(--radius)] bg-crit-soft px-3 py-2 text-[12.5px] text-crit">
           {q.error instanceof ApiError ? q.error.message : String(q.error)} <button onClick={() => void q.refetch()} className="font-semibold underline">Try again</button>
@@ -114,6 +171,7 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
       ) : (
         <div key={view} className="pf-tab-in">
           <DataGrid cols={COLS[view]} rows={q.isPending ? [] : s.filtered} rowKey={(r) => r.id} pageSize={25} pageSizeKey={`ended-${view}`}
+            {...(canEdit ? { selected, onSelectedChange: setSelected } : {})}
             onRowClick={view === 'rejected' ? setOpen : undefined}
             trailing={[{ label: 'Original file', render: (r) => <FileCell uploadId={r.id} name={r.file} /> }]} />
           {q.isPending && <p className="mt-2 text-[12.5px] text-ink-400">Loading…</p>}
