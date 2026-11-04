@@ -75,7 +75,7 @@ export type FindResult = (found: number | null) => void
 const isWordChar = (c: string | undefined) => !!c && /[\p{L}\p{N}]/u.test(c)
 
 /** Places where `term` (lower case) stands on its own in `text`: not inside a longer word or number. */
-export function findTerm(text: string, term: string): number[] {
+function findTerm(text: string, term: string): number[] {
   return findAll(text, term).filter((i) => {
     const before = text[i - 1]
     const after = text[i + term.length]

@@ -44,7 +44,7 @@ export const PATHS = {
  * Pages whose data comes from the API. Every other page still shows the design's sample data, and in dev it is tinted
  * amber with a "Dummy data" strip (see .dummy-data in index.css). Add a page here once it is wired to the backend.
  */
-export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
+const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
   PATHS.PO_REVIEW, // Processed tab live; In Review and Manual Upload still marked inside the page
   PATHS.ADMIN, // GET /admin/users + /admin/roles
   PATHS.APPROVALS, // GET /approvals/po-reviews (PO reviews only; other approval types not built, hidden)

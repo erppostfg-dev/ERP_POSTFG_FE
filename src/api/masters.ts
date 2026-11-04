@@ -252,8 +252,6 @@ let standIn: TransferRoutesStandIn | null = null
 export const setTransferRoutesStandIn = (s: TransferRoutesStandIn) => { standIn = s }
 const offline = () => (standIn?.on() ? standIn : null)
 
-export const listTransferRoutes = (signal?: AbortSignal) =>
-  offline()?.list() ?? api<TransferRouteItem[]>(MASTERS_ENDPOINT.TRANSFER_ROUTES, { signal })
 export type TransferRoutesMeta = { total: number; testOnly?: boolean; testFacilities?: string[] }
 /** The same list with its meta: testOnly = the server runs D2C in local test mode (only TEST_FACILITY transfers). */
 export const listTransferRoutesWithMeta = async (signal?: AbortSignal): Promise<{ data: TransferRouteItem[]; meta: TransferRoutesMeta }> => {

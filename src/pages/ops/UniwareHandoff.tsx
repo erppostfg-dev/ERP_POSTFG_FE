@@ -35,7 +35,7 @@ const dayText = (n: number) => (n === 0 ? 'today' : n === 1 ? '1 day' : `${n} da
 export const ageTone = (n: number) => (n >= UNIWARE_AGE.CRIT_DAYS ? 'crit' : n >= UNIWARE_AGE.WARN_DAYS ? 'warn' : 'neutral')
 
 /** Saves a CSV the backend sends (GET one / POST several): it records the download on the server. */
-export const saveCsv = async (path: string, init?: RequestInit): Promise<void> => {
+const saveCsv = async (path: string, init?: RequestInit): Promise<void> => {
   const res = await fetch(apiUrl(path), { ...init, credentials: 'include', headers: { ...(init?.body ? { 'Content-Type': 'application/json' } : {}) } })
   if (!res.ok) {
     const err = (await res.json().catch(() => null))?.error

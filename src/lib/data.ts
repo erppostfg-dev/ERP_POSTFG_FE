@@ -8,8 +8,6 @@ export const CHANNELS = [
 ] as const
 export type Channel = (typeof CHANNELS)[number]
 
-export const LOCATIONS = ['GGN MWH', 'MUM MWH', 'DarkStore', 'Return', 'D2C'] as const
-
 // ---- Module 1: Inventory (Channel × SKU × Location) --------------------
 export interface InventoryRow {
   sku: string
@@ -61,11 +59,6 @@ export type IntakeSource = 'API' | 'Excel' | 'OCR'
 export type POStage =
   | 'Intake' | 'Validated' | 'COPT Verify' | 'SO in Uniware'
   | 'WH Working' | 'Packed / RTS' | 'Invoiced' | 'Dispatched' | 'Delivered' | 'GRN'
-
-export const PO_STAGES: POStage[] = [
-  'Intake', 'Validated', 'COPT Verify', 'SO in Uniware', 'WH Working',
-  'Packed / RTS', 'Invoiced', 'Dispatched', 'Delivered', 'GRN',
-]
 
 export interface POLine {
   srNo: number
@@ -325,17 +318,6 @@ export const PO_TO_DELIVERY = [
 ]
 export const PO_TO_DELIVERY_TARGET = 12
 
-// PO-expiry windows by channel (days) — shorter = higher urgency
-export const EXPIRY_WINDOWS: { channel: string; window: number }[] = [
-  { channel: 'Blinkit', window: 2 },
-  { channel: 'Zepto', window: 2 },
-  { channel: 'Swiggy', window: 2 },
-  { channel: 'BigBasket', window: 3 },
-  { channel: 'Firstcry', window: 4 },
-  { channel: 'Nykaa', window: 5 },
-  { channel: 'Amazon', window: 7 },
-]
-
 export function criticality(po: PO): { score: number; level: 'Critical' | 'High' | 'Medium' | 'Low' } {
   let score = 0
   if (po.daysToExpiry <= 1) score += 40
@@ -358,13 +340,6 @@ export function fillRate(po: PO): number {
  *  (was the Channel warehouses sub-tab of Warehouses). */
 export const MASTER_TABS = ['PEP SKU Master', 'Channel SKU Master', 'Channel Master', 'Channel Location Master', 'Warehouses', 'Transfer Routes']
 
-export const SKU_CHANNEL_PILLS = [
-  'Blinkit', 'Zepto', 'BigBasket', 'Flipkart Qcom', 'Myntra', 'Nykaa', 'Purplle',
-  'Flipkart', 'Amazon', 'Myntra-OR', 'FirstCry', 'Purplle SOR', 'Purplle SDR',
-  'Tata 1MG', 'Scootsy Logistics', 'Reliance / Tira', 'Avenue Supermarts Ltd',
-  'Avenue E-Commerce', 'Default B2B', 'All Channels',
-]
-
 export interface SkuMaster {
   brand: 'mCaffeine' | 'Hyphen'
   pepCode: string
@@ -375,28 +350,3 @@ export interface SkuMaster {
   marginPct: number
   ean: string
 }
-
-const rateAfter = (mrp: number, m: number) => Math.round(mrp * (1 - m / 100) * 100) / 100
-export function rateAfterMargin(s: SkuMaster) {
-  return rateAfter(s.mrp, s.marginPct)
-}
-
-export const SKU_MASTER: SkuMaster[] = [
-  { brand: 'mCaffeine', pepCode: 'MTOOL1_JD_S', finalSkuLive: 'Continued', productName: 'MCaffeine Jade Face Massager', mrp: 1799, channelCode: '10129779', marginPct: 27, ean: '8906087651234' },
-  { brand: 'Hyphen', pepCode: 'HYPMUBX020F030', finalSkuLive: 'Continued', productName: 'Advanced De-Pigmentation Serum', mrp: 649, channelCode: '10165694', marginPct: 27, ean: '8906112340021' },
-  { brand: 'mCaffeine', pepCode: '75MCaf42_WB', finalSkuLive: 'Continued', productName: 'mCaffeine Espresso Coffee Deep Exfoliating Face Scrub', mrp: 229, channelCode: '10109907', marginPct: 27, ean: '8906087650012' },
-  { brand: 'mCaffeine', pepCode: 'MCVITC30_A', finalSkuLive: 'Continued', productName: 'mCaffeine Vitamin C Face Serum 30ml', mrp: 699, channelCode: '10112238', marginPct: 30, ean: '8906087653019' },
-  { brand: 'Hyphen', pepCode: 'HYPSUN50_C', finalSkuLive: 'Continued', productName: 'Hyphen SPF 50 Sunscreen 50ml', mrp: 449, channelCode: '10165701', marginPct: 28, ean: '8906112340199' },
-  { brand: 'mCaffeine', pepCode: 'MCBEARD_KIT2', finalSkuLive: 'Discontinued', productName: 'mCaffeine Beard Grooming Kit', mrp: 999, channelCode: '10098120', marginPct: 25, ean: '8906087659887' },
-  { brand: 'Hyphen', pepCode: 'HYPNIAC30_B', finalSkuLive: 'Continued', productName: 'Hyphen Niacinamide Serum 30ml', mrp: 549, channelCode: '10165688', marginPct: 27, ean: '8906112340052' },
-  { brand: 'mCaffeine', pepCode: 'MCSHAMP250', finalSkuLive: 'Continued', productName: 'mCaffeine Coffee Shampoo 250ml', mrp: 399, channelCode: '10110455', marginPct: 26, ean: '8906087652077' },
-]
-
-// ---- Masters overview -------------------------------------------------
-export const MASTERS = [
-  { name: 'Overall SKU master', rows: 4210, synced: '2 min ago', issues: 3 },
-  { name: 'Channel SKU master', rows: 9840, synced: '2 min ago', issues: 11 },
-  { name: 'Channel / customer master', rows: 342, synced: '18 min ago', issues: 1 },
-  { name: 'Location master', rows: 63, synced: '1 hr ago', issues: 0 },
-  { name: 'Channel–SKU mapping', rows: 8720, synced: '2 min ago', issues: 27 },
-]

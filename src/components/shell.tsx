@@ -8,7 +8,7 @@ import type { ReactNode } from 'react'
  */
 
 /** Time of the shell's open / close animations (ms), the same as the CSS `duration-300`. */
-export const ANIMATION_MS = 300
+const ANIMATION_MS = 300
 
 export function Reveal({ open, children }: { open: boolean; children: ReactNode }) {
   const [render, setRender] = useState(open)

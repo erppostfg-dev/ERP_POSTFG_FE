@@ -1,7 +1,9 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
-    "src/main.tsx"
+    "src/main.tsx",
+    "src/pages/Orders.tsx",
+    "src/pages/Inventory.tsx"
   ],
   "project": [
     "src/**/*.{ts,tsx}"
@@ -34,6 +36,10 @@
   },
   "ignoreDependencies": [
     "tailwindcss",
-    "husky"
+    "husky",
+    "lint-staged"
+  ],
+  "ignoreBinaries": [
+    "lint-staged\r"
   ]
 }
