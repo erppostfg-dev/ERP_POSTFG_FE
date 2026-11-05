@@ -9,7 +9,7 @@ import {
   createUser, getRolePages, getUserOptions, listRoles, listUsers, resendWelcome, updateRole, updateUser,
   type AccessLevel, type AdminUser, type RoleItem, type RolePage, type UserBody, type UserOptions,
 } from '../api/admin'
-import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT, DEVELOPER_ROLE, EMAIL_TEXT, SERVER_TEXT, SETTINGS_SECTIONS, type SettingsSection } from '../constants/admin'
+import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT, DEVELOPER_ROLE, EMAIL_TEXT, MONITOR_TEXT, SERVER_TEXT, SETTINGS_SECTIONS, type SettingsSection } from '../constants/admin'
 import { istDateTime } from '../lib/time'
 import { PATHS, URL_PARAM } from '../constants/pages'
 import { oneOf, useUrlParam } from '../lib/urlState'
@@ -18,6 +18,7 @@ import { Toggle, VerifySettings } from './ops/VerifySettings'
 import { ReviewRulesDummy } from './SettingsDummy'
 import { EmailTab } from './admin/EmailTab'
 import { ServerTab } from './admin/ServerTab'
+import { MonitorTab } from './admin/MonitorTab'
 import { useAuth } from '../auth/AuthContext'
 import { IntakeSettings } from './ops/IntakeSettings'
 import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
@@ -32,7 +33,7 @@ import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
  * Email tab (2026-10-30): who gets each mail the ERP sends (pages/admin/EmailTab.tsx).
  */
 
-const TABS = ['users', 'roles', 'email', 'settings', 'server'] as const
+const TABS = ['users', 'roles', 'email', 'settings', 'server', 'monitor'] as const
 type Tab = (typeof TABS)[number]
 type Notice = { tone: 'ok' | 'err'; text: string } | null
 const errText = (e: unknown) => (e instanceof ApiError ? (Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message) : String(e))
@@ -42,14 +43,14 @@ export default function Admin() {
   // the Server tab (2026-11-04): developers only (the backend refuses everyone else too)
   const auth = useAuth()
   const isDeveloper = auth.status === 'signedIn' && auth.user.roles.includes(DEVELOPER_ROLE)
-  const shown: Tab = tab === 'server' && !isDeveloper ? 'users' : tab
+  const shown: Tab = (tab === 'server' || tab === 'monitor') && !isDeveloper ? 'users' : tab
   const users = useQuery({ queryKey: ['admin', 'users'], queryFn: ({ signal }) => listUsers(signal) })
   const roles = useQuery({ queryKey: ['admin', 'roles'], queryFn: ({ signal }) => listRoles(signal) })
   return (
     <div className="space-y-5">
       <PageTitle title={ADMIN_TEXT.TITLE} sub={ADMIN_TEXT.SUB} />
-      <SubTabs value={shown} onChange={setTab} tabs={[{ key: 'users', label: 'Users', count: users.data?.length }, { key: 'roles', label: 'Roles', count: roles.data?.length }, { key: 'email', label: EMAIL_TEXT.TAB }, { key: 'settings', label: VERIFY_SETTINGS_TEXT.TAB }, ...(isDeveloper ? [{ key: 'server' as const, label: SERVER_TEXT.TAB }] : [])]} />
-      <div key={shown} className="pf-tab-in">{shown === 'users' ? <UsersTab /> : shown === 'roles' ? <RolesTab /> : shown === 'email' ? <EmailTab /> : shown === 'server' ? <ServerTab /> : <SettingsTab />}</div>
+      <SubTabs value={shown} onChange={setTab} tabs={[{ key: 'users', label: 'Users', count: users.data?.length }, { key: 'roles', label: 'Roles', count: roles.data?.length }, { key: 'email', label: EMAIL_TEXT.TAB }, { key: 'settings', label: VERIFY_SETTINGS_TEXT.TAB }, ...(isDeveloper ? [{ key: 'server' as const, label: SERVER_TEXT.TAB }, { key: 'monitor' as const, label: MONITOR_TEXT.TAB }] : [])]} />
+      <div key={shown} className="pf-tab-in">{shown === 'users' ? <UsersTab /> : shown === 'roles' ? <RolesTab /> : shown === 'email' ? <EmailTab /> : shown === 'server' ? <ServerTab /> : shown === 'monitor' ? <MonitorTab /> : <SettingsTab />}</div>
     </div>
   )
 }

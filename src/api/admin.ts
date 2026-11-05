@@ -75,3 +75,32 @@ export type ServerView = {
 }
 export const getServer = (signal?: AbortSignal) => api<ServerView>(ADMIN_ENDPOINT.SERVER, { signal })
 export const runServerCleanup = (apply: boolean) => api<ServerView & { run: CleanupRun | null }>(ADMIN_ENDPOINT.SERVER_CLEANUP, json('POST', { apply }))
+
+/* Admin > Monitor (2026-11-05; developers only): GET /admin/monitor/access, /overview?window=, /peak?at=. */
+export type MonitorPart<T> = { ok: boolean; error: string | null; data: T | null }
+export type MonitorAccessCheck = { action: string; ok: boolean; error: string | null }
+export type MonitorAccess = { onServer: boolean; instanceId: string | null; logGroup: string; region: string; checks: MonitorAccessCheck[] }
+export type HealthPoint = {
+  t: string; rssMb: number | null; heapUsedMb: number | null; cpuPct: number | null; loopP99Ms: number | null; loopMaxMs: number | null
+  requests: number | null; errors5xx: number | null; errors4xx: number | null; slow: number | null; avgMs: number | null; maxMs: number | null
+  activeRequests: number | null; dbPoolSize: number | null; dbPoolFree: number | null; dbPoolWaiting: number | null; dbPoolMaxWaiting: number | null
+  running: string[]
+}
+export type AlertRow = { t: string; level: string; code: string; source: string; msg: string; reason: string; fix: string; requestId: string; jobId: string; path: string; errorCode: string }
+export type AlertCount = { code: string; level: string; count: number; last: string }
+export type MetricSeries = { id: string; label: string; points: { t: string; v: number }[] }
+export type MonitorAlarm = { name: string; state: string; reason: string; updatedAt: string | null }
+export type MonitorOverview = {
+  onServer: boolean; window: string; from: string; to: string
+  health: MonitorPart<HealthPoint[]>; alerts: MonitorPart<AlertRow[]>; alertCounts: MonitorPart<AlertCount[]>
+  metrics: MonitorPart<{ server: MetricSeries[]; database: MetricSeries[] }>; alarms: MonitorPart<MonitorAlarm[]>
+}
+export type PeakApi = { method: string; path: string; calls: number; avgMs: number; maxMs: number; dbQueries: number; kb: number }
+export type PeakJob = { jobId: string; source: string; lines: number; from: string; to: string; firstMsg: string }
+export type MonitorPeak = {
+  at: string; from: string; to: string
+  health: MonitorPart<HealthPoint | null>; apis: MonitorPart<PeakApi[]>; jobs: MonitorPart<PeakJob[]>; alerts: MonitorPart<AlertRow[]>
+}
+export const getMonitorAccess = (signal?: AbortSignal) => api<MonitorAccess>(ADMIN_ENDPOINT.MONITOR_ACCESS, { signal })
+export const getMonitorOverview = (window: string, signal?: AbortSignal) => api<MonitorOverview>(ADMIN_ENDPOINT.MONITOR_OVERVIEW(window), { signal })
+export const getMonitorPeak = (at: string, signal?: AbortSignal) => api<MonitorPeak>(ADMIN_ENDPOINT.MONITOR_PEAK(at), { signal })
