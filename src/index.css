@@ -185,3 +185,10 @@ input, textarea, select {
 .pf-panel-in { animation: pf-panel-in 220ms cubic-bezier(0.22, 1, 0.36, 1); }
 .pf-panel-out { animation: pf-panel-out 220ms ease-in forwards; }
 @media (prefers-reduced-motion: reduce) { .pf-panel-in, .pf-panel-out { animation: none; } }
+
+/* "Report a problem" hint (2026-11-05): the top-bar button pulses while its "Facing a problem?" pop-up shows. */
+@keyframes pf-attn { 0% { box-shadow: 0 0 0 0 rgb(79 70 229 / 0.55); } 70% { box-shadow: 0 0 0 9px rgb(79 70 229 / 0); } 100% { box-shadow: 0 0 0 0 rgb(79 70 229 / 0); } }
+.pf-attn { animation: pf-attn 1.6s ease-out infinite; border-color: var(--color-primary); color: var(--color-primary); }
+@keyframes pf-attn-soft { 0%, 100% { box-shadow: 0 0 0 0 rgb(79 70 229 / 0.35); } 50% { box-shadow: 0 0 0 4px rgb(79 70 229 / 0.12); } }
+.pf-attn-soft { animation: pf-attn-soft 2.4s ease-in-out infinite; border-color: rgb(79 70 229 / 0.45); color: var(--color-primary); }
+@media (prefers-reduced-motion: reduce) { .pf-attn, .pf-attn-soft { animation: none; } }

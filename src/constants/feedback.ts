@@ -51,6 +51,12 @@ export const FEEDBACK_TEXT = {
   PAGE_TITLE: 'Feedback',
   PAGE_SUB: 'Problems, improvements and questions from the team · everyone sees every item',
   REPORT: 'Report a problem',
+  HINT_TITLE: 'Facing a problem?',
+  HINT_BODY: 'Something not working, wrong data, or an idea? Report it here: the page you are on and the last error go along by themselves.',
+  HINT_ERROR_TITLE: 'Something went wrong?',
+  HINT_ERROR_BODY: 'If that error stopped your work, report it here: the error and its request id are added for you.',
+  HINT_REPORT: 'Report now',
+  HINT_DISMISS: 'Got it',
   NEW: 'New feedback',
   FORM_TITLE: 'Tell us what happened',
   FORM_SUB: 'The page you are on and the last error on screen are added for you.',
@@ -99,3 +105,11 @@ export const FEEDBACK_TEXT = {
   ASSIGN_HINT: 'The person who will work on it. They can change the item too.',
   NO_IMAGES: 'No images',
 } as const
+
+/**
+ * The "Report a problem" hint (2026-11-05): the button pulses softly all the time; the pop-up shows ONCE A DAY per browser
+ * (stays until closed), and again after a server error (at most every 10 min, goes after 15 s).
+ * Dev only (user): on the laptop and in builds with VITE_FEEDBACK_HINT=true (the dev deploy); never on prod.
+ */
+export const FEEDBACK_HINT = {
+  ENABLED: import.meta.env.DEV || import.meta.env.VITE_FEEDBACK_HINT === 'true', STORAGE_KEY: 'pf-feedback-hint-day2', SHOW_MS: 15_000, ERROR_GAP_MS: 10 * 60_000, FIRST_DELAY_MS: 2_000 } as const
