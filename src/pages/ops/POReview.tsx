@@ -19,7 +19,8 @@ import {
 import { PRICE_CHECK_TEXT, PRICE_CHOICE, TOTAL_TOLERANCE, type PriceChoice } from '../../constants/priceDifferences'
 import { PriceCheck, type PriceRow } from './PriceCheck'
 import { ACCESS } from '../../constants/auth'
-import { PATHS } from '../../constants/pages'
+import { PATHS, URL_PARAM } from '../../constants/pages'
+import { useUrlParam } from '../../lib/urlState'
 import { useAuth } from '../../auth/AuthContext'
 import { DATE_SORT_KEY, SORT_FILTER_KEY, orderRows } from '../../lib/listOrder'
 import { istDateTime } from '../../lib/time'
@@ -81,6 +82,13 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
   const [reload, setReload] = useState(0)
   const [sel, setSel] = useState<ReviewRow | null>(null)
   const [notice, setNotice] = useState<string>()
+  // ?item=<upload id> (2026-11-05, Manual Upload "Open it"): that PO opens once the list has it; then the address is cleared
+  const [item, setItem] = useUrlParam(PATHS.PO_REVIEW, URL_PARAM.ITEM, (v) => /^\d+$/.test(v), '')
+  useEffect(() => {
+    if (!item) return
+    const row = rows.find((r) => r.id === item)
+    if (row) { setSel(row); setItem('') }
+  }, [item, rows, setItem])
 
   // Live reloads (liveTick) keep the rows on screen; only the first load shows "Loading…".
   const loaded = useRef(false)

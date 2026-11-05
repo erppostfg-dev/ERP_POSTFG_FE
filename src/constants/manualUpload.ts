@@ -53,6 +53,15 @@ export const MANUAL_MAX_MB = 20
  *  one line with the count, opened on click. */
 export const QUEUE_CELL_OPEN_MAX = 2
 
+/** POST /manual-uploads 409s when the PO is already in POST_FG (2026-11-05). */
+export const COPY_ERROR = { ALREADY_IN: 'MANUAL_ALREADY_IN', BLOCKED: 'MANUAL_ALREADY_BLOCKED' } as const
+
+/** po_uploads status -> how a copy is named in the "already in POST_FG" question. */
+export const COPY_STATUS_LABEL: Record<string, string> = {
+  needs_review: 'In Review', failed: 'Failed', completed: 'Processed (sale order made)', pending_approval: 'Waiting for approval',
+  queued: 'Being processed', held: 'Held', extracting: 'Being read', processing: 'Being processed', uploaded: 'Uploaded, not processed yet',
+}
+
 export const MANUAL_TEXT = {
   CHANNEL: 'Channel',
   PICK_CHANNEL: 'Pick the channel…',
@@ -65,6 +74,17 @@ export const MANUAL_TEXT = {
   UPLOAD: (n: number) => `Upload ${n} file${n === 1 ? '' : 's'}`,
   UPLOADING: 'Uploading…',
   UPLOADED: (n: number) => `${n} PO${n === 1 ? '' : 's'} uploaded and saved to S3. Click Process to read ${n === 1 ? 'it' : 'them'}.`,
+  /** The same PO uploaded again (2026-11-05): the question, its buttons and the copy lines. */
+  COPY_TITLE: 'This PO is already in POST_FG',
+  COPY_BLOCKED_TITLE: 'This PO cannot be processed again',
+  COPY_ASK: 'Open the existing one to review it, or process this upload again: the copy in review is then rejected as replaced (kept; Reopen brings it back), so only one copy stays in review.',
+  COPY_OPEN: 'Open it',
+  COPY_AGAIN: 'Process again',
+  COPY_CANCEL: 'Cancel',
+  COPY_HOW: { 'same file': 'the same file', 'same PO number': 'the same PO number in its file name' } as Record<string, string>,
+  COPY_LINE: (po: string | null, status: string, how: string) => `${po ?? 'PO'} · ${status} · found by ${how}`,
+  COPY_BY: (at: string, by: string | null) => `uploaded ${at}${by ? ` by ${by}` : ''}`,
+  COPY_REPLACED: (n: number) => `Uploaded again (replaces the copy already in POST_FG). Click Process: the old copy is rejected as replaced when it runs.${n > 1 ? ` (${n} POs)` : ''}`,
   NO_OCR_YET: 'Upload only stores the files (S3). OCR runs when you click Process, one PO at a time.',
   QUEUE: 'Upload queue',
   EMPTY: 'Nothing uploaded yet.',

@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router'
 import { AlertTriangle, Check, ChevronDown, FileSpreadsheet, FileText, Loader2, Play, RotateCcw, UploadCloud, X } from 'lucide-react'
 import { Badge } from '../../components/ui'
 import { GroupedSelect } from '../../components/pickers'
 import { ApiError } from '../../api/client'
 import {
   cancelManualUpload, listManualUploads, listUploadChannels, processManualUploads, retryManualUpload, uploadPoFiles,
-  type ManualUploadItem, type UploadChannel,
+  type ManualUploadItem, type UploadChannel, type UploadCopy,
 } from '../../api/manualUpload'
+import { PATHS, URL_PARAM } from '../../constants/pages'
+import { PO_STATUS } from '../../constants/poReview'
 import {
   AMAZON_ACCEPT, AMAZON_CHANNEL, CHANNEL_GROUPS, FLIPKART_ACCEPT, FLIPKART_CHANNEL, FLIPKART_FILE, MANUAL_ACCEPT, MYNTRA_CHANNEL, MYNTRA_FILE, RECENT_CHANNELS_KEY, RECENT_CHANNELS_MAX, MANUAL_MAX_FILES, MANUAL_MAX_MB, MANUAL_STATUS, MANUAL_STATUS_LABEL, MANUAL_STATUS_TONE, MANUAL_TEXT as T,
-  PO_RESULT_LABEL, PO_RESULT_TONE, QUEUE_CELL_OPEN_MAX,
+  COPY_ERROR, COPY_STATUS_LABEL, PO_RESULT_LABEL, PO_RESULT_TONE, QUEUE_CELL_OPEN_MAX,
 } from '../../constants/manualUpload'
 import { istDateTime } from '../../lib/time'
 
@@ -116,7 +120,8 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
   const act = async (key: string, fn: () => Promise<string>) => {
     setBusy(key)
     try {
-      setNote({ tone: 'ok', text: await fn() })
+      const text = await fn()
+      setNote(text ? { tone: 'ok', text } : null)
       reload()
     } catch (e) {
       setNote({ tone: 'err', text: errText(e) })
@@ -124,13 +129,26 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
       setBusy(null)
     }
   }
-  const upload = () => act('upload', async () => {
-    const r = await uploadPoFiles(channel, files)
-    setFiles([])
-    saveRecent(channel)
-    setRecent(readRecent())
-    return T.UPLOADED(r.ids.length)
+  // The same PO already in POST_FG (2026-11-05): the server answers 409 with the copies; ask Open it / Process again / Cancel
+  const [copies, setCopies] = useState<{ list: UploadCopy[]; blocked: boolean; message: string } | null>(null)
+  const sendUpload = (replace: boolean) => act('upload', async () => {
+    try {
+      const r = await uploadPoFiles(channel, files, replace)
+      setFiles([])
+      setCopies(null)
+      saveRecent(channel)
+      setRecent(readRecent())
+      return replace ? T.COPY_REPLACED(r.ids.length) : T.UPLOADED(r.ids.length)
+    } catch (e) {
+      const list = e instanceof ApiError ? (e.details as { copies?: UploadCopy[] } | undefined)?.copies : undefined
+      if (e instanceof ApiError && list?.length && (e.code === COPY_ERROR.ALREADY_IN || e.code === COPY_ERROR.BLOCKED)) {
+        setCopies({ list, blocked: e.code === COPY_ERROR.BLOCKED, message: e.message })
+        return ''
+      }
+      throw e
+    }
   })
+  const upload = () => sendUpload(false)
   const process = (ids: string[]) => act('process', async () => {
     await processManualUploads(ids)
     setSelected(new Set())
@@ -144,6 +162,9 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
 
   return (
     <div className="space-y-4">
+      {copies && (
+        <CopiesDialog copies={copies} busy={busy === 'upload'} onCancel={() => setCopies(null)} onAgain={() => void sendUpload(true)} />
+      )}
       {note && (
         <div className={`pf-tab-in flex items-start gap-2 rounded-[var(--radius)] px-3 py-2 text-[12.5px] ${note.tone === 'ok' ? 'bg-ok-soft text-ok' : 'bg-crit-soft text-crit'}`}>
           {note.tone === 'ok' ? <Check className="mt-0.5 size-4 shrink-0" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0" />}
@@ -296,5 +317,65 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
         )}
       </div>
     </div>
+  )
+}
+
+/** Where "Open it" goes for a copy: In Review opens that PO, else the tab (or page) it is on. */
+const copyLink = (c: UploadCopy): string =>
+  c.status === PO_STATUS.NEEDS_REVIEW && c.uploadId ? `${PATHS.PO_REVIEW}?${URL_PARAM.TAB}=review&${URL_PARAM.ITEM}=${c.uploadId}`
+    : c.status === PO_STATUS.FAILED ? `${PATHS.PO_REVIEW}?${URL_PARAM.TAB}=ended`
+      : c.status === PO_STATUS.PENDING_APPROVAL ? PATHS.APPROVALS
+        : c.status === PO_STATUS.COMPLETED ? `${PATHS.PO_REVIEW}?${URL_PARAM.TAB}=processed`
+          : `${PATHS.PO_REVIEW}?${URL_PARAM.TAB}=manual`
+
+/**
+ * "This PO is already in POST_FG" (2026-11-05): each copy (status, how it was found, when / who, sale order) with Open
+ * it; Process again (the copy in review is rejected as replaced when the new upload runs) unless a copy cannot be
+ * replaced (then the server's why); Cancel.
+ */
+function CopiesDialog({ copies, busy, onCancel, onAgain }: {
+  copies: { list: UploadCopy[]; blocked: boolean; message: string }; busy: boolean; onCancel: () => void; onAgain: () => void
+}) {
+  const navigate = useNavigate()
+  return createPortal(
+    <div className="pf-backdrop-in fixed inset-0 z-[60] flex items-center justify-center bg-ink-900/50 p-4 backdrop-blur-[1px]" onMouseDown={(e) => e.target === e.currentTarget && !busy && onCancel()}>
+      <div className="w-full max-w-lg space-y-3 rounded-[var(--radius-card)] bg-surface p-5 shadow-2xl">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className={`mt-0.5 size-5 shrink-0 ${copies.blocked ? 'text-crit' : 'text-warn'}`} />
+          <div className="min-w-0 flex-1">
+            <div className="text-[15px] font-semibold text-ink-900">{copies.blocked ? T.COPY_BLOCKED_TITLE : T.COPY_TITLE}</div>
+            <p className="mt-0.5 text-[12.5px] text-ink-600">{copies.blocked ? copies.message : T.COPY_ASK}</p>
+          </div>
+          <button onClick={onCancel} disabled={busy} className="rounded-md p-1 text-ink-400 hover:bg-alt hover:text-ink-900"><X className="size-4" /></button>
+        </div>
+        <ul className="space-y-2">
+          {copies.list.map((c) => (
+            <li key={`${c.uploadId ?? ''}-${c.manualUploadId ?? ''}`} className="flex items-start gap-3 rounded-[var(--radius)] border border-line px-3 py-2 text-[12.5px]">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-ink-900">{T.COPY_LINE(c.poNumber, COPY_STATUS_LABEL[c.status] ?? c.status, T.COPY_HOW[c.how] ?? c.how)}</div>
+                <div className="text-ink-600">
+                  {c.uploadId ? `upload #${c.uploadId}` : `manual upload #${c.manualUploadId ?? ''}`}
+                  {c.at ? ` · ${T.COPY_BY(istDateTime(c.at), c.by)}` : ''}
+                  {c.saleOrderCode ? ` · ${c.saleOrderCode}` : ''}
+                </div>
+                {c.why && <div className="text-crit">{c.why}</div>}
+              </div>
+              <button type="button" onClick={() => void navigate(copyLink(c))}
+                className="shrink-0 rounded-md border border-line px-2.5 py-1 text-[12px] font-semibold text-primary hover:bg-primary-soft">{T.COPY_OPEN}</button>
+            </li>
+          ))}
+        </ul>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onCancel} disabled={busy} className="rounded-md border border-line px-3 py-1.5 text-[12.5px] font-semibold text-ink-900 hover:bg-alt">{T.COPY_CANCEL}</button>
+          {!copies.blocked && (
+            <button type="button" onClick={onAgain} disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
+              {busy && <Loader2 className="size-3.5 animate-spin" />}{T.COPY_AGAIN}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }

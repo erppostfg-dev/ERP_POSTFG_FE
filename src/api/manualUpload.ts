@@ -16,10 +16,24 @@ export interface ManualUploadItem {
 export const listUploadChannels = (signal?: AbortSignal) => api<UploadChannel[]>(`${MANUAL_UPLOAD_ENDPOINT}/channels`, { signal })
 export const listManualUploads = (signal?: AbortSignal) => api<ManualUploadItem[]>(MANUAL_UPLOAD_ENDPOINT, { signal })
 
-/* POST /manual-uploads (multipart: channel + files). Not api(): the browser sets the multipart Content-Type itself. */
-export async function uploadPoFiles(channel: string, files: File[]): Promise<{ ids: string[] }> {
+/**
+ * A copy of the PO already in POST_FG (2026-11-05): POST /manual-uploads answers 409 MANUAL_ALREADY_IN (Process again
+ * possible) or MANUAL_ALREADY_BLOCKED (not possible: why) with details.copies.
+ */
+export type UploadCopy = {
+  uploadId: string | null; manualUploadId: string | null; poNumber: string | null; status: string
+  how: 'same file' | 'same PO number'; action: 'replace' | 'blocked'; why: string | null
+  fileName: string | null; at: string | null; by: string | null; saleOrderCode: string | null
+}
+
+/*
+ * POST /manual-uploads (multipart: channel + files [+ replace=true = Process again]). Not api(): the browser sets the
+ * multipart Content-Type itself.
+ */
+export async function uploadPoFiles(channel: string, files: File[], replace = false): Promise<{ ids: string[] }> {
   const form = new FormData()
   form.append('channel', channel)
+  if (replace) form.append('replace', 'true')
   for (const f of files) form.append('files', f, f.name)
   let res: Response
   try {

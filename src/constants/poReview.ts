@@ -10,6 +10,8 @@ export const PO_STATUS = {
   COMPLETED: 'completed',
   REJECTED: 'rejected',
   FAILED: 'failed',
+  /** Submitted for approval (Approvals page). */
+  PENDING_APPROVAL: 'pending_approval',
 } as const
 
 /**
