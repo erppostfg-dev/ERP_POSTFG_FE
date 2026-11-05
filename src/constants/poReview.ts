@@ -192,6 +192,8 @@ export const REVIEW_TEXT = {
   VIEW_ONLY: 'View only: ask an admin for editor access to submit or reject POs.',
   SUBMIT: 'Submit for approval',
   REJECT: 'Reject PO',
+  /** Under a line's Qty / MRP / Rate box: the PO's own value, click = find it on the PO + copy (2026-11-05). */
+  ON_PO: 'on PO',
   /** Combos / gift kits / M_Tools go to Uniware with their _S code when our master has it (2026-10-30). */
   PUNCHED_AS: (code: string) => `Punched as ${code}`,
   PUNCHED_AS_TIP: 'Combos, gift kits and M_Tools are punched in Uniware with their _S code (sale order CSV + PO Overview)',

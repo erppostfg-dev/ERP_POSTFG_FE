@@ -93,6 +93,8 @@ export type PoReviewLine = {
   poMrp: Num
   poUnitPrice: Num
   poLineValue: Num
+  /** The line's values as READ from the PO (2026-11-05): what click-to-find looks for (poUnitPrice is with tax). */
+  printed: { unitCost: Num; landingRate: Num; lineTotal: Num }
   pepCode: string
   /** The code the sale order is punched with: the _S code of a combo when our master has it, else pepCode. */
   punchCode: string

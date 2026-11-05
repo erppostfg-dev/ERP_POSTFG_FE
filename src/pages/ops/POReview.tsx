@@ -26,6 +26,11 @@ import { istDateTime } from '../../lib/time'
 import { SkuPicker } from './SkuPicker'
 import { FileCell, SourceCell } from './SourceCells'
 import { FileViewer } from '../../components/FileViewer'
+import type { ExternalFind, FindResult } from '../../components/FindBox'
+import { FindValue } from '../../components/FindValue'
+import { foundTip, useFindOnPo } from '../../lib/useFindOnPo'
+import type { ValueKind } from '../../lib/valueTerms'
+import { VERIFY_TEXT } from '../../constants/poVerify'
 import { CAPABILITY, REVIEW_EDIT_TEXT, editRules, fieldOpen, type LineField } from '../../constants/reviewEdit'
 
 /*
@@ -260,6 +265,10 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
 }) {
   // Opens with a short rise + fade and closes the same way (user, 2026-10-16: smooth both ways); X, Close and Esc wait for it.
   const [leaving, setLeaving] = useState(false)
+  // Click-to-find (user 2026-11-05, as in Verify): a value on the right is found and highlighted on the PO on the left
+  // (red = not on the PO: check it); a DOUBLE click copies it (to paste into the Masters search). Edit boxes: the PO's own
+  // value under the box ("on PO 226.55") is the clickable one (a click in the box edits it).
+  const finder = useFindOnPo()
   const onClose = useCallback(() => { setLeaving(true); setTimeout(closeNow, PANEL_MS) }, [closeNow])
   const { accessFor, can } = useAuth()
   const canEdit = accessFor(PATHS.PO_REVIEW) === ACCESS.EDITOR
@@ -460,25 +469,49 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
 
   const lab = 'mb-1 block text-[12px] font-medium text-ink-900'
   const Sec = ({ children }: { children: string }) => <div className="mb-3 mt-5 flex items-center gap-3 font-serif text-[12px] uppercase tracking-[0.08em] text-ink-600 first:mt-0">{children}<span className="h-px flex-1 bg-line" /></div>
-  const field = ({ title, value, issueField, mono, req }: { title: string; value: string; issueField?: string; mono?: boolean; req?: boolean }) => {
+  const field = ({ title, value, issueField, mono, req, find }: {
+    title: string; value: string; issueField?: string; mono?: boolean; req?: boolean
+    /** A value printed on the PO: clicking the box finds it there (raw value + its kind, e.g. the number of "₹1,234"). */
+    find?: { value: unknown; kind: ValueKind }
+  }) => {
     const issue = issueField ? headerIssue(issueField) : undefined
     const bad = !!issue && !handled(issue)
+    const key = `h:${title}`
+    const f = finder.found.get(key)
+    const look = find && find.value !== '' && find.value !== null && find.value !== undefined ? () => finder.ask(key, find.value, find.kind) : undefined
+    const ring = f === 0 ? 'border-crit/60 ring-1 ring-crit/40' : finder.active === key ? 'border-primary ring-1 ring-primary/40' : typeof f === 'number' ? 'border-ok/50' : ''
     return (
       <label className="block">
         <span className={lab}>{title}{req && <span className="text-crit"> *</span>}</span>
-        <input readOnly value={value} className={`${inputCls} ${mono ? 'font-mono' : ''} ${bad ? 'border-crit/60 bg-crit-soft' : ''}`} />
+        <input readOnly value={value} onClick={look} onDoubleClick={() => finder.copy(key, value)} title={look ? `${value}\n${foundTip(f, finder.copied === key)}` : undefined}
+          className={`${inputCls} ${mono ? 'font-mono' : ''} ${bad ? 'border-crit/60 bg-crit-soft' : ''} ${look ? `cursor-pointer ${ring}` : ''}`} />
+        {look && (f !== undefined || finder.copied === key) && (
+          <span className={`mt-1 block text-[11px] ${f === 0 ? 'text-crit' : typeof f === 'number' ? 'text-ok' : 'text-ink-400'}`}>{foundTip(f, finder.copied === key)}</span>
+        )}
         {issue && <span className={`mt-1 block text-[11px] ${bad ? 'text-crit' : 'text-ink-400'}`}>{issue.details ?? label(issue.type)}{!bad && ' — accepted'}</span>}
       </label>
     )
   }
+  /** The PO's own value(s) behind an edit box, as read from the PO: the rate as printed before tax AND with tax. */
+  const onPo = (l: PoReviewLine, k: 'qty' | 'mrp' | 'rate'): Num[] =>
+    (k === 'qty' ? [l.qty] : k === 'mrp' ? [l.poMrp] : [l.printed.unitCost, l.printed.landingRate, l.poUnitPrice]).filter((x) => x !== '')
   const numInput = (l: PoReviewLine, k: 'qty' | 'mrp' | 'rate', ours?: Num | number | null) => {
     const e = edits[lineKey(l)]
     const v = e?.[k] ?? ''
     const off = ours !== undefined && ours !== null && differs(numOrEmpty(v), ours)
+    const key = `l:${lineKey(l)}:${k}`
+    const po = onPo(l, k)
     return (
       <>
         <input type="number" step="any" min={0} value={v} disabled={!editable(l, k)} title={lockTip(l, k)} onChange={(ev) => setEdits({ ...edits, [lineKey(l)]: { ...e, [k]: ev.target.value } })}
           className={`tnum h-8 w-24 rounded-md border px-2 ${off ? 'border-crit/60 bg-crit-soft' : 'border-line'} disabled:cursor-not-allowed disabled:bg-alt disabled:text-ink-600`} />
+        {po.length > 0 && (
+          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-400">
+            {REVIEW_TEXT.ON_PO}
+            <FindValue text={String(po[0])} className="tnum" found={finder.found.get(key)} active={finder.active === key} copied={finder.copied === key}
+              onFind={() => finder.ask(key, po, 'number')} onCopy={() => finder.copy(key, String(po[0]))} />
+          </div>
+        )}
         {ours !== undefined && ours !== null && ours !== '' && <div className={`mt-0.5 text-[11px] ${off ? 'text-crit' : 'text-ink-400'}`}>ours {ours}</div>}
       </>
     )
@@ -507,7 +540,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
         <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-2">
           {/* Document viewer: the PO file from S3 through a short-lived link */}
           <div className="hidden min-h-0 flex-col gap-2 p-3 lg:flex">
-            <DocumentViewer data={data} />
+            <DocumentViewer data={data} externalFind={finder.find} onFindResult={finder.onFindResult} />
             <div className="truncate px-1 text-[11.5px] text-ink-600">
               {data.upload.emailFrom && <>From <span className="text-ink-900">{data.upload.emailFrom}</span> · </>}
               {data.upload.emailSubject && <><span className="text-ink-900">{data.upload.emailSubject}</span> · </>}
@@ -566,14 +599,21 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
             )}
 
 
+            <div className="mb-2 flex flex-wrap items-center gap-2 rounded-[var(--radius)] bg-primary-soft/40 px-3 py-1.5 text-[11.5px] text-ink-600">
+              <span className="flex-1">{VERIFY_TEXT.CLICK_HINT}</span>
+              {finder.active && (
+                <span className={`font-semibold ${finder.activeFound === 0 ? 'text-crit' : typeof finder.activeFound === 'number' ? 'text-ok' : 'text-ink-600'}`}>{foundTip(finder.activeFound, finder.copied === finder.active)}</span>
+              )}
+            </div>
+
             <Sec>Purchase order</Sec>
             <div className="grid gap-3 sm:grid-cols-3">
-              {field({ title: 'PO Number', value: data.po.poNumber, issueField: ISSUE_FIELD.PO_NUMBER, mono: true, req: true })}
-              {field({ title: 'PO Date', value: data.po.poDate })}
-              {field({ title: 'PO Expiry', value: data.po.expiryDate, issueField: ISSUE_FIELD.EXPIRY_DATE })}
+              {field({ title: 'PO Number', value: data.po.poNumber, issueField: ISSUE_FIELD.PO_NUMBER, mono: true, req: true, find: { value: data.po.poNumber, kind: 'text' } })}
+              {field({ title: 'PO Date', value: data.po.poDate, find: { value: data.po.poDate, kind: 'date' } })}
+              {field({ title: 'PO Expiry', value: data.po.expiryDate, issueField: ISSUE_FIELD.EXPIRY_DATE, find: { value: data.po.expiryDate, kind: 'date' } })}
               {field({ title: 'Channel', value: data.upload.channel ?? '', req: true })}
               {field({ title: 'PO Type', value: data.po.poType + (data.po.revised ? ' (revised)' : ''), issueField: ISSUE_FIELD.PO_TYPE })}
-              {field({ title: 'PO Value', value: money(data.po.poValue), issueField: ISSUE_FIELD.PO_VALUE })}
+              {field({ title: 'PO Value', value: money(data.po.poValue), issueField: ISSUE_FIELD.PO_VALUE, find: { value: data.po.poValue, kind: 'number' } })}
             </div>
 
             <Sec>Where it's going</Sec>
@@ -589,8 +629,8 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
                   </select>
                   <span className={`mt-1 block text-[11px] ${picked ? 'text-ink-400' : 'text-crit'}`}>PO says: <b className="font-mono">{data.po.deliveryFacility || '—'}</b>{!picked && headerIssue(ISSUE_FIELD.DELIVERY_LOCATION) && ` — ${headerIssue(ISSUE_FIELD.DELIVERY_LOCATION)!.details ?? label('LOCATION_NOT_MAPPED')}`}</span>
                 </label>
-              ) : field({ title: 'Delivery location', value: location?.locationCode ?? data.po.deliveryFacility, issueField: ISSUE_FIELD.DELIVERY_LOCATION })}
-              {field({ title: 'Pincode', value: data.po.pincode, mono: true })}
+              ) : field({ title: 'Delivery location', value: location?.locationCode ?? data.po.deliveryFacility, issueField: ISSUE_FIELD.DELIVERY_LOCATION, find: { value: data.po.deliveryFacility, kind: 'text' } })}
+              {field({ title: 'Pincode', value: data.po.pincode, mono: true, find: { value: data.po.pincode, kind: 'text' } })}
               {field({ title: 'Fulfilment facility', value: location?.facilityCode ?? '', mono: true, req: true })}
             </div>
 
@@ -620,7 +660,14 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
                     return (
                       <tr key={lineKey(l)} className={`border-t border-line align-top ${(errs.length && !fixed) || still.length ? 'bg-crit-soft/50' : ''}`}>
                         <td className="tnum px-2.5 py-2 text-ink-400">{plain(l.lineNo)}</td>
-                        <td className="px-2.5 py-2"><div className="font-mono">{l.channelSkuCode || '—'}</div><div className="max-w-[200px] truncate text-[11px] text-ink-600" title={l.description}>{l.description}</div></td>
+                        <td className="px-2.5 py-2">
+                          <FindValue text={l.channelSkuCode} mono found={finder.found.get(`l:${lineKey(l)}:sku`)} active={finder.active === `l:${lineKey(l)}:sku`} copied={finder.copied === `l:${lineKey(l)}:sku`}
+                            onFind={() => finder.ask(`l:${lineKey(l)}:sku`, l.channelSkuCode, 'text')} onCopy={() => finder.copy(`l:${lineKey(l)}:sku`, l.channelSkuCode)} />
+                          <div className="max-w-[220px]">
+                            <FindValue text={l.description} className="block text-[11px] text-ink-600" found={finder.found.get(`l:${lineKey(l)}:desc`)} active={finder.active === `l:${lineKey(l)}:desc`} copied={finder.copied === `l:${lineKey(l)}:desc`}
+                              onFind={() => finder.ask(`l:${lineKey(l)}:desc`, l.description, 'text')} onCopy={() => finder.copy(`l:${lineKey(l)}:desc`, l.description)} />
+                          </div>
+                        </td>
                         <td className="px-2.5 py-2">
                           <SkuPicker value={e?.pep ?? ''} options={data.skuOptions} disabled={!editable(l, 'pep')} invalid={!e?.pep}
                             onChange={(pep) => setEdits({ ...edits, [lineKey(l)]: { ...e, pep } })} />
@@ -743,7 +790,7 @@ function ResolvedMark({ ok }: { ok: boolean }) {
  * The PO file in the Figma viewer frame, shown in the app for every type (components/FileViewer): PDFs page by page,
  * sheets as grids, JSON as tables, the email body sandboxed. Open in a new tab uses the short-lived S3 link.
  */
-function DocumentViewer({ data }: { data: PoReviewDetail }) {
+function DocumentViewer({ data, externalFind, onFindResult }: { data: PoReviewDetail; externalFind?: ExternalFind; onFindResult?: FindResult }) {
   const url = data.files.poFile
   const fileName = data.upload.fileName
   const uploadId = data.upload.uploadId
@@ -756,7 +803,7 @@ function DocumentViewer({ data }: { data: PoReviewDetail }) {
     )
   }
   return (
-    <FileViewer load={load} fileName={fileName} type={data.files.poFileType} actions={
+    <FileViewer load={load} fileName={fileName} type={data.files.poFileType} externalFind={externalFind} onFindResult={onFindResult} actions={
       <a href={url} target="_blank" rel="noreferrer" title={FILE_VIEWER_TEXT.OPEN_TAB} className="hover:opacity-100"><ExternalLink className="size-4" /></a>
     } />
   )
