@@ -65,10 +65,13 @@ export const COPY_STATUS_LABEL: Record<string, string> = {
 export const MANUAL_TEXT = {
   CHANNEL: 'Channel',
   PICK_CHANNEL: 'Pick the channel…',
-  NEEDS: (needs: string, two: boolean, optional?: string, manyPos?: boolean) =>
-    manyPos
-      ? `One ${needs} file, as downloaded (it can hold many POs: each PO is read on its own)`
-      : two ? `One PO = ${needs} with the same file name` : `One PO = one ${needs} file${optional ? ` (its ${optional} with the same file name is optional)` : ''}`,
+  NEEDS: (needs: string, two: boolean, optional?: string, manyPos?: boolean, either?: boolean) =>
+    either
+      // Purplle (2026-11-06): its PO PDFs, or its daily summary sheet
+      ? `${needs}: each PDF is one PO; a sheet (the daily summary) can hold many POs, each read on its own`
+      : manyPos
+        ? `One ${needs} file, as downloaded (it can hold many POs: each PO is read on its own)`
+        : two ? `One PO = ${needs} with the same file name` : `One PO = one ${needs} file${optional ? ` (its ${optional} with the same file name is optional)` : ''}`,
   DROP: 'Drop PO files here or click to choose',
   DROP_HINT: `PDF, Excel or CSV · up to ${MANUAL_MAX_MB} MB each · up to ${MANUAL_MAX_FILES} files`,
   UPLOAD: (n: number) => `Upload ${n} file${n === 1 ? '' : 's'}`,
