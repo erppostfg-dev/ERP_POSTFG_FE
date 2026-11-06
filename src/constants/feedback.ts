@@ -15,6 +15,20 @@ export const FEEDBACK_COMMENT_MAX = 2000
 export const FEEDBACK_DESCRIPTION_ROWS = 5
 /** The list refreshes by itself this often while the page is open. */
 export const FEEDBACK_REFRESH_MS = 60_000
+/** The top-bar bell asks for new notifications this often (and when the tab comes back into focus). */
+export const FEEDBACK_BELL_REFRESH_MS = 30_000
+
+/** The bell (2026-11-06): what each notification says. */
+export const FEEDBACK_BELL_TEXT = {
+  TITLE: 'Notifications',
+  EMPTY: 'Nothing yet. You are told here when an item is assigned to you, you are added to one, or someone replies.',
+  READ_ALL: 'Mark all read',
+  ASSIGNED: (who: string) => `${who} assigned you`,
+  ADDED: (who: string) => `${who} added you`,
+  COMMENT: (who: string) => `${who} replied`,
+  OPEN_ALL: 'Open Feedback',
+  UNREAD: (n: number) => `${n} unread`,
+} as const
 
 export type FeedbackType = 'problem' | 'improvement' | 'question'
 export type FeedbackSeverity = 'blocking' | 'annoying' | 'small'

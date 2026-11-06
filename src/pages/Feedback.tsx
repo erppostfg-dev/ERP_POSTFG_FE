@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, ImagePlus, MessageSquarePlus, Search, X } from 'lucide-react'
 import { useNavigate } from 'react-router'
@@ -9,11 +9,11 @@ import { pickImages } from '../lib/feedbackImages'
 import { AssigneeSelect, FeedbackForm } from '../components/ReportProblem'
 import { ApiError } from '../api/client'
 import {
-  addFeedbackImages, addFeedbackMember, commentFeedback, feedbackImageUrl, feedbackItemKey, feedbackKey, feedbackPeople, feedbackPeopleKey, getFeedback, listFeedback,
-  removeFeedbackImage, removeFeedbackMember, updateFeedback, type FeedbackDetail, type FeedbackListItem, type FeedbackPatch,
+  addFeedbackImages, addFeedbackMember, commentFeedback, feedbackImagePath, feedbackItemKey, feedbackKey, feedbackNotifications, feedbackNotificationsKey, feedbackPeople,
+  feedbackPeopleKey, getFeedback, listFeedback, readFeedbackNotifications, removeFeedbackImage, removeFeedbackMember, updateFeedback, type FeedbackDetail, type FeedbackListItem, type FeedbackPatch,
 } from '../api/feedback'
 import {
-  FEEDBACK_COMMENT_MAX, FEEDBACK_DESCRIPTION_ROWS, FEEDBACK_IMAGE_ACCEPT, FEEDBACK_MAX_IMAGES, FEEDBACK_REFRESH_MS, FEEDBACK_SEVERITIES, FEEDBACK_SEVERITY_LABEL,
+  FEEDBACK_BELL_REFRESH_MS, FEEDBACK_COMMENT_MAX, FEEDBACK_DESCRIPTION_ROWS, FEEDBACK_IMAGE_ACCEPT, FEEDBACK_MAX_IMAGES, FEEDBACK_REFRESH_MS, FEEDBACK_SEVERITIES, FEEDBACK_SEVERITY_LABEL,
   FEEDBACK_STATUSES, FEEDBACK_STATUS_LABEL, FEEDBACK_STATUS_TONE, FEEDBACK_TEXT as T, FEEDBACK_TEXT_MAX, FEEDBACK_TITLE_MAX, FEEDBACK_TYPES,
   FEEDBACK_TYPE_LABEL, type FeedbackSeverity, type FeedbackStatus, type FeedbackType,
 } from '../constants/feedback'
@@ -107,6 +107,15 @@ function ItemDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [big, setBig] = useState<string | null>(null)
+  // Opening an item reads its notifications (the bell count drops); again when one for it arrives while it is open.
+  const bell = useQuery({ queryKey: feedbackNotificationsKey, queryFn: ({ signal }) => feedbackNotifications(signal), staleTime: FEEDBACK_BELL_REFRESH_MS })
+  const unreadHere = bell.data?.items.some((n) => n.itemId === id && !n.read) ?? false
+  const readFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (readFor.current === id && !unreadHere) return
+    readFor.current = id
+    readFeedbackNotifications({ itemId: id }).then((b) => queryClient.setQueryData(feedbackNotificationsKey, b)).catch(() => undefined)
+  }, [id, unreadHere, queryClient])
 
   /** Runs a change; the answer is the fresh item (shown at once), the lists reload. */
   const act = async (fn: () => Promise<FeedbackDetail>) => {
@@ -147,7 +156,7 @@ function ItemDrawer({ id, onClose }: { id: string; onClose: () => void }) {
               {!d.imageList.length && <span className="text-[12.5px] text-ink-400">{T.NO_IMAGES}</span>}
               {d.imageList.map((img) => (
                 <div key={img.id} className="relative">
-                  <AuthImage path={feedbackImageUrl(id, img.id)} alt={img.fileName} onClick={() => setBig(img.id)}
+                  <AuthImage path={feedbackImagePath(id, img.id)} alt={img.fileName} onClick={() => setBig(img.id)}
                     className="size-28 cursor-zoom-in rounded-md border border-line object-cover" />
                   {d.canEdit && (
                     <button type="button" title={T.REMOVE_IMAGE} disabled={busy} onClick={() => void act(() => removeFeedbackImage(id, img.id))}
@@ -183,7 +192,7 @@ function ItemDrawer({ id, onClose }: { id: string; onClose: () => void }) {
       )}
       {big && d && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-ink-900/80 p-6" onClick={() => setBig(null)}>
-          <AuthImage path={feedbackImageUrl(id, big)} alt="" className="max-h-full max-w-full rounded-md bg-surface object-contain" />
+          <AuthImage path={feedbackImagePath(id, big)} alt="" className="max-h-full max-w-full rounded-md bg-surface object-contain" />
         </div>
       )}
     </Drawer>

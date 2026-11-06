@@ -9,6 +9,7 @@ import Approvals from './pages/Approvals'
 import Admin from './pages/Admin'
 import Feedback from './pages/Feedback'
 import { ReportProblemButton } from './components/ReportProblem'
+import { NotificationBell } from './components/NotificationBell'
 import POOverview from './pages/ops/POOverview'
 import POProcessing from './pages/ops/POProcessing'
 import POWorking from './pages/ops/POWorking'
@@ -229,6 +230,8 @@ export default function App() {
           <div className="ml-auto flex items-center gap-3">
             {/* Report a problem from any page (2026-10-29): the page and the last error go along */}
             {auth.status === 'signedIn' && <ReportProblemButton />}
+            {/* Feedback notifications (2026-11-06): assigned to me, added me, replies; the red count = unread */}
+            {auth.status === 'signedIn' && <NotificationBell />}
             {/* Who am I: the team when the person has one (e.g. "Warehouse"), else their role(s) (e.g. "Admin") */}
             {auth.status === 'signedIn' && (
               <span className="hidden whitespace-nowrap rounded-full bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary sm:inline" title={auth.user.email}>
