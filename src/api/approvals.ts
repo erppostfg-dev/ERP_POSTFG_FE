@@ -1,5 +1,5 @@
 import { api, apiWithMeta } from './client'
-import { APPROVAL_BULK, APPROVALS_ENDPOINT, APPROVALS_PAGE_SIZE, APPROVAL_BULK_RESULT, type ApprovalKind, type ApprovalStatus } from '../constants/poReview'
+import { APPROVAL_BULK, APPROVALS_ENDPOINT, APPROVALS_PAGE_SIZE, APPROVAL_BULK_RESULT, MARGIN_ENDPOINT, type ApprovalKind, type ApprovalStatus } from '../constants/poReview'
 import type { PoReviewDetail } from './poReview'
 
 /* Approvals page: PO reviews submitted for approval (POST_FG routes/approvals.routes.ts, 2026-10-15). */
@@ -86,3 +86,26 @@ export const approveSubmission = (id: string, remark?: string) =>
 
 export const rejectSubmission = (id: string, remark: string) =>
   api<{ status: string }>(`${APPROVALS_ENDPOINT}/${encodeURIComponent(id)}/reject`, { method: 'POST', body: JSON.stringify({ remark }) })
+
+/* Margin changes (2026-11-06, two-layer approval; backend modules/masters/margin-approval.service.ts):
+ * a channel SKU's margin % / rate or a new channel SKU, approved by Operations Manager (layer 1) then Admin (layer 2). */
+export type MarginPerson = { id: number; name: string; email: string }
+export type MarginStatus = 'pending_l1' | 'pending_l2' | 'applied' | 'rejected'
+export type MarginRequest = {
+  id: string; kind: 'edit' | 'add'; source: 'masters' | 'price_check'; status: MarginStatus; channelSkuId: string | null
+  channel: string; channelCode: string; pepCode: string
+  oldMarginPercent: number | null; newMarginPercent: number | null; oldRate: number | null; newRate: number | null
+  row: Record<string, unknown> | null; remark: string | null
+  requestedBy: MarginPerson | null; requestedAt: string
+  l1: { by: MarginPerson | null; at: string; remark: string | null } | null
+  l2: { by: MarginPerson | null; at: string; remark: string | null } | null
+  rejected: { by: MarginPerson | null; at: string; reason: string | null } | null
+  canDecide: boolean; whyNot: string | null
+}
+export type MarginList = { items: MarginRequest[]; counts: { waitingL1: number; waitingL2: number; open: number } }
+const MARGIN = MARGIN_ENDPOINT
+export const listMarginRequests = (status: 'open' | 'applied' | 'rejected', signal?: AbortSignal) => api<MarginList>(`${MARGIN}?status=${status}`, { signal })
+export const approveMarginRequest = (id: string, remark?: string) =>
+  api<MarginRequest>(`${MARGIN}/${encodeURIComponent(id)}/approve`, { method: 'POST', body: JSON.stringify(remark ? { remark } : {}) })
+export const rejectMarginRequest = (id: string, remark: string) =>
+  api<MarginRequest>(`${MARGIN}/${encodeURIComponent(id)}/reject`, { method: 'POST', body: JSON.stringify({ remark }) })

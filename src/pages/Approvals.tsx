@@ -6,11 +6,11 @@ import { Badge, Button, Drawer, Modal, PageTitle, SubTabs } from '../components/
 import { DataGrid, FilterChips, FilterPanel, countActive, inputCls, type FilterDef, type FilterValues } from '../components/kit'
 import { Reveal } from '../components/shell'
 import { ApiError } from '../api/client'
-import { approveSubmission, bulkApprove, bulkReject, getApproval, listApprovals, rejectSubmission, type ApprovalDetail, type ApprovalItem, type BulkItemResult } from '../api/approvals'
+import { approveSubmission, bulkApprove, bulkReject, getApproval, listApprovals, listMarginRequests, rejectSubmission, type ApprovalDetail, type ApprovalItem, type BulkItemResult } from '../api/approvals'
 import type { Num } from '../api/poReview'
 import {
   APPROVAL_BULK, APPROVAL_BULK_RESULT, APPROVAL_ERROR, APPROVAL_FILTER, APPROVAL_KIND, APPROVAL_KIND_LABEL, APPROVAL_STATUS, APPROVAL_TABS, APPROVAL_TEXT,
-  APPROVAL_REOPENED_LABEL, FIX_FIELD_LABEL, ISSUE_LABELS, PO_REVIEW_REMARK_MAX, type ApprovalKind, type ApprovalStatus,
+  APPROVAL_REOPENED_LABEL, APPROVALS_VIEW, FIX_FIELD_LABEL, ISSUE_LABELS, MARGIN_TEXT, PO_REVIEW_REMARK_MAX, type ApprovalKind, type ApprovalsView, type ApprovalStatus,
 } from '../constants/poReview'
 import { SEARCH_DELAY_MS } from '../constants/poOverview'
 import { APPROVAL_PRICE_TEXT, PRICE_CHECK_TEXT, PRICE_CHOICE } from '../constants/priceDifferences'
@@ -21,6 +21,7 @@ import { istDateTime } from '../lib/time'
 import { PATHS, URL_PARAM } from '../constants/pages'
 import { oneOf, useUrlParam } from '../lib/urlState'
 import { fmtDate, type ColKind } from '../lib/ops'
+import MarginApprovals from './MarginApprovals'
 
 /*
  * Approvals (2026-10-15, user): PO reviews the reviewers submitted. Pending (oldest first) / Approved / Rejected tabs
@@ -87,7 +88,36 @@ const bulkSummary = (out: BulkItemResult[]): Notice => {
 const money = (v: Num | number | unknown) => (v === '' || v === null || v === undefined ? '—' : `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
 const shown = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(v))
 
+/**
+ * Approvals has two kinds (2026-11-06): PO reviews (below) and Margin changes (pages/MarginApprovals.tsx, two-layer
+ * approval). The kind is in the address (?view=margin), so a refresh or a shared link keeps it.
+ */
 export default function Approvals() {
+  const [view, setView] = useUrlParam<ApprovalsView>(PATHS.APPROVALS, URL_PARAM.VIEW, oneOf(Object.values(APPROVALS_VIEW)), APPROVALS_VIEW.PO)
+  const margins = useQuery({ queryKey: ['approvals', 'margins', 'open'], queryFn: ({ signal }) => listMarginRequests('open', signal) })
+  const switcher = (
+    <div className="inline-flex rounded-[var(--radius)] bg-alt/70 p-1">
+      {([[APPROVALS_VIEW.PO, MARGIN_TEXT.VIEW_PO], [APPROVALS_VIEW.MARGIN, MARGIN_TEXT.VIEW_MARGIN]] as const).map(([k, label]) => (
+        <button key={k} type="button" onClick={() => setView(k)}
+          className={`rounded-md px-3 py-1 text-[12.5px] font-semibold transition-colors ${view === k ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-600 hover:text-ink-900'}`}>
+          {label}{k === APPROVALS_VIEW.MARGIN && margins.data?.counts.open ? <span className="ml-1.5 rounded-full bg-warn-soft px-1.5 text-[11px] text-warn">{margins.data.counts.open}</span> : null}
+        </button>
+      ))}
+    </div>
+  )
+  if (view === APPROVALS_VIEW.MARGIN) {
+    return (
+      <div className="space-y-5">
+        <PageTitle title="Approvals" sub={MARGIN_TEXT.VIEW_MARGIN} />
+        {switcher}
+        <MarginApprovals />
+      </div>
+    )
+  }
+  return <PoReviewApprovals switcher={switcher} />
+}
+
+function PoReviewApprovals({ switcher }: { switcher: ReactNode }) {
   const qc = useQueryClient()
   const [tab, setTab] = useUrlParam<ApprovalStatus>(PATHS.APPROVALS, URL_PARAM.TAB, oneOf(Object.values(APPROVAL_STATUS)), APPROVAL_STATUS.PENDING)
   const [q, setQ] = useState('')
@@ -141,6 +171,7 @@ export default function Approvals() {
   return (
     <div className="space-y-5">
       <PageTitle title="Approvals" sub={APPROVAL_TEXT.SUB} right={<LiveDot mode={live} />} />
+      {switcher}
       <SubTabs value={tab} onChange={(t) => { setTab(t); setNotice(null); setTicked(new Set()) }} tabs={APPROVAL_TABS.map((t) => ({ ...t, count: counts[t.key] ?? 0 }))} />
       {notice && (
         <div className={`pf-tab-in flex items-start gap-2 rounded-[var(--radius)] px-3 py-2 text-[12.5px] ${notice.tone === 'ok' ? 'bg-ok-soft text-ok' : 'bg-warn-soft text-warn'}`}>

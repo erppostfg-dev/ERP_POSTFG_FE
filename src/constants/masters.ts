@@ -129,7 +129,14 @@ export const EDIT_TEXT = {
   USE_LATEST: 'Use the latest values',
   SAVED: (what: string, n: number) => `${what} saved (${n} field${n === 1 ? '' : 's'}). It is in the row's History.`,
   SWITCHED: (what: string, on: boolean) => `${what} switched ${on ? 'on' : 'off'}. It is in the row's History.`,
+  /** Two-layer margin approval (2026-11-06): margin % / rate wait for Operations Manager, then Admin. */
+  MARGIN_ASKED: (id: string) => `Margin / rate change sent for approval (request #${id}): Operations Manager, then Admin. It applies after both approve (Approvals → Margin changes).`,
+  MARGIN_FIELD_HINT: 'Changing it sends a request: Operations Manager, then Admin approve it before it applies.',
 } as const
+
+/** A new channel SKU waits for the two margin approvals (2026-11-06) before it is added. */
+export const MARGIN_ADD_TEXT = (what: string, id: string) =>
+  `${what} sent for approval (request #${id}): Operations Manager, then Admin. It is added after both approve (Approvals → Margin changes).`
 export const SWITCH_OFF_EFFECT: Record<string, string> = {
   pep: 'New PO lines with this SKU will go to In Review (SKU inactive).',
   channelSku: 'New PO lines with this channel SKU code will go to In Review (SKU not mapped). Add the right mapping afterwards if the key was wrong.',

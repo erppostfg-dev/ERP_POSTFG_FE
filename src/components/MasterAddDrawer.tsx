@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Lock } from 'lucide-react'
 import { ApiError } from '../api/client'
 import { addChannel, addChannelLocation, addChannelSku, addPepSku, editMasterRow, getMasterFormOptions, type EditConflict, type FieldProblem, type MasterFormOptions } from '../api/masters'
-import { ADD_RULE, ADD_TEXT, EDIT_TEXT, HISTORY_TEXT, MASTER_LOG_TYPE, STOCK_EDIT_KEYS, STOCK_NOT_COUNTED, STOCK_TEXT } from '../constants/masters'
+import { ADD_RULE, ADD_TEXT, EDIT_TEXT, HISTORY_TEXT, MARGIN_ADD_TEXT, MASTER_LOG_TYPE, STOCK_EDIT_KEYS, STOCK_NOT_COUNTED, STOCK_TEXT } from '../constants/masters'
 import { Button, Drawer } from './ui'
 import { inputCls } from './kit'
 
@@ -64,7 +64,7 @@ const FORMS: Record<AddMaster, { title: string; fields: Field[]; send: (b: Recor
       { key: 'productName', label: 'Product name', kind: 'text', wide: true },
       { key: 'brand', label: 'Brand', kind: 'text' },
       { key: 'mrp', label: 'MRP (₹)', kind: 'number' },
-      { key: 'marginPercent', label: 'Margin %', kind: 'number', range: { min: 0, max: 100 } },
+      { key: 'marginPercent', label: 'Margin %', kind: 'number', range: { min: 0, max: 100 }, hint: EDIT_TEXT.MARGIN_FIELD_HINT },
       { key: 'rateAfterMargin', label: 'Rate after margin (₹)', kind: 'number', hint: 'Filled from MRP and margin (editable)' },
       { key: 'eanCode', label: 'EAN', kind: 'text', mono: true, rule: ADD_RULE.EAN },
     ],
@@ -254,7 +254,8 @@ export function MasterAddDrawer({ master, defaultChannelId, edit, onClose, onAdd
         original: Object.fromEntries(sendKeys.map((k) => [k, valueOf(fieldOf(k), initial[k] ?? '', null)])),
         ...(remark.trim() ? { remark: remark.trim() } : {}),
       })
-      onAdded(EDIT_TEXT.SAVED(form.title.replace(/^Edit /, ''), res.changed.length))
+      const saved = res.changed.length ? EDIT_TEXT.SAVED(form.title.replace(/^Edit /, ''), res.changed.length) : ''
+      onAdded([saved, res.marginRequestId ? EDIT_TEXT.MARGIN_ASKED(res.marginRequestId) : ''].filter(Boolean).join(' ') || EDIT_TEXT.SAVED(form.title.replace(/^Edit /, ''), 0))
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && Array.isArray(e.details)) setConflicts(e.details as EditConflict[])
       else {
@@ -281,8 +282,10 @@ export function MasterAddDrawer({ master, defaultChannelId, edit, onClose, onAdd
     setSaving(true)
     setFailed('')
     try {
-      const res = (await FORMS[master as AddMaster].send(body())) as { channel?: string }
+      const res = (await FORMS[master as AddMaster].send(body())) as { channel?: string; requestId?: string }
       const name = (v.displayName ?? v.pepCode ?? v.channelCode ?? v.locationCode ?? '').trim()
+      // a channel SKU is not added yet: it waits for the two margin approvals (2026-11-06)
+      if (res.requestId) return onAdded(MARGIN_ADD_TEXT(`${form.title.replace(/^Add |^Map /, '')} ${name}`, res.requestId))
       onAdded(`${form.title.replace(/^Add |^Map /, '')} ${name} added.${res.channel ? ` ${ADD_TEXT.RECHECK(res.channel)}` : ''}${master === 'customer' ? ` ${ADD_TEXT.NEW_CHANNEL}` : ''}`)
     } catch (e) {
       const details = e instanceof ApiError && Array.isArray(e.details) ? (e.details as FieldProblem[]) : []

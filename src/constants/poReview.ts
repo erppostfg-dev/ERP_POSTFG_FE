@@ -228,6 +228,33 @@ export const PRICE_ISSUES = { PRICE_MISMATCH: 'price', MRP_MISMATCH: 'mrp' } as 
 
 export const APPROVALS_ENDPOINT = '/approvals/po-reviews'
 
+/** Margin changes, two-layer approval (2026-11-06): Operations Manager (layer 1), then Admin (layer 2). */
+export const MARGIN_ENDPOINT = '/approvals/margin-changes'
+export const APPROVALS_VIEW = { PO: 'po', MARGIN: 'margin' } as const
+export type ApprovalsView = (typeof APPROVALS_VIEW)[keyof typeof APPROVALS_VIEW]
+export const MARGIN_TABS: { key: 'open' | 'applied' | 'rejected'; label: string }[] = [
+  { key: 'open', label: 'Waiting' }, { key: 'applied', label: 'Applied' }, { key: 'rejected', label: 'Rejected' },
+]
+export const MARGIN_STATUS_LABEL: Record<string, string> = {
+  pending_l1: 'Waiting layer 1 (Operations Manager)', pending_l2: 'Waiting layer 2 (Admin)', applied: 'Applied', rejected: 'Rejected',
+}
+export const MARGIN_TEXT = {
+  VIEW_PO: 'PO reviews',
+  VIEW_MARGIN: 'Margin changes',
+  SUB: 'Margin % / rate changes and new channel SKUs: Operations Manager approves first, then Admin. Nothing changes in the master until both approve.',
+  EMPTY: 'Nothing here.',
+  KIND: { edit: 'Margin / rate change', add: 'New channel SKU' } as Record<string, string>,
+  SOURCE: { masters: 'Masters page', price_check: 'Price check (PO approval)' } as Record<string, string>,
+  APPROVE_L1: 'Approve (layer 1)',
+  APPROVE_L2: 'Approve and apply (layer 2)',
+  REJECT: 'Reject',
+  REMARK: 'Remark (required to reject)',
+  REMARK_NEEDED: 'Write why it is rejected',
+  APPROVED_L1: (id: string) => `Request #${id} approved at layer 1: now waiting for an Admin.`,
+  APPLIED: (id: string) => `Request #${id} approved at layer 2 and applied to the master.`,
+  REJECTED: (id: string) => `Request #${id} rejected.`,
+} as const
+
 /** po_review_submissions.status shown as the page's tabs. */
 export const APPROVAL_STATUS = { PENDING: 'pending', APPROVED: 'approved', REJECTED: 'rejected' } as const
 export type ApprovalStatus = (typeof APPROVAL_STATUS)[keyof typeof APPROVAL_STATUS]
