@@ -38,6 +38,27 @@ export const FACILITY_SCOPE_NOTE = {
   SHOW_MINE: 'Show only mine',
 } as const
 
+/**
+ * The status popup (2026-11-06, user: "same status as PEPIMS, a pop up with all the statuses"): PEPIMS's ⓘ at the row's
+ * end opens "Final Status - PO: …" with the three stages and the final status. An empty stage counts as Confirmed (as
+ * PEPIMS and our backend's STATUS_WHEN_EMPTY); a combination with no row in the final status master = NO_MAPPING.
+ */
+export const STATUS_POPUP = {
+  COLUMN: 'Status',
+  TITLE: (po: string) => `Final Status - PO: ${po}`,
+  OPEN: 'See all statuses',
+  WHEN_EMPTY: 'Confirmed',
+  EMPTY_NOTE: 'not set, counts as Confirmed',
+  NO_MAPPING: 'No mapping available!',
+  FINAL: 'Final Status',
+  STAGES: [
+    { key: 'statusPlanning', label: 'Status (Planning)' },
+    { key: 'statusWarehouse', label: 'Status (Warehouse)' },
+    { key: 'statusLogistics', label: 'Status (Logistics)' },
+  ],
+  CLOSE: 'Close',
+} as const
+
 /** Group header labels of the grid. */
 export const COLUMN_GROUP_LABEL = { KEY: 'PO', SHIPMENT: 'Shipment' } as const
 

@@ -6,7 +6,8 @@ import { DataGrid, Field, FilterPanel, SectionToolbar, exportRows, countActive, 
 import { PO_LINE_COLS, type ColKind, type POLineRow } from '../../lib/ops'
 import { ApiError } from '../../api/client'
 import { getColumns, getFilterOptions, listLines, listShipments, type ColumnDef, type FilterOptions, type LineItem, type ListParams, type PoOverviewColumns, type ShipmentItem, type TeamColumns } from '../../api/poOverview'
-import { COLUMN_GROUP_LABEL, FACILITY_SCOPE_NOTE, NOT_ASSIGNED_DATES, OVERVIEW_TAB, PO_OVERVIEW_PAGE_SIZE, SEARCH_DELAY_MS } from '../../constants/poOverview'
+import { COLUMN_GROUP_LABEL, FACILITY_SCOPE_NOTE, NOT_ASSIGNED_DATES, OVERVIEW_TAB, PO_OVERVIEW_PAGE_SIZE, SEARCH_DELAY_MS, STATUS_POPUP } from '../../constants/poOverview'
+import { StatusCell } from './StatusPopup'
 import { TABLE_HEIGHT } from '../../constants/ui'
 import { Reveal } from '../../components/shell'
 import { useLiveShipments } from '../../lib/liveShipments'
@@ -286,6 +287,7 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
       <div key={tab} className="pf-tab-in">
       <DataGrid
         cols={cols} rows={s.rows} rowKey={(r) => String(r.uid)} sticky={fixedCols} stickyWidths={KEY_FIXED_WIDTHS} stickyFit onRowClick={setSel} groups={groups} editable={editable} rowEditable={(r) => r.canEdit === true} onRowHistory={setHistoryOf} rowClass={(r) => (flash[String(r.uid)] ? 'pf-row-flash' : '')} maxHeight={tableHeight} pageSize={50}
+        trailing={[{ label: STATUS_POPUP.COLUMN, render: (r) => <StatusCell row={r} /> }]}
         rowMenu={(r) => [{ label: 'View details', onClick: () => setSel(r) }, { label: 'History', onClick: () => setHistoryOf(r) }]}
       />
       </div>
@@ -318,7 +320,7 @@ function LinesTab({ options, columns, onTotal, tableHeight }: { options: FilterO
       <ListStatus s={s} entity="PO lines" />
       <DataGrid
         cols={PO_LINE_COLS} rows={s.rows} rowKey={(r) => `${r.shipmentUid}-${r.srNo}`} sticky={LINE_FIXED_COLS} stickyWidths={LINE_FIXED_WIDTHS} stickyFit maxHeight={tableHeight} pageSize={50} onRowClick={setSel}
-        trailing={[{ label: 'Status', render: (r) => <Cell kind="status" v={r.status} /> }]}
+        trailing={[{ label: STATUS_POPUP.COLUMN, render: (r) => <StatusCell row={{ ...r, statusFinal: r.status }} /> }]}
         rowMenu={(r) => [{ label: 'View details', onClick: () => setSel(r) }]}
       />
       {sel && (
