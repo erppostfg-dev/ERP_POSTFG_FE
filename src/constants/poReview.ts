@@ -103,6 +103,9 @@ export const SOURCE_LABELS: Record<string, 'API' | 'Webhook' | 'Email' | 'Manual
 /** po_issues.status */
 export const ISSUE_STATUS = { OPEN: 'open' } as const
 
+/** An accepted Address Mismatch needs a remark (backend REMARK_REQUIRED_ISSUE_TYPES, 2026-11-06). */
+export const ADDRESS_REMARK = 'Write a remark: why ship from another warehouse than the PO is billed to'
+
 /** po_issues.issue_type -> what the reviewer reads. */
 export const ISSUE_LABELS: Record<string, string> = {
   OCR_ISSUE: 'OCR problem',
@@ -115,6 +118,8 @@ export const ISSUE_LABELS: Record<string, string> = {
   TOTAL_MISMATCH: 'Total mismatch',
   PO_EXPIRED: 'PO expired',
   OTHER: 'Other',
+  // billed to one of our warehouses (its GSTIN), location mapped to another (2026-11-06)
+  ADDRESS_MISMATCH: 'Address Mismatch',
 }
 
 /** po_issues.field_name of header issues -> the review panel field they belong to. */

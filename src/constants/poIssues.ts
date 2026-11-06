@@ -20,6 +20,7 @@ export const ISSUE_KIND_LABEL: Record<string, string> = {
 export const ISSUE_ITEM_LABEL: Record<string, string> = {
   SKU_NOT_MAPPED: 'Channel SKU', PRICE_MISMATCH: 'Channel SKU', MRP_MISMATCH: 'Channel SKU', QTY_MISMATCH: 'Channel SKU',
   LOCATION_NOT_MAPPED: 'Location on the PO', TOTAL_MISMATCH: 'PO value', PO_EXPIRED: 'Expiry date', DUPLICATE_PO: 'PO number',
+  ADDRESS_MISMATCH: 'Billed to (our GSTIN)',
   REJECTED: 'Reason', SENT_BACK: 'Reason',
 }
 

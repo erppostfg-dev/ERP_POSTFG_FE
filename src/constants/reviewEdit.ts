@@ -22,7 +22,8 @@ export const editRules = (open: { type: string; lineNo: number | null }[]): Edit
   }
   for (const i of open) {
     const n = i.lineNo
-    if (i.type === 'LOCATION_NOT_MAPPED') r.location = true
+    // ADDRESS_MISMATCH (2026-11-06): pick a location of the warehouse the PO is billed to, or accept it
+    if (i.type === 'LOCATION_NOT_MAPPED' || i.type === 'ADDRESS_MISMATCH') r.location = true
     else if (i.type === 'SKU_NOT_MAPPED' && n !== null) line(n, 'pep')
     else if (i.type === 'MRP_MISMATCH' && n !== null) line(n, 'mrp')
     else if (i.type === 'PRICE_MISMATCH' && n !== null) line(n, 'rate')

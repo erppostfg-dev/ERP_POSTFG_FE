@@ -14,7 +14,7 @@ import { ApiError } from '../../api/client'
 import { downloadExcel } from '../../lib/excelExport'
 import { downloadReviewLineItems } from '../../lib/lineItemsExport'
 import {
-  BULK_ENDED_TEXT, ENDED_TEXT, LINE_ITEMS, ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED, PRICE_ISSUES,
+  ADDRESS_REMARK, BULK_ENDED_TEXT, ENDED_TEXT, LINE_ITEMS, ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED, PRICE_ISSUES,
 } from '../../constants/poReview'
 import { PRICE_CHECK_TEXT, PRICE_CHOICE, TOTAL_TOLERANCE, type PriceChoice } from '../../constants/priceDifferences'
 import { PriceCheck, type PriceRow } from './PriceCheck'
@@ -352,6 +352,9 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   const totalLeft = Math.abs(left) > Math.max(TOTAL_TOLERANCE.MIN, (chosenTotal * TOTAL_TOLERANCE.PERCENT) / 100) ? left : null
   const totalIssue = open.find((i) => i.field === ISSUE_FIELD.PO_VALUE)
   const totalNeedsRemark = !!totalIssue && accepted.has(totalIssue.issueId) && !remark.trim()
+  // an accepted Address Mismatch (2026-11-06) needs a remark too: why ship from another warehouse than the PO is billed to
+  const addressIssue = open.find((i) => i.type === 'ADDRESS_MISMATCH')
+  const addressNeedsRemark = !!addressIssue && accepted.has(addressIssue.issueId) && !remark.trim()
 
   // An issue counts as handled when it is accepted, or the part it is about was corrected. The backend checks again on
   // Submit and answers with whatever is still open.
@@ -405,6 +408,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
     ? [
         ...(unresolved.length ? [`${unresolved.length} issue${unresolved.length > 1 ? 's' : ''} to resolve`] : []),
         ...(totalNeedsRemark ? [PRICE_CHECK_TEXT.TOTAL_REMARK] : []),
+        ...(addressNeedsRemark ? [ADDRESS_REMARK] : []),
         ...checks.filter((c) => !c.ok).map((c) => c.label),
       ]
     : []
