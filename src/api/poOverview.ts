@@ -162,3 +162,12 @@ export type ShipmentChange = { uid: string; logId: string; action: string; field
 export const getChanges = (after?: string, signal?: AbortSignal) =>
   api<{ lastId: string; changes: ShipmentChange[] }>(`${PO_OVERVIEW_ENDPOINT.CHANGES}${after ? `?after=${encodeURIComponent(after)}` : ''}`, { signal })
 
+
+/* Uniware sale order status (2026-11-06, backend modules/po-uniware-sync). */
+export interface UniwareSyncStatus {
+  lastOkAt: string | null; lastError: string | null; counts: Record<string, number>; running: boolean; queued: boolean
+  timerOn: boolean; nextRunAt: string | null; everyMinutes: number; minutesAgo: number | null
+}
+export const getUniwareSync = (signal?: AbortSignal) => api<UniwareSyncStatus>(PO_OVERVIEW_ENDPOINT.UNIWARE_SYNC, { signal })
+export const startUniwareSync = (uids?: string[]) =>
+  api<UniwareSyncStatus & { state: 'started' | 'queued' }>(PO_OVERVIEW_ENDPOINT.UNIWARE_SYNC, { method: 'POST', body: JSON.stringify(uids?.length ? { uids } : {}) })

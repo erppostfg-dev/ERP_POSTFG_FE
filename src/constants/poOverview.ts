@@ -10,6 +10,8 @@ export const PO_OVERVIEW_ENDPOINT = {
   EDIT_OPTIONS: '/po-overview/edit-options',
   EVENTS: '/po-overview/events',
   CHANGES: '/po-overview/changes',
+  /** Uniware sale order status (2026-11-06): GET last run, POST Sync now. */
+  UNIWARE_SYNC: '/po-overview/uniware-sync',
 } as const
 
 /** Rows per request (the backend's default; PEPIMS loads 200 at a time). */
@@ -58,6 +60,18 @@ export const STATUS_POPUP = {
   ],
   CLOSE: 'Close',
 } as const
+
+/** The Uniware sale order sync (2026-11-06): every 30 min on the server, read-only on Uniware. */
+export const UNIWARE_SYNC_TEXT = {
+  BUTTON: 'Sync from Uniware',
+  RUNNING: 'Syncing…',
+  NEVER: 'Uniware: not synced yet',
+  AGO: (min: number) => `Uniware · synced ${min === 0 ? 'just now' : `${min} min ago`}`,
+  STARTED: 'Reading the sale orders from Uniware: rows update as it goes.',
+  FAILED: (why: string) => `Uniware sync: ${why}`,
+  HINT: 'Reads the sale order of each PO from Uniware (read-only): Warehouse status forward, RTS / dispatch dates and invoice when empty.',
+} as const
+export const UNIWARE_SYNC_REFRESH_MS = 30_000
 
 /** Group header labels of the grid. */
 export const COLUMN_GROUP_LABEL = { KEY: 'PO', SHIPMENT: 'Shipment' } as const

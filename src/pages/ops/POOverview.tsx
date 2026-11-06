@@ -8,6 +8,7 @@ import { ApiError } from '../../api/client'
 import { getColumns, getFilterOptions, listLines, listShipments, type ColumnDef, type FilterOptions, type LineItem, type ListParams, type PoOverviewColumns, type ShipmentItem, type TeamColumns } from '../../api/poOverview'
 import { COLUMN_GROUP_LABEL, FACILITY_SCOPE_NOTE, NOT_ASSIGNED_DATES, OVERVIEW_TAB, PO_OVERVIEW_PAGE_SIZE, SEARCH_DELAY_MS, STATUS_POPUP } from '../../constants/poOverview'
 import { StatusCell } from './StatusPopup'
+import { UniwareSyncButton } from '../../components/UniwareSyncButton'
 import { TABLE_HEIGHT } from '../../constants/ui'
 import { Reveal } from '../../components/shell'
 import { useLiveShipments } from '../../lib/liveShipments'
@@ -279,6 +280,8 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
         entity="Shipment Status" onExport={(e) => exportRows(`shipment_status_${tab}`, e, cols, s.rows)}
         primary={disabled('Bulk Edit', <PencilLine className="size-4" />)}
       />
+      {/* Uniware sale order status (2026-11-06): synced every 30 min; Sync now for people who edit a team's columns */}
+      <UniwareSyncButton canSync={!!columns?.teams.some((t) => t.access === 'edit')} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={(f) => { s.setFilters(f); s.setOpen(false) }} onClose={() => s.setOpen(false)} /></Reveal>
       {columns && <TeamTabs teams={teams} value={tab} onChange={setTab} />}
       {columns?.facilityScoped && <FacilityNote mine={columns.facilities} filters={s.filters} setFilters={s.setFilters} editHere={editable.size > 0} />}
