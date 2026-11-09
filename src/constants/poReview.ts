@@ -335,6 +335,10 @@ export const UNIWARE_ENDPOINT = {
   ONE: (uploadId: string) => `${PO_REVIEW_ENDPOINT}/${encodeURIComponent(uploadId)}/uniware-csv`,
   MANY: `${PO_REVIEW_ENDPOINT}/uniware-csv`,
   MARK: `${PO_REVIEW_ENDPOINT}/uniware-uploaded`,
+  /** Create in Uniware (2026-11-09, POST_FG UNIWARE_CREATE): queue the ticked POs / the latest request of each. */
+  CREATE: `${PO_REVIEW_ENDPOINT}/uniware-create`,
+  CREATE_STATES: `${PO_REVIEW_ENDPOINT}/uniware-create/states`,
+  CREATE_PREVIEW: `${PO_REVIEW_ENDPOINT}/uniware-create/preview`,
 } as const
 
 /** Days waiting (since processed, not yet in Uniware): from WARN yellow, from CRIT red, before that grey (user, 2026-10-19). */
@@ -360,12 +364,53 @@ export const UNIWARE_TEXT = {
   SORT_HINT: 'Sort: ↓ waiting longest first (in Uniware last) · ↑ the reverse · click again to clear',
   DOWNLOADED_BY: 'Downloaded by',
   UPLOADED_BY: 'Marked uploaded by',
+  /** No person: the Uniware sync found the sale order in Uniware and marked it (2026-11-09). */
+  FOUND_BY_SYNC: 'Found in Uniware by the sync',
   BULK_DOWNLOAD: (n: number) => `Download sale order CSV (${n})`,
   BULK_MARK: (n: number) => `Mark uploaded (${n})`,
   DOWNLOADED: (n: number) => (n === 1 ? 'Sale order CSV downloaded. Upload it into Uniware, then click "Mark uploaded".' : `One CSV with ${n} sale orders downloaded. Upload it into Uniware, then mark them uploaded.`),
   MARKED: (n: number) => `${n} PO${n === 1 ? '' : 's'} marked uploaded into Uniware: now in PO Overview.`,
   UNDONE: (n: number) => `Upload mark removed from ${n} PO${n === 1 ? '' : 's'}: back to waiting, out of PO Overview.`,
   SUMMARY: (pending: number, downloaded: number) => `${pending} not downloaded · ${downloaded} downloaded, not in Uniware`,
+} as const
+
+/* ---- Create in Uniware (2026-11-09): the sale order is created through the Uniware API, no CSV download / upload ---- */
+/** POST_FG UNIWARE_CREATE_STATUS. */
+export const UNIWARE_CREATE_STATUS = { QUEUED: 'queued', CREATING: 'creating', CREATED: 'created', EXISTS: 'exists', FAILED: 'failed' } as const
+export type UniwareCreateStatus = (typeof UNIWARE_CREATE_STATUS)[keyof typeof UNIWARE_CREATE_STATUS]
+export const UNIWARE_CREATE_TEXT = {
+  BUTTON: (n: number) => `Create in Uniware (${n})`,
+  BUTTON_HINT: 'Creates the sale orders in Uniware through its API: no CSV download / upload. Only verified POs not in Uniware yet.',
+  CONFIRM_TITLE: (n: number) => `Create ${n} sale order${n === 1 ? '' : 's'} in Uniware?`,
+  CONFIRM_BODY: 'These are REAL sale orders in Uniware. Each one is checked first: one Uniware already has is not sent again. Nothing in Uniware is ever changed or cancelled from here.',
+  CONFIRM: 'Create in Uniware',
+  CANCEL: 'Cancel',
+  QUEUED: (n: number, refused: string[]) => `${n} PO${n === 1 ? '' : 's'} being created in Uniware.${refused.length ? ` Not sent: ${refused.join('; ')}` : ''}`,
+  CREATING: 'Creating in Uniware…',
+  FAILED: 'Create failed',
+  FAILED_HINT: (error: string | null, attempts: number) => `${error ?? 'Uniware did not create it'} (${attempts} tr${attempts === 1 ? 'y' : 'ies'}). Fix it and create again, or download the CSV.`,
+  /** Max POs in one click (POST_FG UNIWARE_CREATE.MAX_IDS). */
+  MAX: 50,
+  TOO_MANY: (max: number) => `Tick at most ${max} POs to create in Uniware at once.`,
+  /** How often the screen checks while some are being created. */
+  POLL_MS: 4000,
+} as const
+
+/** Preview of Create in Uniware (2026-11-09): what would be sent, nothing sent or saved. */
+export const UNIWARE_PREVIEW_TEXT = {
+  BUTTON: (n: number) => `Preview in Uniware (${n})`,
+  BUTTON_HINT: 'Shows exactly what "Create in Uniware" would send for the ticked POs, or why one would not be sent. Nothing is sent and nothing is saved.',
+  TITLE: (n: number, ready: number) => `Preview: ${ready} of ${n} PO${n === 1 ? '' : 's'} would be sent to Uniware`,
+  NOTHING_SENT: 'Nothing has been sent to Uniware and nothing was saved. "Create in Uniware" sends exactly this.',
+  CREATE_OFF: 'Create in Uniware is switched off on this server: this is a preview only. Nothing has been sent and nothing was saved.',
+  NO_PHONE: 'No phone number is set for Uniware orders (UNIWARE_ORDER_PHONE): the real create needs one, so it stays off until it is set.',
+  WOULD_SEND: 'Would be sent',
+  WOULD_NOT: 'Would NOT be sent',
+  CHANNEL: 'Uniware channel', CUSTOMER: 'Customer code', FACILITY: 'Warehouse (facility)', PO_DATE: 'PO date',
+  UNITS: 'Units', TOTAL: 'Order value', GSTIN: 'Customer GSTIN', DISPLAY: 'Display order code', ADDRESS: 'Ship-to / bill-to address',
+  SKU: 'Item SKU', PRICE: 'Price / unit', VALUE: 'Value',
+  SHOW_JSON: 'Show the exact request JSON',
+  CLOSE: 'Close the preview',
 } as const
 
 /* ---- Line items download on the Processed tab (2026-10-26): every line of the ticked POs as CSV or Excel ---- */

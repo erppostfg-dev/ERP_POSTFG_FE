@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Check, Clock, Loader2, Upload } from 'lucide-react'
+import { AlertTriangle, Check, Clock, Loader2, Upload } from 'lucide-react'
 import { Badge } from '../../components/ui'
 import { apiUrl, ApiError } from '../../api/client'
-import { markUniwareUploaded } from '../../api/poReview'
-import { UNIWARE_AGE, UNIWARE_ENDPOINT, UNIWARE_STATE, UNIWARE_TEXT, type UniwareState } from '../../constants/poReview'
+import { markUniwareUploaded, type UniwareCreateState } from '../../api/poReview'
+import { UNIWARE_AGE, UNIWARE_CREATE_STATUS, UNIWARE_CREATE_TEXT, UNIWARE_ENDPOINT, UNIWARE_STATE, UNIWARE_TEXT, type UniwareState } from '../../constants/poReview'
 import { istDateTime } from '../../lib/time'
 
 /*
@@ -57,8 +57,10 @@ export const downloadCombinedCsv = (uploadIds: string[]) =>
   saveCsv(UNIWARE_ENDPOINT.MANY, { method: 'POST', body: JSON.stringify({ uploadIds }) })
 
 /** The status chip + Mark uploaded / Undo of one PO (the last column of Processed); no download button here. */
-export function UniwareCell({ h, canEdit, onDone, onError }: {
+export function UniwareCell({ h, canEdit, onDone, onError, create }: {
   h: Handoff; canEdit: boolean; onDone: (message: string) => void; onError: (message: string) => void
+  /** Its latest Create in Uniware request (2026-11-09), if any. */
+  create?: UniwareCreateState
 }) {
   const [busy, setBusy] = useState<'mark' | 'undo' | null>(null)
   const st = stateOf(h)
@@ -79,15 +81,20 @@ export function UniwareCell({ h, canEdit, onDone, onError }: {
   if (st === UNIWARE_STATE.UPLOADED) {
     return (
       <span className="inline-flex items-center gap-2">
-        <span title={`${UNIWARE_TEXT.UPLOADED_BY} ${h.uniwareUploadedBy ?? '—'} · ${istDateTime(h.uniwareUploadedAt)}`}>
+        <span title={`${h.uniwareUploadedBy ? `${UNIWARE_TEXT.UPLOADED_BY} ${h.uniwareUploadedBy}` : UNIWARE_TEXT.FOUND_BY_SYNC} · ${istDateTime(h.uniwareUploadedAt)}`}>
           <Badge tone="ok"><Check className="size-3" />{UNIWARE_TEXT.IN_UNIWARE}</Badge>
         </span>
         {canEdit && <button type="button" onClick={() => void run('undo')} disabled={!!busy} className="text-[11.5px] text-ink-400 underline-offset-2 hover:text-ink-900 hover:underline">{busy === 'undo' ? 'Undoing…' : 'Undo'}</button>}
       </span>
     )
   }
+  // Create in Uniware: being created, or the last try failed (Uniware's own reason on hover)
+  const creating = create && (create.status === UNIWARE_CREATE_STATUS.QUEUED || create.status === UNIWARE_CREATE_STATUS.CREATING)
+  if (creating) return <Badge tone="info">{spin}{UNIWARE_CREATE_TEXT.CREATING}</Badge>
+  const failed = create?.status === UNIWARE_CREATE_STATUS.FAILED
   return (
     <span className="inline-flex items-center gap-2">
+      {failed && <span title={UNIWARE_CREATE_TEXT.FAILED_HINT(create.error, create.attempts)}><Badge tone="crit"><AlertTriangle className="size-3" />{UNIWARE_CREATE_TEXT.FAILED}</Badge></span>}
       <span title={st === UNIWARE_STATE.DOWNLOADED ? `${UNIWARE_TEXT.DOWNLOADED_BY} ${h.csvDownloadedBy ?? '—'} · ${istDateTime(h.csvDownloadedAt)}` : UNIWARE_TEXT.NOT_DOWNLOADED_HINT}>
         <Badge tone={st === UNIWARE_STATE.DOWNLOADED ? 'info' : 'neutral'}>{st === UNIWARE_STATE.DOWNLOADED ? UNIWARE_TEXT.WAITING_UPLOAD : UNIWARE_TEXT.NOT_DOWNLOADED}</Badge>
       </span>

@@ -167,6 +167,8 @@ export const getChanges = (after?: string, signal?: AbortSignal) =>
 export interface UniwareSyncStatus {
   lastOkAt: string | null; lastError: string | null; counts: Record<string, number>; running: boolean; queued: boolean
   timerOn: boolean; nextRunAt: string | null; everyMinutes: number; minutesAgo: number | null
+  /** The Sync button (2026-11-09): one click per everyMinutes for the whole team; nextAt null = clickable now. */
+  button?: { lastAt: string | null; lastBy: string | null; everyMinutes: number; nextAt: string | null }
 }
 export const getUniwareSync = (signal?: AbortSignal) => api<UniwareSyncStatus>(PO_OVERVIEW_ENDPOINT.UNIWARE_SYNC, { signal })
 export const startUniwareSync = (uids?: string[]) =>

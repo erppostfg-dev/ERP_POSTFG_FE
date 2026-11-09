@@ -70,6 +70,9 @@ export const UNIWARE_SYNC_TEXT = {
   STARTED: 'Reading the sale orders from Uniware: rows update as it goes.',
   FAILED: (why: string) => `Uniware sync: ${why}`,
   HINT: 'Reads the sale order of each PO from Uniware (read-only): Warehouse status forward, RTS / dispatch dates and invoice when empty.',
+  /** The button is shared by the whole team: once per 30 min (2026-11-09). */
+  WAIT: (min: number) => `Next sync in ${min} min`,
+  WAIT_HINT: (by: string | null, at: string) => `Synced from this button${by ? ` by ${by}` : ''} at ${at}. The button works once every 30 minutes for the whole team; the server also syncs every 30 minutes by itself.`,
 } as const
 export const UNIWARE_SYNC_REFRESH_MS = 30_000
 

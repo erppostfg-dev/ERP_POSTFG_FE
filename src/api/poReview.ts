@@ -1,6 +1,6 @@
 import { api, apiUrl, ApiError } from './client'
 import { ERROR_CODE } from '../constants/auth'
-import { LINE_ITEMS, PO_REVIEW_ENDPOINT, PO_REVIEW_MAX_PAGE_SIZE, PO_REVIEW_MAX_PAGES } from '../constants/poReview'
+import { LINE_ITEMS, PO_REVIEW_ENDPOINT, PO_REVIEW_MAX_PAGE_SIZE, PO_REVIEW_MAX_PAGES, UNIWARE_ENDPOINT, type UniwareCreateStatus } from '../constants/poReview'
 import type { PriceChoice } from '../constants/priceDifferences'
 
 /* GET /po-review: one row per PO upload (API contract "PO review"). */
@@ -231,6 +231,32 @@ export function submitPo(uploadId: string, body: ResubmitBody) {
 /* POST /po-review/:uploadId/reject: the reviewer rejects directly; the PO leaves the list (who / why kept). */
 export function rejectPo(uploadId: string, remark: string) {
   return api<{ status: string; rejectedIssues: string[] }>(`${one(uploadId)}/reject`, { method: 'POST', body: JSON.stringify({ remark }) })
+}
+
+/* Create in Uniware (2026-11-09): POST /po-review/uniware-create queues the ticked POs; the states call gives the latest
+   request of each + whether the button is switched on (UNIWARE_CREATE_ENABLED on the server). */
+export interface UniwareCreateState {
+  uploadId: string; saleOrderCode: string; status: UniwareCreateStatus; attempts: number; error: string | null
+  items: number | null; orderValue: number | null; requestedAt: string; finishedAt: string | null
+}
+export function createInUniware(uploadIds: string[]) {
+  return api<{ queued: string[]; refused: { uploadId: string; reason: string }[] }>(UNIWARE_ENDPOINT.CREATE, { method: 'POST', body: JSON.stringify({ uploadIds }) })
+}
+export interface UniwarePreviewItem {
+  uploadId: string; poNumber: string | null; saleOrderCode: string | null; wouldSend: boolean; problems: string[]; phoneSet: boolean
+  summary: {
+    channel: string; customerCode: string; facility: string; displayOrderCode: string; poDate: string | null; units: number; value: number; gstin: string | null
+    address: { name: string; line1: string; city: string; state: string; pincode: string | null }
+    lines: { sku: string; units: number; price: number; value: number }[]
+  } | null
+  request: Record<string, unknown> | null
+}
+/* POST /po-review/uniware-create/preview: what Create would send per PO; nothing sent or saved (works with Create off). */
+export function previewUniwareCreate(uploadIds: string[]) {
+  return api<{ createEnabled: boolean; items: UniwarePreviewItem[] }>(UNIWARE_ENDPOINT.CREATE_PREVIEW, { method: 'POST', body: JSON.stringify({ uploadIds }) })
+}
+export function uniwareCreateStates(uploadIds: string[]) {
+  return api<{ enabled: boolean; items: UniwareCreateState[] }>(UNIWARE_ENDPOINT.CREATE_STATES, { method: 'POST', body: JSON.stringify({ uploadIds }) })
 }
 
 /* POST /po-review/uniware-uploaded: mark POs uploaded into Uniware (or undo); they then show in PO Overview. */

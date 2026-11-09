@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChannelOptions } from '../../lib/channels'
-import { AlertTriangle, FileUp, Webhook, Zap, Mail } from 'lucide-react'
+import { AlertTriangle, Eye, FileUp, Webhook, Zap, Mail } from 'lucide-react'
 import { Badge, PageTitle, SubTabs } from '../../components/ui'
 import { DataGrid, DownloadMenu, FilterChips, FilterPanel, ColumnSort, SectionToolbar, exportRows, exportRowsExcel, useSection, type DownloadItem, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
@@ -9,9 +9,10 @@ import { DATE_SORT_KEY, SORT_FILTER_KEY, orderRows } from '../../lib/listOrder'
 import { istDateTime } from '../../lib/time'
 import { InReview } from './POReview'
 import { FileCell, SourceCell } from './SourceCells'
+import { UniwareCreatePreview } from './UniwareCreatePreview'
 import { UniwareCell, ageTone, daysWaiting, downloadCombinedCsv, downloadOneCsv, stateOf, type Handoff } from './UniwareHandoff'
-import { getLineItems, markUniwareUploaded } from '../../api/poReview'
-import { LINE_ITEMS, LINE_ITEMS_TEXT, UNIWARE_STATE, UNIWARE_STATE_LABEL, UNIWARE_TEXT } from '../../constants/poReview'
+import { createInUniware, getLineItems, markUniwareUploaded, previewUniwareCreate, uniwareCreateStates, type UniwareCreateState, type UniwarePreviewItem } from '../../api/poReview'
+import { LINE_ITEMS, LINE_ITEMS_TEXT, UNIWARE_CREATE_STATUS, UNIWARE_CREATE_TEXT, UNIWARE_PREVIEW_TEXT, UNIWARE_STATE, UNIWARE_STATE_LABEL, UNIWARE_TEXT } from '../../constants/poReview'
 import { downloadLineItemsCsv, downloadLineItemsExcel } from '../../lib/lineItemsExport'
 import { useAuth } from '../../auth/AuthContext'
 import { ACCESS } from '../../constants/auth'
@@ -231,6 +232,57 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   const waiting = rows.filter((r) => stateOf(r.handoff) === UNIWARE_STATE.DOWNLOADED).length
   // Bulk: the ticked POs as ONE combined CSV, or marked uploaded (only the downloaded, not-yet-uploaded ones).
   const markable = picked.filter((r) => stateOf(r.handoff) === UNIWARE_STATE.DOWNLOADED)
+  // Create in Uniware (2026-11-09): the latest request of every PO not in Uniware yet; checked again while some are working.
+  const [creates, setCreates] = useState<{ enabled: boolean; byId: Map<string, UniwareCreateState> }>({ enabled: false, byId: new Map() })
+  const [confirmCreate, setConfirmCreate] = useState(false)
+  const notInUniware = useMemo(() => rows.filter((r) => stateOf(r.handoff) !== UNIWARE_STATE.UPLOADED).map((r) => r.id).slice(0, 500).join(','), [rows])
+  const loadCreates = useCallback(async () => {
+    try {
+      const r = await uniwareCreateStates(notInUniware ? notInUniware.split(',') : [])
+      setCreates({ enabled: r.enabled, byId: new Map(r.items.map((i) => [i.uploadId, i])) })
+    } catch {
+      // the button stays as it was; the list itself shows its own errors
+    }
+  }, [notInUniware])
+  useEffect(() => { void loadCreates() }, [loadCreates])
+  const working = [...creates.byId.values()].some((i) => i.status === UNIWARE_CREATE_STATUS.QUEUED || i.status === UNIWARE_CREATE_STATUS.CREATING)
+  useEffect(() => {
+    if (!working) return
+    const t = setInterval(() => { void loadCreates() }, UNIWARE_CREATE_TEXT.POLL_MS)
+    return () => clearInterval(t)
+  }, [working, loadCreates])
+  const isWorking = (r: ProcessedRow) => {
+    const c = creates.byId.get(r.id)
+    return !!c && (c.status === UNIWARE_CREATE_STATUS.QUEUED || c.status === UNIWARE_CREATE_STATUS.CREATING)
+  }
+  const creatable = picked.filter((r) => stateOf(r.handoff) !== UNIWARE_STATE.UPLOADED && !toVerify(r) && !isWorking(r))
+  // Preview (2026-11-09): any ticked PO not in Uniware yet; the answer says per PO what would be sent or why not
+  const [preview, setPreview] = useState<{ createEnabled: boolean; items: UniwarePreviewItem[] } | null>(null)
+  const previewable = picked.filter((r) => stateOf(r.handoff) !== UNIWARE_STATE.UPLOADED)
+  const runPreview = async () => {
+    setBulkBusy(true)
+    try {
+      setPreview(await previewUniwareCreate(previewable.map((x) => x.id)))
+    } catch (e) {
+      fail(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+  const runCreate = async () => {
+    setConfirmCreate(false)
+    setBulkBusy(true)
+    try {
+      const r = await createInUniware(creatable.map((x) => x.id))
+      const name = (id: string) => rows.find((x) => x.id === id)?.poNumber ?? id
+      done(UNIWARE_CREATE_TEXT.QUEUED(r.queued.length, r.refused.map((x) => `${name(x.uploadId)}: ${x.reason}`)))
+      await loadCreates()
+    } catch (e) {
+      fail(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
   const bulk = async (what: 'csv' | 'mark') => {
     setBulkBusy(true)
     try {
@@ -295,6 +347,20 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
             {picked.length > 0 && <button onClick={() => void bulk('csv')} disabled={bulkBusy || unverifiedPicked > 0} title={unverifiedPicked ? VERIFY_TEXT.BLOCKED(unverifiedPicked) : undefined} className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
               <DownloadIcon className="size-4" />{UNIWARE_TEXT.BULK_DOWNLOAD(picked.length)}
             </button>}
+            {previewable.length > 0 && (
+              <button onClick={() => void runPreview()} disabled={bulkBusy || previewable.length > UNIWARE_CREATE_TEXT.MAX}
+                title={previewable.length > UNIWARE_CREATE_TEXT.MAX ? UNIWARE_CREATE_TEXT.TOO_MANY(UNIWARE_CREATE_TEXT.MAX) : UNIWARE_PREVIEW_TEXT.BUTTON_HINT}
+                className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line px-3 text-[13px] font-semibold text-ink-900 hover:bg-alt disabled:opacity-60">
+                <Eye className="size-4" />{UNIWARE_PREVIEW_TEXT.BUTTON(previewable.length)}
+              </button>
+            )}
+            {creates.enabled && creatable.length > 0 && (
+              <button onClick={() => setConfirmCreate(true)} disabled={bulkBusy || creatable.length > UNIWARE_CREATE_TEXT.MAX}
+                title={creatable.length > UNIWARE_CREATE_TEXT.MAX ? UNIWARE_CREATE_TEXT.TOO_MANY(UNIWARE_CREATE_TEXT.MAX) : UNIWARE_CREATE_TEXT.BUTTON_HINT}
+                className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-primary px-3 text-[13px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-60">
+                <UploadIcon className="size-4" />{UNIWARE_CREATE_TEXT.BUTTON(creatable.length)}
+              </button>
+            )}
             {markable.length > 0 && (
               <button onClick={() => void bulk('mark')} disabled={bulkBusy} className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-ok px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
                 <UploadIcon className="size-4" />{UNIWARE_TEXT.BULK_MARK(markable.length)}
@@ -319,6 +385,17 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       )}
       {canEdit && unverifiedPicked > 0 && (
         <div className="pf-tab-in flex items-center gap-2 rounded-[var(--radius)] bg-warn-soft px-3 py-2 text-[12.5px] text-warn"><AlertTriangle className="size-4" />{VERIFY_TEXT.BLOCKED(unverifiedPicked)}</div>
+      )}
+      {preview && <UniwareCreatePreview items={preview.items} createEnabled={preview.createEnabled} onClose={() => setPreview(null)} />}
+      {confirmCreate && creatable.length > 0 && (
+        <div className="pf-tab-in space-y-2 rounded-[var(--radius)] border border-warn/50 bg-warn-soft px-3 py-2.5 text-[12.5px] text-ink-900">
+          <div className="font-semibold">{UNIWARE_CREATE_TEXT.CONFIRM_TITLE(creatable.length)}</div>
+          <div className="text-ink-600">{UNIWARE_CREATE_TEXT.CONFIRM_BODY}</div>
+          <div className="flex gap-2">
+            <button onClick={() => void runCreate()} disabled={bulkBusy} className="pf-press inline-flex h-8 items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50"><UploadIcon className="size-4" />{UNIWARE_CREATE_TEXT.CONFIRM}</button>
+            <button onClick={() => setConfirmCreate(false)} className="rounded-[var(--radius)] px-3 text-[12.5px] text-ink-600 hover:bg-alt">{UNIWARE_CREATE_TEXT.CANCEL}</button>
+          </div>
+        </div>
       )}
       {verifying && <div className="pf-tab-in rounded-[var(--radius)] bg-alt px-3 py-2 text-[12.5px] text-ink-600">{verifying}</div>}
       {upload && !verifying && (
@@ -374,7 +451,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
               sortValue: (r: ProcessedRow) => (r.verify?.state === VERIFY_STATE.TO_VERIFY ? 1 : 0),
             }] : []),
             {
-              label: UNIWARE_TEXT.COLUMN, render: (r) => <UniwareCell h={r.handoff} canEdit={canEdit} onDone={done} onError={fail} />,
+              label: UNIWARE_TEXT.COLUMN, render: (r) => <UniwareCell h={r.handoff} canEdit={canEdit} onDone={done} onError={fail} create={creates.byId.get(r.id)} />,
               // ↓ = waiting longest first (not downloaded before downloaded on the same day), POs already in Uniware last.
               sortValue: (r) => (stateOf(r.handoff) === UNIWARE_STATE.UPLOADED ? -1 : r.waitingDays * 2 + (stateOf(r.handoff) === UNIWARE_STATE.PENDING ? 1 : 0)),
               sortHint: UNIWARE_TEXT.SORT_HINT,
