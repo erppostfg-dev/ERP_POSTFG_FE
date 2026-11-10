@@ -15,6 +15,7 @@ import { PATHS, URL_PARAM } from '../constants/pages'
 import { oneOf, useUrlParam } from '../lib/urlState'
 import type { ColKind } from '../lib/ops'
 import { Toggle, VerifySettings } from './ops/VerifySettings'
+import { NoticeSettings } from './admin/NoticeSettings'
 import { ReviewRulesDummy } from './SettingsDummy'
 import { EmailTab } from './admin/EmailTab'
 import { ServerTab } from './admin/ServerTab'
@@ -74,6 +75,7 @@ function SettingsTab() {
         {section === 'po-verify' && <VerifySettings />}
         {section === 'review-rules' && <ReviewRulesDummy />}
         {section === 'po-intake' && <IntakeSettings />}
+        {section === 'notices' && <NoticeSettings />}
       </div>
     </div>
   )
