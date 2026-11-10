@@ -87,12 +87,14 @@ export const approveSubmission = (id: string, remark?: string) =>
 export const rejectSubmission = (id: string, remark: string) =>
   api<{ status: string }>(`${APPROVALS_ENDPOINT}/${encodeURIComponent(id)}/reject`, { method: 'POST', body: JSON.stringify({ remark }) })
 
-/* Margin changes (2026-11-06, two-layer approval; backend modules/masters/margin-approval.service.ts):
- * a channel SKU's margin % / rate or a new channel SKU, approved by Operations Manager (layer 1) then Admin (layer 2). */
+/* Margin changes (2026-11-06; backend modules/masters/margin-approval.service.ts): a change to a channel SKU's margin % /
+ * rate = Operations Manager (layer 1) then Admin (layer 2); a new channel SKU = ONE approval (layer 1, 2026-11-10). */
 export type MarginPerson = { id: number; name: string; email: string }
 export type MarginStatus = 'pending_l1' | 'pending_l2' | 'applied' | 'rejected'
 export type MarginRequest = {
   id: string; kind: 'edit' | 'add'; source: 'masters' | 'price_check'; status: MarginStatus; channelSkuId: string | null
+  /** 1 = new channel SKU (the first approval adds it), 2 = change to an existing row. */
+  approvalsNeeded: 1 | 2
   channel: string; channelCode: string; pepCode: string
   oldMarginPercent: number | null; newMarginPercent: number | null; oldRate: number | null; newRate: number | null
   row: Record<string, unknown> | null; remark: string | null

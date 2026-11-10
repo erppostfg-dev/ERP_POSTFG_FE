@@ -241,17 +241,20 @@ export const MARGIN_STATUS_LABEL: Record<string, string> = {
 export const MARGIN_TEXT = {
   VIEW_PO: 'PO reviews',
   VIEW_MARGIN: 'Margin changes',
-  SUB: 'Margin % / rate changes and new channel SKUs: Operations Manager approves first, then Admin. Nothing changes in the master until both approve.',
+  SUB: 'A new channel SKU needs one approval (Operations Manager or Admin): it is added at once. A margin % / rate change on an existing SKU needs two: Operations Manager first, then Admin; nothing changes in the master until both approve.',
   EMPTY: 'Nothing here.',
   KIND: { edit: 'Margin / rate change', add: 'New channel SKU' } as Record<string, string>,
   SOURCE: { masters: 'Masters page', price_check: 'Price check (PO approval)' } as Record<string, string>,
   APPROVE_L1: 'Approve (layer 1)',
   APPROVE_L2: 'Approve and apply (layer 2)',
+  APPROVE_ADD: 'Approve and add',
+  NEEDS: { 1: '1 approval', 2: '2 approvals' } as Record<number, string>,
   REJECT: 'Reject',
   REMARK: 'Remark (required to reject)',
   REMARK_NEEDED: 'Write why it is rejected',
   APPROVED_L1: (id: string) => `Request #${id} approved at layer 1: now waiting for an Admin.`,
   APPLIED: (id: string) => `Request #${id} approved at layer 2 and applied to the master.`,
+  ADDED: (id: string) => `Request #${id} approved: the channel SKU is added to the master.`,
   REJECTED: (id: string) => `Request #${id} rejected.`,
 } as const
 

@@ -190,7 +190,7 @@ export function getMasterFormOptions(signal?: AbortSignal) {
 
 const post = <T>(path: string, body: unknown) => api<T>(path, { method: 'POST', body: JSON.stringify(body) })
 export const addPepSku = (body: Record<string, unknown>) => post<{ id: string; pepCode: string }>(MASTERS_ENDPOINT.PEP_SKUS, body)
-/** 2026-11-06: not added yet; a margin request for the two approvals (Approvals → Margin changes). */
+/** 2026-11-06: not added yet; a margin request; added after ONE approval (2026-11-10, Approvals → Margin changes). */
 export const addChannelSku = (body: Record<string, unknown>) => post<{ requestId: string; channel: string }>(MASTERS_ENDPOINT.CHANNEL_SKUS, body)
 export const addChannel = (body: Record<string, unknown>) => post<{ id: number; displayName: string }>(MASTERS_ENDPOINT.CHANNELS, body)
 export const addChannelLocation = (body: Record<string, unknown>) => post<{ id: string; channel: string }>(MASTERS_ENDPOINT.CHANNEL_WAREHOUSES, body)

@@ -9,9 +9,9 @@ import { MARGIN_STATUS_LABEL, MARGIN_TABS, MARGIN_TEXT as T, PO_REVIEW_REMARK_MA
 import { istDateTime } from '../lib/time'
 
 /*
- * Approvals → Margin changes (2026-11-06, two-layer approval): a channel SKU's margin % / rate after margin (Masters
- * Edit, price check "update master") or a new channel SKU (Masters Add). Operations Manager approves first (layer 1),
- * then an Admin (layer 2) approves and it is applied to the master. Rejecting needs a reason. The server decides who
+ * Approvals → Margin changes (2026-11-06): a channel SKU's margin % / rate after margin (Masters Edit, price check
+ * "update master"): Operations Manager approves first (layer 1), then an Admin (layer 2) approves and it is applied to
+ * the master. A new channel SKU (Masters Add) needs ONE approval (2026-11-10, approvalsNeeded 1): it is added at once. Rejecting needs a reason. The server decides who
  * may act (canDecide, whyNot): not the requester, and layer 2 not the layer 1 person.
  */
 
@@ -53,13 +53,14 @@ function RequestCard({ r, onDone }: { r: MarginRequest; onDone: (text: string) =
       setBusy(false)
     }
   }
+  const single = r.approvalsNeeded === 1
   const layer2 = r.status === 'pending_l2'
   const open = r.status === 'pending_l1' || r.status === 'pending_l2'
   return (
     <div className="space-y-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[13.5px] font-semibold text-ink-900">#{r.id} · {T.KIND[r.kind] ?? r.kind} · {r.channel} <span className="font-mono">{r.channelCode}</span></div>
+          <div className="text-[13.5px] font-semibold text-ink-900">#{r.id} · {T.KIND[r.kind] ?? r.kind} · {T.NEEDS[r.approvalsNeeded]} · {r.channel} <span className="font-mono">{r.channelCode}</span></div>
           <div className="text-[12px] text-ink-600">PEP <span className="font-mono">{r.pepCode}</span> · {T.SOURCE[r.source] ?? r.source} · asked by {who(r.requestedBy)} · {istDateTime(r.requestedAt)}</div>
         </div>
         <Badge tone={tone(r.status)}>{MARGIN_STATUS_LABEL[r.status] ?? r.status}</Badge>
@@ -71,8 +72,8 @@ function RequestCard({ r, onDone }: { r: MarginRequest; onDone: (text: string) =
       </div>
       {r.remark && <div className="rounded-md bg-alt px-3 py-2 text-[12.5px] text-ink-700">“{r.remark}”</div>}
       <div className="space-y-0.5 text-[12px] text-ink-600">
-        {r.l1 && <div>Layer 1 approved by {who(r.l1.by)} · {istDateTime(r.l1.at)}{r.l1.remark ? ` · “${r.l1.remark}”` : ''}</div>}
-        {r.l2 && <div>Layer 2 approved by {who(r.l2.by)} · {istDateTime(r.l2.at)}{r.l2.remark ? ` · “${r.l2.remark}”` : ''}</div>}
+        {r.l1 && <div>{single ? 'Approved' : 'Layer 1 approved'} by {who(r.l1.by)} · {istDateTime(r.l1.at)}{r.l1.remark ? ` · “${r.l1.remark}”` : ''}</div>}
+        {r.l2 && <div>{single ? 'Approved' : 'Layer 2 approved'} by {who(r.l2.by)} · {istDateTime(r.l2.at)}{r.l2.remark ? ` · “${r.l2.remark}”` : ''}</div>}
         {r.rejected && <div className="text-crit">Rejected by {who(r.rejected.by)} · {istDateTime(r.rejected.at)} · “{r.rejected.reason}”</div>}
       </div>
       {open && (r.canDecide ? (
@@ -80,8 +81,8 @@ function RequestCard({ r, onDone }: { r: MarginRequest; onDone: (text: string) =
           <textarea id={`margin-remark-${r.id}`} value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={PO_REVIEW_REMARK_MAX} rows={2} placeholder={T.REMARK} className={`${inputCls} w-full`} />
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="primary" icon={<Check className="size-4" />} disabled={busy}
-              onClick={() => void act(() => approveMarginRequest(r.id, remark.trim() || undefined), layer2 ? T.APPLIED(r.id) : T.APPROVED_L1(r.id))}>
-              {layer2 ? T.APPROVE_L2 : T.APPROVE_L1}
+              onClick={() => void act(() => approveMarginRequest(r.id, remark.trim() || undefined), single ? T.ADDED(r.id) : layer2 ? T.APPLIED(r.id) : T.APPROVED_L1(r.id))}>
+              {single ? T.APPROVE_ADD : layer2 ? T.APPROVE_L2 : T.APPROVE_L1}
             </Button>
             <Button icon={<X className="size-4" />} disabled={busy}
               onClick={() => (remark.trim() ? void act(() => rejectMarginRequest(r.id, remark.trim()), T.REJECTED(r.id)) : setError(T.REMARK_NEEDED))}>

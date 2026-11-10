@@ -134,9 +134,9 @@ export const EDIT_TEXT = {
   MARGIN_FIELD_HINT: 'Changing it sends a request: Operations Manager, then Admin approve it before it applies.',
 } as const
 
-/** A new channel SKU waits for the two margin approvals (2026-11-06) before it is added. */
+/** A new channel SKU waits for ONE approval (2026-11-10; was two since 2026-11-06) before it is added. */
 export const MARGIN_ADD_TEXT = (what: string, id: string) =>
-  `${what} sent for approval (request #${id}): Operations Manager, then Admin. It is added after both approve (Approvals → Margin changes).`
+  `${what} sent for approval (request #${id}): one approval by Operations Manager or Admin adds it (Approvals → Margin changes).`
 export const SWITCH_OFF_EFFECT: Record<string, string> = {
   pep: 'New PO lines with this SKU will go to In Review (SKU inactive).',
   channelSku: 'New PO lines with this channel SKU code will go to In Review (SKU not mapped). Add the right mapping afterwards if the key was wrong.',
