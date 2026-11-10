@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChannelOptions } from '../../lib/channels'
-import { AlertTriangle, Eye, FileUp, Webhook, Zap, Mail } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Eye, FileUp, Webhook, Zap, Mail } from 'lucide-react'
 import { Badge, PageTitle, SubTabs } from '../../components/ui'
 import { DataGrid, DownloadMenu, FilterChips, FilterPanel, ColumnSort, SectionToolbar, exportRows, exportRowsExcel, useSection, type DownloadItem, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
@@ -463,35 +463,32 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   )
 }
 
-/** Verified (green, who / when on hover), To verify + a Verify button, or In Uniware (marked before the check existed). */
+/** One clickable chip per state, all the same height (2026-11-10): Verified (green, who / when on hover), Optional (grey,
+ * channel switch OFF), To verify (amber); click = open the check. In Uniware (marked before the check existed) = plain badge. */
+const CHIP = 'pf-press inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold leading-none transition-[filter,box-shadow] duration-150 hover:brightness-95 hover:shadow-[0_0_0_1px_currentColor]'
 function CheckCell({ row, canEdit, onOpen }: { row: ProcessedRow; canEdit: boolean; onOpen: () => void }) {
   const v = row.verify
   if (!v) return <span className="text-ink-400">—</span>
+  if (v.state === VERIFY_STATE.NOT_NEEDED) return <Badge tone="neutral">{VERIFY_TEXT.NOT_NEEDED}</Badge>
+  const action = canEdit ? VERIFY_TEXT.VERIFY : VERIFY_TEXT.VIEW
   if (v.state === VERIFY_STATE.VERIFIED) {
     return (
-      <span className="inline-flex items-center gap-2">
-        <span title={VERIFY_TEXT.BY(v.by, istDateTime(v.at))}><Badge tone="ok"><ShieldCheck className="size-3" />{VERIFY_TEXT.VERIFIED}</Badge></span>
-        <button type="button" onClick={onOpen} className="text-[11.5px] text-ink-400 underline-offset-2 hover:text-ink-900 hover:underline">{VERIFY_TEXT.VIEW}</button>
-      </span>
+      <button type="button" onClick={onOpen} title={`${VERIFY_TEXT.BY(v.by, istDateTime(v.at))} · ${VERIFY_TEXT.CLICK_VIEW}`} className={`${CHIP} bg-ok-soft text-ok`}>
+        <ShieldCheck className="size-3" />{VERIFY_TEXT.VERIFIED}
+      </button>
     )
   }
-  if (v.state === VERIFY_STATE.NOT_NEEDED) return <Badge tone="neutral">{VERIFY_TEXT.NOT_NEEDED}</Badge>
   // Channel switched OFF (Users & Roles -> Settings): not locked; verifying is optional.
   if (v.state === VERIFY_STATE.NOT_REQUIRED) {
     return (
-      <span className="inline-flex items-center gap-2" title={VERIFY_TEXT.OPTIONAL_HINT}>
-        <Badge tone="neutral">{VERIFY_TEXT.OPTIONAL}</Badge>
-        <button type="button" onClick={onOpen} className="text-[11.5px] text-ink-400 underline-offset-2 hover:text-primary hover:underline">{canEdit ? VERIFY_TEXT.VERIFY : VERIFY_TEXT.VIEW}</button>
-      </span>
+      <button type="button" onClick={onOpen} title={`${VERIFY_TEXT.OPTIONAL_HINT} · ${VERIFY_TEXT.CLICK_TO(action)}`} className={`${CHIP} bg-slate-100 text-slate-600`}>
+        {VERIFY_TEXT.OPTIONAL}
+      </button>
     )
   }
   return (
-    <span className="inline-flex items-center gap-2">
-      <Badge tone="warn">{VERIFY_TEXT.TO_VERIFY}</Badge>
-      <button type="button" onClick={onOpen}
-        className="pf-press inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-[12px] font-semibold text-white transition-opacity duration-150 hover:opacity-90">
-        <ShieldCheck className="size-3.5" />{canEdit ? VERIFY_TEXT.VERIFY : VERIFY_TEXT.VIEW}
-      </button>
-    </span>
+    <button type="button" onClick={onOpen} title={VERIFY_TEXT.CLICK_TO(action)} className={`${CHIP} bg-warn-soft text-warn`}>
+      <AlertTriangle className="size-3" />{VERIFY_TEXT.TO_VERIFY}<ArrowRight className="size-3" />
+    </button>
   )
 }

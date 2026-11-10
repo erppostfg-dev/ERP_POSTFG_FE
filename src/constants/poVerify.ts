@@ -35,6 +35,9 @@ export const VERIFY_TEXT = {
   OPTIONAL_HINT: 'Verification is switched OFF for this channel: the CSV is not locked; you can still verify it.',
   VERIFY: 'Verify',
   VIEW: 'View check',
+  /** Hover text of the Check column chips (one chip per state, click = open). */
+  CLICK_VIEW: 'click to view the check',
+  CLICK_TO: (action: string) => `click: ${action}`,
   TITLE: 'Verify PO against the original',
   INTRO: 'Left: the original PO. Right: what was saved and goes to Uniware. Tick each line once it matches, then verify. If anything is wrong, send it back to In Review.',
   LOADING: 'Loading the saved PO…',
