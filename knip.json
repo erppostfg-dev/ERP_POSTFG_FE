@@ -2,6 +2,7 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
     "src/main.tsx",
+    "src/bulk-main.tsx",
     "src/pages/Orders.tsx",
     "src/pages/Inventory.tsx"
   ],
