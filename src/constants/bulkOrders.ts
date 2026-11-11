@@ -12,6 +12,9 @@ export const BULK_ENDPOINT = {
   REJECT: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/reject`,
   SKUS: '/bulk-orders/skus',
   LOCATIONS: '/bulk-orders/locations',
+  /** Our team's read-only view in POST_FG (PO Processing & Review > Bulk Orders, step 3a). */
+  TEAM: '/po-review/bulk-orders',
+  TEAM_ORDER: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}`,
   /** Sign-in started here comes back to the portal (backend BULK_PORTAL_URL). */
   GOOGLE: '/auth/google?app=bulk',
 } as const
@@ -143,6 +146,12 @@ export const BULK_TEXT = {
   LABEL: 'Name',
   SAVE: 'Save',
   NO_LOCATIONS: 'No saved locations yet. Save one here or while creating an order.',
+  // POST_FG PO Processing & Review > Bulk Orders (step 3a)
+  TEAM_TAB: 'Bulk Orders',
+  TEAM_SUB: 'Marketing and Institutional orders from the Bulk Orders portal. Approved ones wait for our team; processing them (warehouse, customer code, sale order) comes next.',
+  TEAM_ALL: 'All',
+  TEAM_WAITING: (n: number) => `${n} approved, waiting for us`,
+  COL_APPROVED: 'Approved by',
   LOCATION_SAVED: (label: string) => `"${label}" saved`,
   // step 2
   EDIT: 'Edit order',

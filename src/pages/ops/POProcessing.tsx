@@ -37,11 +37,18 @@ import { PriceDifferences } from './PriceDifferences'
 import { PRICE_DIFF_TEXT } from '../../constants/priceDifferences'
 import { RejectedFailed } from './RejectedFailed'
 import { ENDED_TEXT } from '../../constants/poReview'
+import { useQuery } from '@tanstack/react-query'
+import { BulkOrdersTab } from './BulkOrdersTab'
+import { listTeamBulkOrders } from '../../api/bulkOrders'
+import { BULK_TEXT, BULK_TYPES } from '../../constants/bulkOrders'
 
 // PO issues (2026-10-29): moved here from Users & Roles, for everyone who can open this page
 // Price differences (2026-10-30): lines kept at our price, to tell the channel
 // Rejected & Failed (2026-11-02): the POs that ended without a sale order, with who / why
-const TABS = ['processed', 'review', 'manual', 'issues', 'prices', 'ended'] as const
+// Bulk Orders (2026-11-11): Marketing / Institutional orders from the Bulk Orders portal, read only for now
+const TABS = ['processed', 'review', 'bulk', 'manual', 'issues', 'prices', 'ended'] as const
+/** How often the Bulk Orders tab count (approved, waiting for us) is read again while the page is open (ms). */
+const BULK_COUNT_MS = 2 * 60_000
 type Tab = (typeof TABS)[number]
 const SRC_ICON = { API: Zap, Webhook: Webhook, Email: Mail, Manual: FileUp } as const
 
@@ -54,12 +61,21 @@ export default function POProcessing() {
   const [liveTick, setLiveTick] = useState(0)
   const live = useLiveReview(REVIEW_LIVE.PO_REVIEW_BASE, useCallback(() => setLiveTick((n) => n + 1), []))
   const canEditRoot = useAuth().accessFor(PATHS.PO_REVIEW) === ACCESS.EDITOR
+  // the Bulk Orders count on the tab even before it is opened: one small request (1 row + the waiting counts)
+  const [bulkCount, setBulkCount] = useState<number | undefined>()
+  const bulkWaiting = useQuery({
+    queryKey: ['bulk', 'team-count'],
+    queryFn: () => listTeamBulkOrders({ pageSize: 1 }).then((r) => BULK_TYPES.reduce((n, t) => n + (r.meta.waiting[t] ?? 0), 0)),
+    refetchInterval: BULK_COUNT_MS,
+  })
+  const bulkShown = bulkCount ?? bulkWaiting.data
   return (
     <div className="space-y-5">
       <PageTitle title="PO Processing & Review" sub="Ingest from channel APIs, webhooks and email · resolve parser errors · upload what can't be automated" right={<LiveDot mode={live} />} />
       <SubTabs value={tab} onChange={setTab} tabs={[
         { key: 'processed', label: 'Processed', count: processedCount },
         { key: 'review', label: 'In Review', count: reviewCount, danger: !!reviewCount },
+        { key: 'bulk', label: BULK_TEXT.TEAM_TAB, count: bulkShown },
         { key: 'manual', label: 'Manual Upload' },
         { key: 'issues', label: PO_ISSUES_TEXT.TAB },
         { key: 'prices', label: PRICE_DIFF_TEXT.TAB },
@@ -67,6 +83,7 @@ export default function POProcessing() {
       ]} />
       {tab === 'processed' && <Processed onCount={setProcessedCount} liveTick={liveTick} />}
       {tab === 'review' && <InReview srcIcon={SRC_ICON} onCount={setReviewCount} liveTick={liveTick} />}
+      {tab === 'bulk' && <BulkOrdersTab onCount={setBulkCount} />}
       {tab === 'manual' && <ManualUpload canEdit={canEditRoot} liveTick={liveTick} />}
       {tab === 'issues' && <PoIssues />}
       {tab === 'prices' && <PriceDifferences canEdit={canEditRoot} />}

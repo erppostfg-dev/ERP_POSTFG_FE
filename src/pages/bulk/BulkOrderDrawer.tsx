@@ -11,6 +11,7 @@ import { lineTotal, priceAfterDiscount, round2, rupees, validDiscount } from '..
  * One bulk order (step 1 + 2): details, lines, timeline. While it waits for approval: its type's people may Edit /
  * Cancel; an approver may change qty / discount per line, remove lines, then Approve or Reject (reason). The server
  * prices the approval on today's MRP; the screen shows the order's MRP until then.
+ * Read only (step 3a, POST_FG PO Processing & Review > Bulk Orders): pass `load` (the team API) and no `rights`.
  */
 
 const day = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -43,15 +44,18 @@ function Timeline({ events }: { events: BulkOrderEvent[] }) {
   )
 }
 
-export default function BulkOrderDrawer({ id, rights, onClose, onEdit, onToast }: {
+export default function BulkOrderDrawer({ id, rights, load, onClose, onEdit, onToast }: {
   id: string | null
-  rights: BulkRights
+  /** The portal person's rights; none = read only (no Edit / Cancel / Approve / Reject). */
+  rights?: BulkRights
+  /** Where the order is read from (default the portal API). */
+  load?: (id: string) => Promise<BulkOrderFull>
   onClose: () => void
-  onEdit: (o: BulkOrderFull) => void
-  onToast: (text: string) => void
+  onEdit?: (o: BulkOrderFull) => void
+  onToast?: (text: string) => void
 }) {
   const qc = useQueryClient()
-  const o = useQuery({ queryKey: ['bulk', 'order', id], queryFn: () => getBulkOrder(id!), enabled: !!id })
+  const o = useQuery({ queryKey: ['bulk', load ? 'team-order' : 'order', id], queryFn: () => (load ?? getBulkOrder)(id!), enabled: !!id })
   const d = o.data
   // approver's working copy: lineNo -> { qty, discount } as typed; removed line numbers
   const [edits, setEdits] = useState<Record<number, { qty: string; discount: string }>>({})
@@ -67,13 +71,13 @@ export default function BulkOrderDrawer({ id, rights, onClose, onEdit, onToast }
     qc.setQueryData(['bulk', 'order', id], r)
     void qc.invalidateQueries({ queryKey: ['bulk', 'orders'] })
     reset()
-    onToast(text)
+    onToast?.(text)
   }
   const fail = (e: Error) => setError(errorText(e))
 
   const pending = d?.status === BULK_STATUS.PENDING
-  const canDecide = !!d && pending && rights.approve
-  const canChange = !!d && pending && rights.create.includes(d.type)
+  const canDecide = !!d && pending && !!rights?.approve
+  const canChange = !!d && pending && !!rights?.create.includes(d.type)
 
   const rows = (d?.lines ?? []).map((l) => {
     const e = edits[l.lineNo]
@@ -117,7 +121,7 @@ export default function BulkOrderDrawer({ id, rights, onClose, onEdit, onToast }
     ) : (
       <>
         {canChange && <button disabled={busy} onClick={() => setAsk('cancel')} className={`${btn} mr-auto text-crit hover:bg-crit-soft`}>{BULK_TEXT.CANCEL_ORDER}</button>}
-        {canChange && <button disabled={busy} onClick={() => d && onEdit(d)} className={`${btn} border border-line`}>{BULK_TEXT.EDIT}</button>}
+        {canChange && <button disabled={busy} onClick={() => d && onEdit?.(d)} className={`${btn} border border-line`}>{BULK_TEXT.EDIT}</button>}
         {canDecide && <button disabled={busy} onClick={() => setAsk('reject')} className={`${btn} border border-crit text-crit`}>{BULK_TEXT.REJECT}</button>}
         {canDecide && <button disabled={busy || !valid} onClick={() => approve.mutate()} className={`${btn} bg-ok text-white`}>{BULK_TEXT.APPROVE}{valid ? ` · ${rupees(preview)}` : ''}</button>}
       </>
