@@ -42,7 +42,18 @@ export interface BulkOrderLine {
   unitPrice: number; lineTotal: number; requestedQty: number; requestedDiscountPct: number
 }
 
-export type BulkOrderFull = BulkOrder & { lines: BulkOrderLine[] }
+/** One change of an order (created / edited / cancelled / approved / rejected); approved: line changes [old, new]. */
+export interface BulkOrderEvent {
+  action: string
+  by: { id: number; name: string | null }
+  at: string
+  note: string | null
+  changes: { lines?: { lineNo: number; pepCode: string; qty?: [number, number]; discountPct?: [number, number]; mrp?: [number, number]; removed?: boolean }[]; fields?: string[] } | null
+}
+
+export type BulkOrderFull = BulkOrder & { lines: BulkOrderLine[]; events: BulkOrderEvent[] }
+
+export interface BulkApproveInput { lines?: { lineNo: number; qty?: number; discountPct?: number }[]; removeLines?: number[]; note?: string }
 
 export interface BulkSku { pepCode: string; name: string | null; mrp: number; ean: string | null }
 
@@ -83,6 +94,16 @@ export const createBulkOrder = (input: BulkOrderInput) =>
   api<BulkOrderFull>(BULK_ENDPOINT.ORDERS, { method: 'POST', body: JSON.stringify(input) })
 
 /** signal: an older search still on its way is cancelled when a newer one starts (TanStack Query passes it). */
+/** Step 2 (only while pending approval; else 409 BULK_ORDER_NOT_PENDING). */
+export const updateBulkOrder = (id: string, input: BulkOrderInput) =>
+  api<BulkOrderFull>(BULK_ENDPOINT.ORDER(id), { method: 'PUT', body: JSON.stringify(input) })
+export const cancelBulkOrder = (id: string, reason?: string) =>
+  api<BulkOrderFull>(BULK_ENDPOINT.CANCEL(id), { method: 'POST', body: JSON.stringify(reason ? { reason } : {}) })
+export const approveBulkOrder = (id: string, input: BulkApproveInput) =>
+  api<BulkOrderFull>(BULK_ENDPOINT.APPROVE(id), { method: 'POST', body: JSON.stringify(input) })
+export const rejectBulkOrder = (id: string, reason: string) =>
+  api<BulkOrderFull>(BULK_ENDPOINT.REJECT(id), { method: 'POST', body: JSON.stringify({ reason }) })
+
 export const searchBulkSkus = (q: string, signal?: AbortSignal) => api<BulkSku[]>(`${BULK_ENDPOINT.SKUS}${qs({ q })}`, { signal })
 
 export const listBulkLocations = (type: BulkType) => api<BulkLocation[]>(`${BULK_ENDPOINT.LOCATIONS}${qs({ type })}`)

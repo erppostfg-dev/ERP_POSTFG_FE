@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Box, LogOut, MapPin } from 'lucide-react'
+import { Box, CheckCheck, LogOut, MapPin } from 'lucide-react'
 import { api, ApiError, apiUrl } from '../../api/client'
-import type { BulkRights } from '../../api/bulkOrders'
+import { listBulkOrders, type BulkRights } from '../../api/bulkOrders'
 import { ACCESS, AUTH_ENDPOINTS, ERROR_CODE, LOGIN_ERROR_FALLBACK, LOGIN_ERROR_MESSAGES, type AccessLevel } from '../../constants/auth'
-import { BULK_ENDPOINT, BULK_PAGE, BULK_TEXT, BULK_TYPES } from '../../constants/bulkOrders'
+import { BULK_ENDPOINT, BULK_PAGE, BULK_STATUS, BULK_TEXT, BULK_TYPES } from '../../constants/bulkOrders'
 import BulkOrders from './BulkOrders'
 import BulkLocations from './BulkLocations'
 
@@ -21,7 +21,7 @@ const rightsOf = (access: Record<string, AccessLevel>): BulkRights => ({
   approve: access[BULK_PAGE.APPROVE] === ACCESS.EDITOR,
 })
 
-type Page = 'orders' | 'locations'
+type Page = 'orders' | 'approvals' | 'locations'
 
 function SignIn({ error }: { error?: string }) {
   return (
@@ -44,6 +44,13 @@ export default function BulkApp() {
   const urlError = new URLSearchParams(window.location.search).get('error') ?? undefined
   const me = useQuery({ queryKey: ['bulk', 'me'], queryFn: () => api<Me>(AUTH_ENDPOINTS.ME), retry: false })
   const [page, setPage] = useState<Page>('orders')
+  const approver = me.data ? rightsOf(me.data.access).approve : false
+  // the Approvals badge: how many wait (one count query, refreshed with the lists)
+  const waiting = useQuery({
+    queryKey: ['bulk', 'orders', 'count', 'approvals'],
+    queryFn: () => listBulkOrders({ status: BULK_STATUS.PENDING, pageSize: 1 }).then((r) => r.meta.total),
+    enabled: approver,
+  })
 
   // the ?error= of a refused sign-in is shown once, then dropped from the address
   useEffect(() => {
@@ -81,10 +88,12 @@ export default function BulkApp() {
     )
   }
 
-  const nav: { key: Page; label: string; icon: React.ReactNode }[] = [
+  const nav: { key: Page; label: string; icon: React.ReactNode; count?: number }[] = [
     { key: 'orders', label: BULK_TEXT.NAV_ORDERS, icon: <Box className="size-4" /> },
+    ...(rights.approve ? [{ key: 'approvals' as const, label: BULK_TEXT.NAV_APPROVALS, icon: <CheckCheck className="size-4" />, count: waiting.data }] : []),
     { key: 'locations', label: BULK_TEXT.NAV_LOCATIONS, icon: <MapPin className="size-4" /> },
   ]
+  const titles: Record<Page, string> = { orders: BULK_TEXT.ORDERS_TITLE, approvals: BULK_TEXT.APPROVALS_TITLE, locations: BULK_TEXT.LOCATIONS_TITLE }
   const initials = user.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 
   return (
@@ -102,6 +111,7 @@ export default function BulkApp() {
             <button key={n.key} onClick={() => setPage(n.key)}
               className={`flex items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] ${page === n.key ? 'bg-primary-soft font-semibold text-primary' : 'text-ink-600 hover:bg-alt hover:text-ink-900'}`}>
               {n.icon}{n.label}
+              {!!n.count && <span className="ml-auto rounded-full bg-warn px-1.5 text-[11px] font-semibold text-white">{n.count}</span>}
             </button>
           ))}
         </nav>
@@ -114,7 +124,7 @@ export default function BulkApp() {
               <button key={n.key} onClick={() => setPage(n.key)} className={`rounded-md px-2.5 py-1.5 text-[12px] ${page === n.key ? 'bg-primary-soft font-semibold text-primary' : 'text-ink-600'}`}>{n.label}</button>
             ))}
           </div>
-          <div className="hidden text-[12px] text-ink-600 md:block">{BULK_TEXT.APP} <span className="text-ink-400">/</span> <strong className="text-ink-900">{page === 'orders' ? BULK_TEXT.ORDERS_TITLE : BULK_TEXT.LOCATIONS_TITLE}</strong></div>
+          <div className="hidden text-[12px] text-ink-600 md:block">{BULK_TEXT.APP} <span className="text-ink-400">/</span> <strong className="text-ink-900">{titles[page]}</strong></div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="grid size-8 place-items-center rounded-full bg-primary-soft text-[11px] font-bold text-primary">{initials}</span>
@@ -127,7 +137,7 @@ export default function BulkApp() {
           </div>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">
-          {page === 'orders' ? <BulkOrders rights={rights} /> : <BulkLocations rights={rights} />}
+          {page === 'locations' ? <BulkLocations rights={rights} /> : <BulkOrders key={page} rights={rights} mode={page} />}
         </div>
       </main>
     </div>

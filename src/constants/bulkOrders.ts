@@ -7,6 +7,9 @@
 export const BULK_ENDPOINT = {
   ORDERS: '/bulk-orders',
   ORDER: (id: string) => `/bulk-orders/${encodeURIComponent(id)}`,
+  CANCEL: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/cancel`,
+  APPROVE: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/approve`,
+  REJECT: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/reject`,
   SKUS: '/bulk-orders/skus',
   LOCATIONS: '/bulk-orders/locations',
   /** Sign-in started here comes back to the portal (backend BULK_PORTAL_URL). */
@@ -24,10 +27,13 @@ export const BULK_PAGE = {
   APPROVE: '/bulk-orders/approve',
 } as const
 
-export const BULK_STATUS = { PENDING: 'pending_approval', APPROVED: 'approved', REJECTED: 'rejected' } as const
+export const BULK_STATUS = { PENDING: 'pending_approval', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled' } as const
 export type BulkStatus = (typeof BULK_STATUS)[keyof typeof BULK_STATUS]
-export const BULK_STATUS_LABEL: Record<string, string> = { pending_approval: 'Pending approval', approved: 'Approved', rejected: 'Rejected' }
-export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit'> = { pending_approval: 'warn', approved: 'ok', rejected: 'crit' }
+export const BULK_STATUS_LABEL: Record<string, string> = { pending_approval: 'Pending approval', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' }
+export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral'> = { pending_approval: 'warn', approved: 'ok', rejected: 'crit', cancelled: 'neutral' }
+
+/** Timeline words per event (backend BULK_EVENT). */
+export const BULK_EVENT_LABEL: Record<string, string> = { created: 'Created', edited: 'Edited', cancelled: 'Cancelled', approved: 'Approved', rejected: 'Rejected' }
 
 /** The design's markers (figma-make-bulk-orders): mode for Marketing only. */
 export const BULK_MODES = ['Porter', 'Courier', 'Self pickup'] as const
@@ -47,6 +53,10 @@ export const BULK_TEXT = {
   BRAND: 'Post FG',
   NAV_ORDERS: 'Orders',
   NAV_LOCATIONS: 'Saved locations',
+  NAV_APPROVALS: 'Approvals',
+  APPROVALS_TITLE: 'Approval queue',
+  APPROVALS_SUB: "Orders waiting for approval. Open one to change quantities or discounts, then approve or reject. Prices use today's MRP.",
+  APPROVALS_EMPTY: 'Nothing waiting for approval',
   ORDERS_TITLE: 'Order worklist',
   ORDERS_SUB: 'Create, submit and track bulk orders. Prices are our MRP less your discount; an approver checks every order.',
   LOCATIONS_TITLE: 'Saved locations',
@@ -134,4 +144,29 @@ export const BULK_TEXT = {
   SAVE: 'Save',
   NO_LOCATIONS: 'No saved locations yet. Save one here or while creating an order.',
   LOCATION_SAVED: (label: string) => `"${label}" saved`,
+  // step 2
+  EDIT: 'Edit order',
+  EDIT_TITLE: (po: string) => `Edit ${po}`,
+  SAVE_CHANGES: 'Save changes',
+  SAVED: (po: string) => `${po} updated: still waiting for approval`,
+  CANCEL_ORDER: 'Cancel order',
+  CANCEL_REASON: 'Why cancel? (optional)',
+  CANCEL_CONFIRM: 'Cancel this order',
+  CANCELLED: (po: string) => `${po} cancelled`,
+  KEEP: 'Keep it',
+  APPROVE: 'Approve',
+  APPROVE_HINT: "Change a quantity or discount if needed; prices are worked out again on today's MRP when you approve.",
+  APPROVER_NOTE: 'Note for the requester (optional)',
+  REJECT: 'Reject',
+  REJECT_REASON: 'Reason (required)',
+  REJECT_CONFIRM: 'Reject order',
+  APPROVED: (po: string) => `${po} approved`,
+  REJECTED: (po: string) => `${po} rejected`,
+  REMOVE_LINE: 'Remove this line',
+  RESTORE_LINE: 'Keep this line',
+  DECISION: 'Decision',
+  TIMELINE: 'Timeline',
+  CHANGED: (what: string, from: string, to: string) => `${what} ${from} → ${to}`,
+  REMOVED: 'removed',
+  EDITED_FIELDS: (n: number) => `${n} detail${n === 1 ? '' : 's'} changed`,
 } as const

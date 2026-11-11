@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { createBulkOrder, listBulkLocations, searchBulkSkus, type BulkOrderFull, type BulkOrderInput, type BulkSku } from '../../api/bulkOrders'
+import { createBulkOrder, listBulkLocations, updateBulkOrder, searchBulkSkus, type BulkOrderFull, type BulkOrderInput, type BulkSku } from '../../api/bulkOrders'
 import { Modal } from '../../components/ui'
 import { BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
 import { lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
@@ -108,20 +108,23 @@ function SkuPicker({ value, taken, onPick }: { value: BulkSku | null; taken: Set
   )
 }
 
-export default function BulkCreateOrder({ types, onClose, onCreated }: { types: BulkType[]; onClose: () => void; onCreated: (o: BulkOrderFull) => void }) {
+/** `initial` (step 2): edit that pending order (same PO number, type fixed); else a new order. */
+export default function BulkCreateOrder({ types, initial, onClose, onCreated }: { types: BulkType[]; initial?: BulkOrderFull; onClose: () => void; onCreated: (o: BulkOrderFull) => void }) {
   const qc = useQueryClient()
-  const [type, setType] = useState<BulkType>(types[0])
+  const [type, setType] = useState<BulkType>(initial?.type ?? types[0])
   const [step, setStep] = useState(1)
-  const [lines, setLines] = useState<Line[]>([emptyLine()])
-  const [form, setForm] = useState<Record<'orderedBy' | 'neededBy' | 'receiverName' | 'receiverPhone' | 'mode' | 'priority' | 'note', string>>({ orderedBy: '', neededBy: '', receiverName: '', receiverPhone: '', mode: 'Courier', priority: BULK_PRIORITIES[0], note: '' })
-  const [where, setWhere] = useState<string>('new') // 'new' or a saved location id
-  const [address, setAddress] = useState({ line: '', city: '', state: '', pincode: '' })
+  const [lines, setLines] = useState<Line[]>(() => initial
+    ? initial.lines.map((l) => ({ key: nextKey++, sku: { pepCode: l.pepCode, name: l.name, mrp: l.mrp, ean: null }, qty: String(l.qty), discount: String(l.discountPct) }))
+    : [emptyLine()])
+  const [form, setForm] = useState<Record<'orderedBy' | 'neededBy' | 'receiverName' | 'receiverPhone' | 'mode' | 'priority' | 'note', string>>(initial
+    ? { orderedBy: initial.orderedBy, neededBy: initial.neededBy.slice(0, 10), receiverName: initial.receiverName, receiverPhone: initial.receiverPhone, mode: initial.mode ?? 'Courier', priority: initial.priority, note: initial.note ?? '' }
+    : { orderedBy: '', neededBy: '', receiverName: '', receiverPhone: '', mode: 'Courier', priority: BULK_PRIORITIES[0], note: '' })
+  const [where, setWhere] = useState<string>(initial?.location.id ?? 'new') // 'new' or a saved location id
+  const [address, setAddress] = useState(initial && !initial.location.id ? { ...initial.location.address } : { line: '', city: '', state: '', pincode: '' })
   const [saveAs, setSaveAs] = useState('')
   const [errors, setErrors] = useState<string[]>([])
 
   const locations = useQuery({ queryKey: ['bulk', 'locations', type], queryFn: () => listBulkLocations(type) })
-  // a saved location of the other type does not exist for this one
-  useEffect(() => setWhere('new'), [type])
 
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
   const setLine = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -137,7 +140,7 @@ export default function BulkCreateOrder({ types, onClose, onCreated }: { types: 
   const deliveryOk = !!form.orderedBy.trim() && !!form.neededBy && form.neededBy >= todayIst() && !!form.receiverName.trim() && !!phone && addressOk
 
   const save = useMutation({
-    mutationFn: (body: BulkOrderInput) => createBulkOrder(body),
+    mutationFn: (body: BulkOrderInput) => (initial ? updateBulkOrder(initial.id, body) : createBulkOrder(body)),
     onSuccess: (o) => {
       void qc.invalidateQueries({ queryKey: ['bulk'] })
       onCreated(o)
@@ -176,13 +179,13 @@ export default function BulkCreateOrder({ types, onClose, onCreated }: { types: 
       {step < 3 ? (
         <button onClick={() => setStep(step + 1)} disabled={step === 1 ? !itemsOk : !deliveryOk} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{BULK_TEXT.NEXT}</button>
       ) : (
-        <button onClick={submit} disabled={save.isPending} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{save.isPending ? BULK_TEXT.SUBMITTING : BULK_TEXT.SUBMIT}</button>
+        <button onClick={submit} disabled={save.isPending} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{save.isPending ? BULK_TEXT.SUBMITTING : initial ? BULK_TEXT.SAVE_CHANGES : BULK_TEXT.SUBMIT}</button>
       )}
     </>
   )
 
   return (
-    <Modal open wide onClose={onClose} title={BULK_TEXT.CREATE} sub={`${BULK_TYPE_LABEL[type]} order`} footer={footer}>
+    <Modal open wide onClose={onClose} title={initial ? BULK_TEXT.EDIT_TITLE(initial.poNumber) : BULK_TEXT.CREATE} sub={`${BULK_TYPE_LABEL[type]} order`} footer={footer}>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         {BULK_TEXT.STEPS.map((label, i) => (
           <div key={label} className={`flex items-center gap-2 text-[12px] ${step >= i + 1 ? 'text-primary' : 'text-ink-400'}`}>
@@ -192,7 +195,7 @@ export default function BulkCreateOrder({ types, onClose, onCreated }: { types: 
           </div>
         ))}
         {types.length > 1 && step === 1 && (
-          <div className="ml-auto flex items-center gap-2 text-[12px] text-ink-600">{BULK_TEXT.TYPE}<Choice value={BULK_TYPE_LABEL[type]} options={types.map((t) => BULK_TYPE_LABEL[t])} onChange={(v) => setType(types.find((t) => BULK_TYPE_LABEL[t] === v)!)} /></div>
+          <div className="ml-auto flex items-center gap-2 text-[12px] text-ink-600">{BULK_TEXT.TYPE}<Choice value={BULK_TYPE_LABEL[type]} options={types.map((t) => BULK_TYPE_LABEL[t])} onChange={(v) => { setType(types.find((t) => BULK_TYPE_LABEL[t] === v)!); setWhere('new') /* saved locations are per type */ }} /></div>
         )}
       </div>
 
