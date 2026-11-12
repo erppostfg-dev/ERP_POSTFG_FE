@@ -16,6 +16,7 @@ import { oneOf, useUrlParam } from '../lib/urlState'
 import type { ColKind } from '../lib/ops'
 import { Toggle, VerifySettings } from './ops/VerifySettings'
 import { NoticeSettings } from './admin/NoticeSettings'
+import { BulkOrderSettings } from './admin/BulkOrderSettings'
 import { ReviewRulesDummy } from './SettingsDummy'
 import { EmailTab } from './admin/EmailTab'
 import { ServerTab } from './admin/ServerTab'
@@ -76,6 +77,7 @@ function SettingsTab() {
         {section === 'review-rules' && <ReviewRulesDummy />}
         {section === 'po-intake' && <IntakeSettings />}
         {section === 'notices' && <NoticeSettings />}
+        {section === 'bulk-orders' && <BulkOrderSettings />}
       </div>
     </div>
   )

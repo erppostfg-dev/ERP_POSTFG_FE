@@ -1,4 +1,4 @@
-import { api, apiWithMeta } from './client'
+import { api, apiForm, apiUrl, apiWithMeta } from './client'
 import { BULK_ENDPOINT, BULK_LIMIT, type BulkType } from '../constants/bulkOrders'
 
 /* Bulk Orders portal API (POST_FG routes/bulk-orders.routes.ts, API_REFERENCE #124-129). */
@@ -35,7 +35,16 @@ export interface BulkOrder {
   decidedBy: { id: number; name: string | null } | null
   decidedAt: string | null
   decisionNote: string | null
+  /** null = no payment check on this order (off for its type when it was created). */
+  payment: { status: string; by: { id: number; name: string | null } | null; at: string | null; note: string | null } | null
 }
+
+export interface BulkDocument {
+  id: string; kind: string; fileName: string; contentType: string; sizeBytes: number
+  by: { id: number; name: string | null }; at: string; replacedAt: string | null
+}
+
+export interface BulkSetting { type: BulkType; paymentCheck: boolean; updatedBy: { id: number; name: string | null } | null; updatedAt: string | null }
 
 export interface BulkOrderLine {
   lineNo: number; pepCode: string; name: string | null; mrp: number; qty: number; discountPct: number
@@ -48,10 +57,17 @@ export interface BulkOrderEvent {
   by: { id: number; name: string | null }
   at: string
   note: string | null
-  changes: { lines?: { lineNo: number; pepCode: string; qty?: [number, number]; discountPct?: [number, number]; mrp?: [number, number]; removed?: boolean }[]; fields?: string[] } | null
+  changes: {
+    lines?: { lineNo: number; pepCode: string; qty?: [number, number]; discountPct?: [number, number]; mrp?: [number, number]; removed?: boolean }[]
+    fields?: string[]
+    /** document_added */
+    kind?: string; fileName?: string; replaced?: string[]
+    /** payment: [old, new] */
+    status?: [string, string]
+  } | null
 }
 
-export type BulkOrderFull = BulkOrder & { lines: BulkOrderLine[]; events: BulkOrderEvent[] }
+export type BulkOrderFull = BulkOrder & { lines: BulkOrderLine[]; events: BulkOrderEvent[]; documents: BulkDocument[] }
 
 export interface BulkApproveInput { lines?: { lineNo: number; qty?: number; discountPct?: number }[]; removeLines?: number[]; note?: string }
 
@@ -110,6 +126,21 @@ export const listTeamBulkOrders = (q: BulkListQuery) =>
     `${BULK_ENDPOINT.TEAM}${qs({ type: q.type, status: q.status, q: q.q, page: q.page, pageSize: q.pageSize ?? BULK_LIMIT.PAGE_SIZE })}`,
   )
 export const getTeamBulkOrder = (id: string) => api<BulkOrderFull>(BULK_ENDPOINT.TEAM_ORDER(id))
+
+/** Payment + documents (2026-11-12). team = our team's routes (PO review access). */
+export const uploadBulkDocument = (id: string, kind: string, file: File, team = false) => {
+  const form = new FormData()
+  form.append('kind', kind)
+  form.append('file', file)
+  return apiForm<BulkOrderFull>(team ? BULK_ENDPOINT.TEAM_DOCUMENTS(id) : BULK_ENDPOINT.DOCUMENTS(id), form)
+}
+/** Opens in a new tab (the browser sends the login cookie). */
+export const bulkDocumentUrl = (id: string, docId: string, team = false) => apiUrl(team ? BULK_ENDPOINT.TEAM_DOCUMENT(id, docId) : BULK_ENDPOINT.DOCUMENT(id, docId))
+export const setBulkPayment = (id: string, action: string, note?: string) =>
+  api<BulkOrderFull>(BULK_ENDPOINT.PAYMENT(id), { method: 'POST', body: JSON.stringify(note ? { action, note } : { action }) })
+export const listBulkSettings = () => api<BulkSetting[]>(BULK_ENDPOINT.SETTINGS)
+export const updateBulkSetting = (type: BulkType, paymentCheck: boolean) =>
+  api<BulkSetting[]>(BULK_ENDPOINT.SETTING(type), { method: 'PUT', body: JSON.stringify({ paymentCheck }) })
 
 export const searchBulkSkus = (q: string, signal?: AbortSignal) => api<BulkSku[]>(`${BULK_ENDPOINT.SKUS}${qs({ q })}`, { signal })
 

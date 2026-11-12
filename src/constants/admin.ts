@@ -69,6 +69,7 @@ export const SETTINGS_SECTIONS = [
   { key: 'po-verify', label: 'PO verification', hint: 'Verify POs against the original before the Uniware CSV, per channel' },
   { key: 'po-intake', label: 'PO intake', hint: 'Which channels are processed and how many POs a day' },
   { key: 'notices', label: 'Notices', hint: 'Short notes people send each other in the bell (kept 2 days)' },
+  { key: 'bulk-orders', label: 'Bulk Orders', hint: 'Bulk Orders portal: proof of payment check per order type' },
   // DUMMY group (pages/SettingsDummy.tsx): only to see the layout; nothing is saved. (Notifications became the Email tab.)
   { key: 'review-rules', label: 'PO review rules', hint: 'Dummy: tolerances and approval', dummy: true },
 ] as const

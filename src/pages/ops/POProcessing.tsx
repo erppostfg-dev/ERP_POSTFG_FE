@@ -83,7 +83,7 @@ export default function POProcessing() {
       ]} />
       {tab === 'processed' && <Processed onCount={setProcessedCount} liveTick={liveTick} />}
       {tab === 'review' && <InReview srcIcon={SRC_ICON} onCount={setReviewCount} liveTick={liveTick} />}
-      {tab === 'bulk' && <BulkOrdersTab onCount={setBulkCount} />}
+      {tab === 'bulk' && <BulkOrdersTab onCount={setBulkCount} canEdit={canEditRoot} />}
       {tab === 'manual' && <ManualUpload canEdit={canEditRoot} liveTick={liveTick} />}
       {tab === 'issues' && <PoIssues />}
       {tab === 'prices' && <PriceDifferences canEdit={canEditRoot} />}

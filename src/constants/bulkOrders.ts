@@ -10,11 +10,18 @@ export const BULK_ENDPOINT = {
   CANCEL: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/cancel`,
   APPROVE: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/approve`,
   REJECT: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/reject`,
+  DOCUMENTS: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/documents`,
+  DOCUMENT: (id: string, docId: string) => `/bulk-orders/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}`,
+  PAYMENT: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/payment`,
+  SETTINGS: '/bulk-orders/settings',
+  SETTING: (type: string) => `/bulk-orders/settings/${encodeURIComponent(type)}`,
   SKUS: '/bulk-orders/skus',
   LOCATIONS: '/bulk-orders/locations',
   /** Our team's read-only view in POST_FG (PO Processing & Review > Bulk Orders, step 3a). */
   TEAM: '/po-review/bulk-orders',
   TEAM_ORDER: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}`,
+  TEAM_DOCUMENTS: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/documents`,
+  TEAM_DOCUMENT: (id: string, docId: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}`,
   /** Sign-in started here comes back to the portal (backend BULK_PORTAL_URL). */
   GOOGLE: '/auth/google?app=bulk',
 } as const
@@ -36,7 +43,37 @@ export const BULK_STATUS_LABEL: Record<string, string> = { pending_approval: 'Pe
 export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral'> = { pending_approval: 'warn', approved: 'ok', rejected: 'crit', cancelled: 'neutral' }
 
 /** Timeline words per event (backend BULK_EVENT). */
-export const BULK_EVENT_LABEL: Record<string, string> = { created: 'Created', edited: 'Edited', cancelled: 'Cancelled', approved: 'Approved', rejected: 'Rejected' }
+export const BULK_EVENT_LABEL: Record<string, string> = {
+  created: 'Created', edited: 'Edited', cancelled: 'Cancelled', approved: 'Approved', rejected: 'Rejected', document_added: 'Document uploaded', payment: 'Payment',
+}
+
+/**
+ * Payment check (backend BULK_PAYMENT_STATUS, 2026-11-12): only orders whose type has it ON (Settings); never blocks
+ * approval or processing; the approver verifies / refuses the proof or marks it not needed.
+ */
+export const BULK_PAYMENT = { AWAITING: 'awaiting_proof', UPLOADED: 'proof_uploaded', VERIFIED: 'verified', REFUSED: 'refused', NOT_NEEDED: 'not_needed' } as const
+export const BULK_PAYMENT_LABEL: Record<string, string> = {
+  awaiting_proof: 'Awaiting proof', proof_uploaded: 'Proof uploaded · to check', verified: 'Payment verified', refused: 'Proof refused', not_needed: 'Not needed',
+}
+export const BULK_PAYMENT_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = {
+  awaiting_proof: 'neutral', proof_uploaded: 'warn', verified: 'ok', refused: 'crit', not_needed: 'info',
+}
+export const BULK_PAYMENT_ACTION = { VERIFY: 'verify', REFUSE: 'refuse', NOT_NEEDED: 'not_needed' } as const
+export type BulkPaymentAction = (typeof BULK_PAYMENT_ACTION)[keyof typeof BULK_PAYMENT_ACTION]
+
+/** Documents on an order (backend BULK_DOC_KIND); PDF / PNG / JPG up to 10 MB. */
+export const BULK_DOC_KIND = { PROFORMA: 'proforma_invoice', INVOICE: 'invoice', PAYMENT_PROOF: 'payment_proof' } as const
+export const BULK_DOC_KIND_LABEL: Record<string, string> = { proforma_invoice: 'Proforma invoice', invoice: 'Invoice', payment_proof: 'Proof of payment' }
+export const BULK_DOC_ACCEPT = '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg'
+export const BULK_DOC_MAX_BYTES = 10 * 1024 * 1024
+
+/**
+ * The status timeline's steps (design figma-make-bulk-orders Timeline). Today the backend reaches Submitted + Approved;
+ * Processing comes with step 3b, Ready to Dispatch / Dispatched / Delivered with the Uniware status of its sale order.
+ */
+export const BULK_STEPS = ['Submitted', 'Approved', 'Processing', 'Ready to Dispatch', 'Dispatched', 'Delivered'] as const
+/** How far an order status is on BULK_STEPS (index of the last step done). */
+export const BULK_STEP_OF: Record<string, number> = { pending_approval: 0, approved: 1 }
 
 /** The design's markers (figma-make-bulk-orders): mode for Marketing only. */
 export const BULK_MODES = ['Porter', 'Courier', 'Self pickup'] as const
@@ -174,7 +211,32 @@ export const BULK_TEXT = {
   REMOVE_LINE: 'Remove this line',
   RESTORE_LINE: 'Keep this line',
   DECISION: 'Decision',
-  TIMELINE: 'Timeline',
+  TIMELINE: 'History',
+  // payment + documents (2026-11-12)
+  PAYMENT: 'Payment',
+  DOCUMENTS: 'Payments & documents',
+  DOCUMENTS_SUB: 'Proforma, invoice and proof of payment: PDF, PNG or JPG up to 10 MB. A new file of the same kind replaces the old one (kept).',
+  NO_DOCUMENTS: 'No documents uploaded yet.',
+  UPLOAD: 'Upload file',
+  UPLOADING: 'Uploading…',
+  UPLOADED: (name: string) => `${name} uploaded`,
+  TOO_BIG: 'The file is bigger than 10 MB',
+  VIEW: 'View',
+  REPLACED: 'replaced',
+  PAYMENT_NOTE: 'Note (required to refuse)',
+  VERIFY_PAYMENT: 'Verify payment',
+  REFUSE_PROOF: 'Refuse proof',
+  PAYMENT_NOT_NEEDED: 'Payment not needed',
+  PAYMENT_SAVED: (label: string) => `Payment: ${label}`,
+  PAYMENT_HINT: 'Payment never holds the order: approve and process as usual, check the proof whenever it comes.',
+  COL_PAYMENT: 'Payment',
+  // POST_FG Users & Roles -> Settings -> Bulk Orders (central admin)
+  SETTINGS_SUB: 'Bulk Orders portal, per order type. A change applies to orders created after it.',
+  PAYMENT_CHECK: 'Proof of payment check',
+  PAYMENT_CHECK_HINT: 'ON: new orders get a payment status (awaiting proof); the approver verifies the proof. Never blocks the order.',
+  CHANGED_BY: (name: string, at: string) => `Changed by ${name} · ${at}`,
+  STATUS_TIMELINE: 'Status timeline',
+  CLOSED: 'Order closed',
   CHANGED: (what: string, from: string, to: string) => `${what} ${from} → ${to}`,
   REMOVED: 'removed',
   EDITED_FIELDS: (n: number) => `${n} detail${n === 1 ? '' : 's'} changed`,

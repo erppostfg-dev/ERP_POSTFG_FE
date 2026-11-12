@@ -3,7 +3,7 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { ChevronRight, Search } from 'lucide-react'
 import { getTeamBulkOrder, listTeamBulkOrders, type BulkOrder } from '../../api/bulkOrders'
 import { Badge } from '../../components/ui'
-import { BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, BULK_TYPES, type BulkType } from '../../constants/bulkOrders'
+import { BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, BULK_TYPES, type BulkType } from '../../constants/bulkOrders'
 import { PATHS, URL_PARAM } from '../../constants/pages'
 import { rupees } from '../../lib/bulkPrice'
 import { oneOf, useUrlParam } from '../../lib/urlState'
@@ -13,6 +13,7 @@ import BulkOrderDrawer from '../bulk/BulkOrderDrawer'
  * PO Processing & Review > Bulk Orders (2026-11-11, Bulk Orders step 3a): the portal's Marketing / Institutional orders
  * for our team, READ ONLY (GET /po-review/bulk-orders, PO review access). Approved = waiting for us (the tab count);
  * processing them (warehouse, customer code, Create PO -> the same sale order / CSV chain) is step 3b.
+ * 2026-11-12: Payment column (unpaid orders can still be processed) + documents in the drawer (PO review editors upload).
  */
 
 const STATUS_CHIPS: [string, string][] = [
@@ -25,7 +26,7 @@ const STATUS_CHIPS: [string, string][] = [
 const day = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 const when = (s: string) => new Date(s).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 
-export function BulkOrdersTab({ onCount }: { onCount: (n: number) => void }) {
+export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => void; canEdit: boolean }) {
   // Marketing / Institutional in the address (?section=), like the other tabs' views
   const [type, setType] = useUrlParam<BulkType>(PATHS.PO_REVIEW, URL_PARAM.SECTION, oneOf(BULK_TYPES), BULK_TYPES[0])
   const [status, setStatus] = useState<string>(BULK_STATUS.APPROVED)
@@ -78,10 +79,10 @@ export function BulkOrdersTab({ onCount }: { onCount: (n: number) => void }) {
           : !rows.length ? <div className="px-4 py-10 text-center text-[13px] text-ink-600">{q ? BULK_TEXT.EMPTY_FILTERED : BULK_TEXT.EMPTY}</div>
           : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-left">
+              <table className="w-full min-w-[1080px] text-left">
                 <thead className="bg-alt/60 text-[11px] font-semibold uppercase tracking-wide text-ink-600">
                   <tr>
-                    {[BULK_TEXT.COL_PO, BULK_TEXT.ORDERED_BY, BULK_TEXT.COL_NEEDED, BULK_TEXT.COL_LOCATION, BULK_TEXT.MODE, BULK_TEXT.PRIORITY, BULK_TEXT.COL_ITEMS, BULK_TEXT.COL_VALUE, BULK_TEXT.COL_STATUS, BULK_TEXT.COL_APPROVED, ''].map((h, i) => (
+                    {[BULK_TEXT.COL_PO, BULK_TEXT.ORDERED_BY, BULK_TEXT.COL_NEEDED, BULK_TEXT.COL_LOCATION, BULK_TEXT.MODE, BULK_TEXT.PRIORITY, BULK_TEXT.COL_ITEMS, BULK_TEXT.COL_VALUE, BULK_TEXT.COL_STATUS, BULK_TEXT.COL_PAYMENT, BULK_TEXT.COL_APPROVED, ''].map((h, i) => (
                       <th key={i} className={`px-3 py-2 ${h === BULK_TEXT.COL_VALUE ? 'text-right' : ''}`}>{h}</th>
                     ))}
                   </tr>
@@ -98,6 +99,7 @@ export function BulkOrdersTab({ onCount }: { onCount: (n: number) => void }) {
                       <td className="px-3 py-2.5 tnum">{o.totalUnits} {BULK_TEXT.TOTAL_UNITS}<div className="text-[11px] text-ink-600">{o.lineCount} SKU{o.lineCount === 1 ? '' : 's'}</div></td>
                       <td className="px-3 py-2.5 text-right tnum">{rupees(o.totalValue)}</td>
                       <td className="px-3 py-2.5"><Badge tone={BULK_STATUS_TONE[o.status] ?? 'neutral'}>{BULK_STATUS_LABEL[o.status] ?? o.status}</Badge></td>
+                      <td className="px-3 py-2.5">{o.payment ? <Badge tone={BULK_PAYMENT_TONE[o.payment.status] ?? 'neutral'}>{BULK_PAYMENT_LABEL[o.payment.status] ?? o.payment.status}</Badge> : <span className="text-ink-400">–</span>}</td>
                       <td className="px-3 py-2.5">{o.decidedBy ? <><div>{o.decidedBy.name}</div><div className="text-[11px] text-ink-600">{o.decidedAt && when(o.decidedAt)}</div></> : '–'}</td>
                       <td className="px-3 py-2.5 text-ink-400"><ChevronRight className="size-4" /></td>
                     </tr>
@@ -112,7 +114,7 @@ export function BulkOrdersTab({ onCount }: { onCount: (n: number) => void }) {
         </div>
       </div>
 
-      <BulkOrderDrawer id={openId} load={getTeamBulkOrder} onClose={() => setOpenId(null)} />
+      <BulkOrderDrawer id={openId} load={getTeamBulkOrder} teamCanUpload={canEdit} onClose={() => setOpenId(null)} />
     </div>
   )
 }
