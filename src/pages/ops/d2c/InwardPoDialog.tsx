@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react'
 import { CheckCircle2, CircleAlert, Loader2, XCircle } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button, Modal } from '../../../components/ui'
+import { DatePicker } from '../../../components/pickers'
 import { createInwardPo, gateAllows, getInwardJob, type D2cGate, type D2cInvoiceRow, type D2cInwardJob } from '../../../api/d2cTransfers'
-import { D2C_ERROR, D2C_INWARD_OUTCOME_LABEL, D2C_SO_JOB_POLL_MS, D2C_TEXT } from '../../../constants/d2cTransfers'
+import { D2C_ERROR, D2C_INWARD_EXPIRY_DAYS, D2C_INWARD_OUTCOME_LABEL, D2C_RECEIVE_BY_DEFAULT_DAYS, D2C_SO_JOB_POLL_MS, D2C_TEXT } from '../../../constants/d2cTransfers'
 import { D2C_KEY } from '../../../lib/liveTransfers'
 import { ErrorBox } from './bits'
-import { errorOf, num } from './format'
+import { addDays, errorOf, num, todayIst } from './format'
 
 /*
  * "Create inward PO" for one or more dispatched invoices (POST_FG inward-po.service.ts; plan 5.5): the confirm step
  * lists transfer / invoice / units / receiving warehouse / vendor and the total; then the create runs in the background
  * on the server (2 at a time) and this dialog follows its job: per invoice created (with the PO number) / refused with
  * Uniware's reason / no clear answer yet (the sync checks it). Only the test warehouses while D2C is not live.
+ * Dates (user, 2026-11-12): the PO date is the day it is created; Ops pick only "Receive by" (one date for every
+ * selected invoice, today .. the expiry); the expiry is PO date + 15 days. The backend checks the same window.
  */
 
 /** May this inward PO be written to Uniware now (the backend gate's rule: the RECEIVING facility, where the PO is made; not live = both sides test)? */
@@ -25,6 +28,10 @@ export function InwardPoDialog({ rows, gate, onClose }: { rows: D2cInvoiceRow[];
   const [job, setJob] = useState<D2cInwardJob | null>(null)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<ReturnType<typeof errorOf> | null>(null)
+  const today = todayIst()
+  const expiry = addDays(today, D2C_INWARD_EXPIRY_DAYS)
+  const [receiveBy, setReceiveBy] = useState(() => addDays(today, D2C_RECEIVE_BY_DEFAULT_DAYS))
+  const receiveByProblem = !receiveBy ? 'Pick the receive-by date' : receiveBy < today ? 'Receive by cannot be before today' : receiveBy > expiry ? `Receive by must be on or before the PO expiry (${showDay(expiry)})` : null
 
   useEffect(() => {
     if (!job || job.status === 'done') return
@@ -43,7 +50,7 @@ export function InwardPoDialog({ rows, gate, onClose }: { rows: D2cInvoiceRow[];
     setSending(true)
     setError(null)
     try {
-      setJob(await createInwardPo(allowed.map((r) => r.id)))
+      setJob(await createInwardPo(allowed.map((r) => r.id), receiveBy))
     } catch (e) {
       setError(errorOf(e))
     } finally {
@@ -62,11 +69,19 @@ export function InwardPoDialog({ rows, gate, onClose }: { rows: D2cInvoiceRow[];
         ? <Button variant="primary" disabled={running} onClick={onClose}>{running ? `Creating… ${job.done}/${job.total}` : 'Done'}</Button>
         : <>
           <Button onClick={onClose}>Close</Button>
-          <Button variant="primary" disabled={!allowed.length || sending} onClick={() => void send()}>
+          <Button variant="primary" disabled={!allowed.length || sending || !!receiveByProblem} onClick={() => void send()}>
             {sending ? 'Sending…' : `Create ${allowed.length} inward PO${allowed.length === 1 ? '' : 's'} (${num(total)} units)`}
           </Button>
         </>}>
       <div className="space-y-3">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="text-[12.5px]"><div className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-600">PO date</div><div className="mt-1 font-mono">{showDay(today)}</div></div>
+          <label className="w-[200px] text-[12.5px]"><span className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-600">Receive by *</span>
+            <div className="mt-1"><DatePicker value={receiveBy} onChange={setReceiveBy} placeholder="Pick a date" /></div>
+          </label>
+          <div className="text-[12.5px]"><div className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-600">PO expiry</div><div className="mt-1 font-mono">{showDay(expiry)} <span className="font-sans text-ink-400">(PO date + {D2C_INWARD_EXPIRY_DAYS} days)</span></div></div>
+        </div>
+        {!job && receiveByProblem && <div className="text-[12.5px] text-crit">{receiveByProblem}</div>}
         {gate && (!gate.open || gate.testOnly) && (
           <div className="flex items-start gap-2 rounded-[var(--radius)] border border-warn/30 bg-warn-soft px-3 py-2 text-[12.5px] text-warn">
             <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
@@ -110,6 +125,9 @@ export function InwardPoDialog({ rows, gate, onClose }: { rows: D2cInvoiceRow[];
     </Modal>
   )
 }
+
+/** YYYY-MM-DD -> DD-MM-YYYY (as the date fields show it). */
+const showDay = (d: string) => d.split('-').reverse().join('-')
 
 function Result({ outcome, code }: { outcome: string; code: string | null }) {
   const label = D2C_INWARD_OUTCOME_LABEL[outcome] ?? outcome

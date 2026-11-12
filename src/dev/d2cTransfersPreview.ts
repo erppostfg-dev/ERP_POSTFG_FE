@@ -508,7 +508,7 @@ const countersOf = (r: Row): D2cListItem['invoices'] => ({
   inwardPos: r.invoices.filter((i) => ['requested', 'created', 'unknown'].includes(i.inwardPoState ?? '')).length,
   varianceOpen: r.invoices.filter((i) => i.varianceOpen).length,
 })
-const startInwardJob = (ids: string[]): Promise<D2cInwardJob> => {
+const startInwardJob = (ids: string[], _receiveBy?: string): Promise<D2cInwardJob> => {
   ensure()
   const job: D2cInwardJob = { id: `ipo${Date.now()}`, kind: 'inward_po', status: 'running', total: ids.length, done: 0, startedAt: new Date().toISOString(), finishedAt: null, results: [] }
   const todo: { r: Row; i: Row['invoices'][number] }[] = []

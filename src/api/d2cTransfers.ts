@@ -274,7 +274,7 @@ export type D2cStandIn = {
   syncStatus: () => Promise<D2cSyncStatus>
   syncNow: (ids?: string[], full?: boolean) => Promise<D2cSyncStatus & { state: 'started' | 'queued' }>
   invoices: (p: D2cParams) => Promise<{ data: D2cInvoiceRow[]; meta: { total: number } }>
-  createInwardPo: (invoiceIds: string[]) => Promise<D2cInwardJob>
+  createInwardPo: (invoiceIds: string[], receiveBy: string) => Promise<D2cInwardJob>
   inwardJob: (jobId: string) => Promise<D2cInwardJob>
   varianceReason: (invoiceId: string, reason: string, note: string) => Promise<D2cDetail>
   preview: (file: File) => Promise<D2cUploadPreview>
@@ -323,9 +323,12 @@ export const closeShort = (id: string, reason: string) =>
 /** GET /invoices?tab=create_inward_po|inward_pos&<filters>: invoice rows of the two invoice tabs. */
 export const listInvoices = (params: D2cParams, signal?: AbortSignal) =>
   offline()?.invoices(params) ?? apiWithMeta<D2cInvoiceRow[], { page: number; pageSize: number; total: number }>(`${D2C_ENDPOINT.INVOICES}?${d2cQuery(params)}`, { signal })
-/** POST /create-inward-po { invoiceIds } -> 202 job (409 D2C_NOT_LIVE when the gate refuses every invoice). */
-export const createInwardPo = (invoiceIds: string[]) =>
-  offline()?.createInwardPo(invoiceIds) ?? api<D2cInwardJob>(D2C_ENDPOINT.CREATE_INWARD_PO, { method: 'POST', body: JSON.stringify({ invoiceIds }) })
+/**
+ * POST /create-inward-po { invoiceIds, receiveBy } -> 202 job (409 D2C_NOT_LIVE when the gate refuses every invoice).
+ * receiveBy (YYYY-MM-DD) -> the PO's delivery date; the PO date is the day it is created, its expiry PO date + 15 days.
+ */
+export const createInwardPo = (invoiceIds: string[], receiveBy: string) =>
+  offline()?.createInwardPo(invoiceIds, receiveBy) ?? api<D2cInwardJob>(D2C_ENDPOINT.CREATE_INWARD_PO, { method: 'POST', body: JSON.stringify({ invoiceIds, receiveBy }) })
 /** The inward PO job (same /jobs/:jobId as the SO jobs). */
 export const getInwardJob = (jobId: string, signal?: AbortSignal) => offline()?.inwardJob(jobId) ?? api<D2cInwardJob>(D2C_ENDPOINT.JOB(jobId), { signal })
 /** POST /invoices/:invoiceId/variance-reason { reason, note }: answers the transfer. */
