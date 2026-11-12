@@ -6,8 +6,9 @@ import { approveBulkOrder, bulkDocumentUrl, cancelBulkOrder, getBulkOrder, rejec
 import { Badge, Drawer } from '../../components/ui'
 import {
   BULK_DOC_ACCEPT, BULK_DOC_KIND, BULK_DOC_KIND_LABEL, BULK_DOC_MAX_BYTES, BULK_EVENT_LABEL, BULK_PAYMENT, BULK_PAYMENT_ACTION, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE,
-  BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_STEP_OF, BULK_STEPS, BULK_TEXT, BULK_TYPE_LABEL, type BulkPaymentAction,
+  BULK_PROCESS_TYPES, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_STEP_OF, BULK_STEPS, BULK_TEXT, BULK_TYPE_LABEL, type BulkPaymentAction,
 } from '../../constants/bulkOrders'
+import { BulkProcessPanel } from '../ops/BulkProcessPanel'
 import { lineTotal, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
 
 /*
@@ -18,6 +19,8 @@ import { lineTotal, priceAfterDiscount, round2, rupees, validDiscount } from '..
  * Payment + documents (2026-11-12): payment line under the status timeline (only orders with a payment check), the
  * approver verifies / refuses the proof or marks it not needed; documents list + upload (portal: the type's editors and
  * approvers; our team: `teamCanUpload`). Nothing here blocks approval or processing.
+ * Step 3b (2026-11-12): Institution details; our team's editors (`teamCanUpload`) get "Create sale order" on an approved
+ * Institutional order (BulkProcessPanel); the sale order shows under the timeline (Processing step).
  */
 
 const day = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -43,6 +46,7 @@ function StatusTimeline({ d }: { d: BulkOrderFull }) {
   const info: (string | null)[] = [
     `${d.createdBy.name ?? ''} · ${when(d.createdAt)}`,
     d.decidedBy && d.decidedAt ? `${d.decidedBy.name ?? ''} · ${when(d.decidedAt)}` : null,
+    d.saleOrder?.by && d.saleOrder.at ? `${d.saleOrder.by.name ?? ''} · ${when(d.saleOrder.at)}` : null,
   ]
   return (
     <div>
@@ -59,6 +63,15 @@ function StatusTimeline({ d }: { d: BulkOrderFull }) {
         ))}
       </ol>
       {d.decisionNote && d.status === BULK_STATUS.APPROVED && <p className="mt-2 rounded-md bg-ok-soft px-3 py-1.5 text-[12px] text-ink-600">“{d.decisionNote}”</p>}
+      {d.saleOrder && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-3 text-[13px]">
+          <span className="text-ink-600">{BULK_TEXT.SALE_ORDER}</span>
+          <span className="font-mono font-semibold">{d.saleOrder.code}</span>
+          <span className="text-[12px] text-ink-600">{BULK_TEXT.WAREHOUSE} <span className="font-mono text-ink-900">{d.saleOrder.facilityCode}</span></span>
+          <span className="text-[12px] text-ink-600">{BULK_TEXT.UNIWARE_CHANNEL} <span className="font-mono text-ink-900">{d.saleOrder.uniwareChannel}</span></span>
+          <span className="text-[12px] text-ink-600">{BULK_TEXT.CUSTOMER_CODE} <span className="font-mono text-ink-900">{d.saleOrder.customerCode}</span></span>
+        </div>
+      )}
       {d.payment && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3 text-[13px]">
           <span className="text-ink-600">{BULK_TEXT.PAYMENT}</span>
@@ -91,6 +104,7 @@ function Timeline({ events }: { events: BulkOrderEvent[] }) {
           ))}
           {e.changes?.fields && e.changes.fields.length > 0 && <div className="text-[12px] text-ink-600">{BULK_TEXT.EDITED_FIELDS(e.changes.fields.length)}</div>}
           {e.changes?.fileName && <div className="text-[12px] text-ink-600">{BULK_DOC_KIND_LABEL[e.changes.kind ?? ''] ?? e.changes.kind}: {e.changes.fileName}{e.changes.replaced?.length ? ` (${BULK_TEXT.REPLACED} ${e.changes.replaced.join(', ')})` : ''}</div>}
+          {e.changes?.saleOrderCode && <div className="text-[12px] text-ink-600"><span className="font-mono">{e.changes.saleOrderCode}</span>{e.changes.facilityCode ? ` · ${e.changes.facilityCode} · ${e.changes.uniwareChannel ?? ''} · ${e.changes.customerCode ?? ''}` : ''}</div>}
           {e.changes?.status && <div className="text-[12px] text-ink-600">{BULK_TEXT.CHANGED('', BULK_PAYMENT_LABEL[e.changes.status[0]] ?? e.changes.status[0], BULK_PAYMENT_LABEL[e.changes.status[1]] ?? e.changes.status[1]).trim()}</div>}
         </li>
       ))}
@@ -243,6 +257,20 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, onClo
               <p className="mt-1 text-right text-[13px] text-ink-900">{d.location.address.line}<br />{d.location.address.city}, {d.location.address.state} {d.location.address.pincode}</p>
             </section>
           </div>
+
+          {d.institution && (
+            <section>
+              <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{BULK_TEXT.INSTITUTION_TITLE}</h3>
+              {row(BULK_TEXT.INSTITUTION_NAME, d.institution.name)}
+              {d.institution.gstin && row('GSTIN', <span className="font-mono">{d.institution.gstin}</span>)}
+              {d.institution.email && row('Email', d.institution.email)}
+              {row(BULK_TEXT.BILLING_LINE, <>{d.institution.billingAddress.line}<br />{d.institution.billingAddress.city}, {d.institution.billingAddress.state} {d.institution.billingAddress.pincode}</>)}
+            </section>
+          )}
+
+          {team && teamCanUpload && d.status === BULK_STATUS.APPROVED && BULK_PROCESS_TYPES.includes(d.type) && (
+            <BulkProcessPanel d={d} onDone={(r) => done(BULK_TEXT.CREATED(r.saleOrder?.code ?? ''))(r)} />
+          )}
 
           <section>
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{BULK_TEXT.DRAWER_LINES} ({d.lines.length})</h3>

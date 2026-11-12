@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+import { treeRows, type TreeOption, type TreeRow } from '../lib/treeOptions'
 
 /*
  * Our own dropdown list and calendar (2026-10-14): the browser's <select> list and date picker can't be animated, so
@@ -323,6 +324,102 @@ export function GroupedSelect({ value, groups, onChange, placeholder = '—' }: 
                   <div className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
                     <div className="overflow-hidden">{items}</div>
                   </div>
+                </div>
+              )
+            })}
+          </div>
+        </Pop>
+      )}
+    </div>
+  )
+}
+
+/**
+ * A single-choice dropdown of main rows with their children folded under them (2026-11-12, Bulk Orders warehouse:
+ * main = mother warehouse, children = its child warehouses). Main rows and children can both be picked; the arrow on a
+ * main row opens / closes its children smoothly. The search box looks through every row: a main row shows when it or
+ * one of its children matches, and opens by itself when a child matches. The picked child's main row opens with the list.
+ */
+export function TreeSelect({ value, options, onChange, placeholder = '—', searchPlaceholder = 'Search…', noMatch = 'No match' }: {
+  value: string; options: TreeOption[]; onChange: (v: string) => void; placeholder?: string; searchPlaceholder?: string; noMatch?: string
+}) {
+  const p = usePopover()
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  const [active, setActive] = useState(0)
+  const f = q.trim().toLowerCase()
+  const shown = useMemo(() => treeRows(options, q), [options, q])
+  const isOpen = (r: TreeRow) => r.childHit || open.has(r.main.value)
+  const visible = shown.flatMap((r) => [r.main, ...(isOpen(r) ? r.children : [])])
+  useEffect(() => {
+    if (!p.open) return
+    setQ('')
+    const mine = options.find((o) => o.value === value)
+    setOpen(mine?.parent ? new Set([mine.parent]) : new Set())
+    setActive(0)
+  }, [p.open]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setActive(0), [f])
+  const current = options.find((o) => o.value === value)
+  const pick = (v: string) => { onChange(v); p.close() }
+  const toggle = (v: string) => setOpen((s) => { const x = new Set(s); if (x.has(v)) x.delete(v); else x.add(v); return x })
+  const onKey = (e: KeyboardEvent) => {
+    if (!p.open && (e.key === 'ArrowDown' || e.key === 'Enter')) { e.preventDefault(); p.setOpen(true); return }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(visible.length - 1, i + 1)) }
+    if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(0, i - 1)) }
+    if (e.key === 'ArrowRight' && visible[active] && shown.some((r) => r.main.value === visible[active].value && r.total > 0)) { e.preventDefault(); setOpen((s) => new Set(s).add(visible[active].value)) }
+    if (e.key === 'ArrowLeft' && visible[active] && open.has(visible[active].value)) { e.preventDefault(); toggle(visible[active].value) }
+    if (e.key === 'Enter' && visible[active]) { e.preventDefault(); pick(visible[active].value) }
+  }
+  const row = (o: TreeOption, i: number, child: boolean) => (
+    <button type="button" key={o.value} onMouseEnter={() => setActive(i)} onClick={() => pick(o.value)}
+      className={`flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] transition-colors duration-100 ${i === active ? 'bg-alt' : ''} ${child ? 'pl-8' : ''}`}>
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate font-mono ${child ? 'text-ink-600' : 'font-semibold text-ink-900'}`}>{o.label}</span>
+        {o.sub && <span className="block truncate text-[11.5px] text-ink-400">{o.sub}</span>}
+      </span>
+      {o.value === value && <Check className="size-3.5 shrink-0 text-primary" />}
+    </button>
+  )
+  let n = 0
+  return (
+    <div ref={p.ref} className="relative" onKeyDown={onKey}>
+      <button type="button" onClick={p.toggle} className={boxCls(p.open)}>
+        <span className={`min-w-0 flex-1 truncate ${current ? 'text-ink-900' : 'text-ink-400'}`}>
+          {current ? <><span className="font-mono">{current.label}</span>{current.sub ? <span className="text-ink-400"> · {current.sub}</span> : null}</> : placeholder}
+        </span>
+        <ChevronDown className={`size-3.5 shrink-0 text-ink-400 transition-transform duration-150 ${p.open && !p.leaving ? 'rotate-180' : ''}`} />
+      </button>
+      {p.open && (
+        <Pop leaving={p.leaving} className="w-full min-w-[300px]">
+          <label className="mb-1 flex items-center gap-2 border-b border-line px-2 pb-1.5 pt-1">
+            <Search className="size-3.5 text-ink-400" />
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={searchPlaceholder} className="w-full bg-transparent text-[13px] outline-none" />
+            {q && <X className="size-3.5 shrink-0 cursor-pointer text-ink-400 hover:text-ink-900" onClick={() => setQ('')} />}
+          </label>
+          <div className="max-h-80 overflow-y-auto">
+            {!shown.length && <div className="px-2 py-1.5 text-[12.5px] text-ink-400">{noMatch}</div>}
+            {shown.map((r) => {
+              const expanded = isOpen(r)
+              const mi = n++
+              const children = r.children.map((c) => row(c, expanded ? n++ : -1, true))
+              return (
+                <div key={r.main.value}>
+                  <div className="flex items-center">
+                    {r.total ? (
+                      <button type="button" aria-label="Show child warehouses" onClick={() => toggle(r.main.value)}
+                        className="flex shrink-0 items-center gap-0.5 rounded px-1 py-1.5 text-ink-400 hover:bg-alt hover:text-ink-900">
+                        <ChevronRight className={`size-3.5 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
+                        <span className="rounded-full bg-alt px-1.5 text-[10px]">{r.total}</span>
+                      </button>
+                    ) : <span className="w-[42px] shrink-0" />}
+                    {row(r.main, mi, false)}
+                  </div>
+                  {r.total > 0 && (
+                    // Height animates from 0 to its content: grid rows 0fr -> 1fr.
+                    <div className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                      <div className="flex flex-col overflow-hidden">{children}</div>
+                    </div>
+                  )}
                 </div>
               )
             })}

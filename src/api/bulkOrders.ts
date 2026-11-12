@@ -37,7 +37,26 @@ export interface BulkOrder {
   decisionNote: string | null
   /** null = no payment check on this order (off for its type when it was created). */
   payment: { status: string; by: { id: number; name: string | null } | null; at: string | null; note: string | null } | null
+  /** Institutional requester details (null on Marketing orders; 2026-11-12). */
+  institution: { name: string; gstin: string | null; email: string | null; billingAddress: BulkAddress } | null
+  /** Our team's sale order (step 3b); null until processed, and again after a send back. */
+  saleOrder: {
+    code: string; facilityCode: string; uniwareChannel: string; customerCode: string; uploadId: string | null
+    by: { id: number; name: string | null } | null; at: string | null
+  } | null
 }
+
+/** A customer our team processed before that matches an order (process-options). */
+export interface BulkCustomerMatch {
+  id: string; name: string; gstin: string | null; address: BulkAddress; uniwareChannel: string; customerCode: string
+  usedCount: number; lastUsedAt: string; matchedBy: 'gstin' | 'name'
+}
+export interface BulkProcessOptions {
+  /** Active warehouses; parentCode = its main (mother) warehouse, null = a main one. */
+  facilities: { code: string; name: string | null; parentCode: string | null }[]
+  customers: BulkCustomerMatch[]
+}
+export interface BulkProcessInput { facilityCode: string; uniwareChannel: string; customerCode: string }
 
 export interface BulkDocument {
   id: string; kind: string; fileName: string; contentType: string; sizeBytes: number
@@ -64,6 +83,8 @@ export interface BulkOrderEvent {
     kind?: string; fileName?: string; replaced?: string[]
     /** payment: [old, new] */
     status?: [string, string]
+    /** processed / sent_back */
+    saleOrderCode?: string | null; facilityCode?: string; uniwareChannel?: string; customerCode?: string
   } | null
 }
 
@@ -88,6 +109,12 @@ export interface BulkOrderInput {
   priority: string
   note?: string
   lines: { pepCode: string; qty: number; discountPct: number }[]
+  /** Institutional only (required: name + billing address or billingSameAsDelivery). */
+  institutionName?: string
+  gstin?: string
+  contactEmail?: string
+  billingSameAsDelivery?: boolean
+  billingAddress?: BulkAddress
 }
 
 export interface BulkListQuery { type?: BulkType | ''; status?: string; q?: string; page?: number; pageSize?: number }
@@ -126,6 +153,10 @@ export const listTeamBulkOrders = (q: BulkListQuery) =>
     `${BULK_ENDPOINT.TEAM}${qs({ type: q.type, status: q.status, q: q.q, page: q.page, pageSize: q.pageSize ?? BULK_LIMIT.PAGE_SIZE })}`,
   )
 export const getTeamBulkOrder = (id: string) => api<BulkOrderFull>(BULK_ENDPOINT.TEAM_ORDER(id))
+/** Step 3b (2026-11-12): warehouses + matching saved customers; create the sale order (PO review editor). */
+export const getBulkProcessOptions = (id: string) => api<BulkProcessOptions>(BULK_ENDPOINT.TEAM_PROCESS_OPTIONS(id))
+export const processBulkOrder = (id: string, input: BulkProcessInput) =>
+  api<BulkOrderFull>(BULK_ENDPOINT.TEAM_PROCESS(id), { method: 'POST', body: JSON.stringify(input) })
 
 /** Payment + documents (2026-11-12). team = our team's routes (PO review access). */
 export const uploadBulkDocument = (id: string, kind: string, file: File, team = false) => {

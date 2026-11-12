@@ -5,7 +5,7 @@ import { Plus, Search, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import { createBulkOrder, listBulkLocations, updateBulkOrder, searchBulkSkus, type BulkOrderFull, type BulkOrderInput, type BulkSku } from '../../api/bulkOrders'
 import { Modal } from '../../components/ui'
-import { BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
+import { BULK_INSTITUTION_RE, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
 import { lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
 
 /*
@@ -15,6 +15,7 @@ import { lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscou
 
 interface Line { key: number; sku: BulkSku | null; qty: string; discount: string }
 
+const { GSTIN: GSTIN_RE, EMAIL: EMAIL_RE } = BULK_INSTITUTION_RE
 const todayIst = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)
 let nextKey = 1
 const emptyLine = (): Line => ({ key: nextKey++, sku: null, qty: '1', discount: '0' })
@@ -123,6 +124,13 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const [address, setAddress] = useState(initial && !initial.location.id ? { ...initial.location.address } : { line: '', city: '', state: '', pincode: '' })
   const [saveAs, setSaveAs] = useState('')
   const [errors, setErrors] = useState<string[]>([])
+  // Institutional requester details (2026-11-12): name + billing required, GSTIN / email optional
+  const [inst, setInst] = useState(() => ({
+    name: initial?.institution?.name ?? '', gstin: initial?.institution?.gstin ?? '', email: initial?.institution?.email ?? '',
+    same: !initial?.institution || JSON.stringify(initial.institution.billingAddress) === JSON.stringify(initial.location.address),
+    billing: initial?.institution ? { ...initial.institution.billingAddress } : { line: '', city: '', state: '', pincode: '' },
+  }))
+  const setI = (patch: Partial<typeof inst>) => setInst((x) => ({ ...x, ...patch }))
 
   const locations = useQuery({ queryKey: ['bulk', 'locations', type], queryFn: () => listBulkLocations(type) })
 
@@ -137,7 +145,12 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
 
   const phone = normalPhone(form.receiverPhone)
   const addressOk = where !== 'new' || (!!address.line.trim() && !!address.city.trim() && !!address.state.trim() && /^[1-9]\d{5}$/.test(address.pincode.trim()))
-  const deliveryOk = !!form.orderedBy.trim() && !!form.neededBy && form.neededBy >= todayIst() && !!form.receiverName.trim() && !!phone && addressOk
+  const isInst = type === BULK_TYPE.INSTITUTIONAL
+  const gstinBad = !!inst.gstin.trim() && !GSTIN_RE.test(inst.gstin.trim().toUpperCase())
+  const emailBad = !!inst.email.trim() && !EMAIL_RE.test(inst.email.trim())
+  const billingOk = inst.same || (!!inst.billing.line.trim() && !!inst.billing.city.trim() && !!inst.billing.state.trim() && /^[1-9]\d{5}$/.test(inst.billing.pincode.trim()))
+  const instOk = !isInst || (!!inst.name.trim() && !gstinBad && !emailBad && billingOk)
+  const deliveryOk = !!form.orderedBy.trim() && !!form.neededBy && form.neededBy >= todayIst() && !!form.receiverName.trim() && !!phone && addressOk && instOk
 
   const save = useMutation({
     mutationFn: (body: BulkOrderInput) => (initial ? updateBulkOrder(initial.id, body) : createBulkOrder(body)),
@@ -166,6 +179,13 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       priority: form.priority,
       ...(form.note.trim() ? { note: form.note.trim() } : {}),
       lines: parsed.map((l) => ({ pepCode: l.sku!.pepCode, qty: l.q, discountPct: l.d })),
+      ...(isInst ? {
+        institutionName: inst.name.trim(),
+        ...(inst.gstin.trim() ? { gstin: inst.gstin.trim().toUpperCase() } : {}),
+        ...(inst.email.trim() ? { contactEmail: inst.email.trim() } : {}),
+        billingSameAsDelivery: inst.same,
+        ...(inst.same ? {} : { billingAddress: { line: inst.billing.line.trim(), city: inst.billing.city.trim(), state: inst.billing.state.trim(), pincode: inst.billing.pincode.trim() } }),
+      } : {}),
     })
   }
 
@@ -269,6 +289,28 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
             <Field label={BULK_TEXT.PRIORITY}><Choice value={form.priority} options={BULK_PRIORITIES} onChange={(v) => set({ priority: v })} /></Field>
             <Field label={BULK_TEXT.NOTE} wide><textarea rows={2} className={input} value={form.note} onChange={(e) => set({ note: e.target.value })} /></Field>
           </div>
+          {isInst && (
+            <div className="mt-5 border-t border-line pt-4">
+              <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.INSTITUTION_TITLE}</h3>
+              <p className="mb-3 text-[12px] text-ink-600">{BULK_TEXT.INSTITUTION_SUB}</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label={BULK_TEXT.INSTITUTION_NAME} wide><input className={input} maxLength={200} value={inst.name} onChange={(e) => setI({ name: e.target.value })} /></Field>
+                <Field label={BULK_TEXT.GSTIN} hint={gstinBad ? BULK_TEXT.BAD_GSTIN : undefined}><input className={`${input} uppercase ${gstinBad ? 'border-crit' : ''}`} maxLength={15} value={inst.gstin} onChange={(e) => setI({ gstin: e.target.value.trim() })} /></Field>
+                <Field label={BULK_TEXT.CONTACT_EMAIL} hint={emailBad ? BULK_TEXT.BAD_EMAIL : undefined}><input type="email" className={`${input} ${emailBad ? 'border-crit' : ''}`} maxLength={150} value={inst.email} onChange={(e) => setI({ email: e.target.value })} /></Field>
+                <label className="flex items-center gap-2 text-[13px] text-ink-900 md:col-span-2">
+                  <input type="checkbox" checked={inst.same} onChange={(e) => setI({ same: e.target.checked })} />{BULK_TEXT.BILLING_SAME}
+                </label>
+                {!inst.same && (
+                  <>
+                    <Field label={BULK_TEXT.BILLING_LINE} wide><input className={input} value={inst.billing.line} onChange={(e) => setI({ billing: { ...inst.billing, line: e.target.value } })} /></Field>
+                    <Field label={BULK_TEXT.CITY}><input className={input} value={inst.billing.city} onChange={(e) => setI({ billing: { ...inst.billing, city: e.target.value } })} /></Field>
+                    <Field label={BULK_TEXT.STATE}><input className={input} value={inst.billing.state} onChange={(e) => setI({ billing: { ...inst.billing, state: e.target.value } })} /></Field>
+                    <Field label={BULK_TEXT.PINCODE}><input inputMode="numeric" maxLength={6} className={`${input} ${inst.billing.pincode && !/^[1-9]\d{5}$/.test(inst.billing.pincode) ? 'border-crit' : ''}`} value={inst.billing.pincode} onChange={(e) => setI({ billing: { ...inst.billing, pincode: e.target.value.trim() } })} /></Field>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -286,6 +328,12 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
               <div className="font-semibold">{form.receiverName} · {phone}</div>
               <div className="text-ink-600">{where === 'new' ? `${address.line}, ${address.city}, ${address.state} ${address.pincode}` : saved && `${saved.label}: ${saved.address.line}, ${saved.address.city} ${saved.address.pincode}`}</div>
             </div>
+            {isInst && (
+              <div className="rounded-md border border-line p-3 md:col-span-2">
+                <div className="font-semibold">{inst.name}{inst.gstin ? ` · ${inst.gstin.toUpperCase()}` : ''}</div>
+                <div className="text-ink-600">{inst.same ? BULK_TEXT.BILLING_SAME : `${inst.billing.line}, ${inst.billing.city}, ${inst.billing.state} ${inst.billing.pincode}`}{inst.email ? ` · ${inst.email}` : ''}</div>
+              </div>
+            )}
           </div>
           <table className="mt-3 w-full text-left text-[13px]">
             <tbody>

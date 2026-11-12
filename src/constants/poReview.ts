@@ -94,10 +94,12 @@ export const LIST_SORT = { CHANNEL: 'channel' } as const
 export const DISPLAY_TIME_ZONE = 'Asia/Kolkata'
 
 /** po_uploads.source -> the label the design uses. */
-export const SOURCE_LABELS: Record<string, 'API' | 'Webhook' | 'Email' | 'Manual'> = {
+export const SOURCE_LABELS: Record<string, 'API' | 'Webhook' | 'Email' | 'Manual' | 'Bulk order'> = {
   api: 'API',
   email: 'Email',
   manual: 'Manual',
+  /** 2026-11-12: a Bulk Orders portal order our team turned into a sale order (no Verify step). */
+  bulk: 'Bulk order',
 }
 
 /** po_issues.status */
@@ -235,8 +237,15 @@ export type ApprovalsView = (typeof APPROVALS_VIEW)[keyof typeof APPROVALS_VIEW]
 export const MARGIN_TABS: { key: 'open' | 'applied' | 'rejected'; label: string }[] = [
   { key: 'open', label: 'Waiting' }, { key: 'applied', label: 'Applied' }, { key: 'rejected', label: 'Rejected' },
 ]
-export const MARGIN_STATUS_LABEL: Record<string, string> = {
-  pending_l1: 'Waiting layer 1 (Operations Manager)', pending_l2: 'Waiting layer 2 (Admin)', applied: 'Applied', rejected: 'Rejected',
+/**
+ * Status in plain words (user 2026-11-12: no "layer 1 / layer 2" on screen). A new channel SKU has one approval
+ * ("Waiting for approval", also an old add still at pending_l2); a change has two steps (Operations Manager, then Admin).
+ */
+export const marginStatusLabel = (status: string, approvalsNeeded: number): string => {
+  if (status === 'applied') return approvalsNeeded === 1 ? 'Added' : 'Applied'
+  if (status === 'rejected') return 'Rejected'
+  if (approvalsNeeded === 1) return 'Waiting for approval'
+  return status === 'pending_l2' ? 'Waiting for Admin (step 2 of 2)' : 'Waiting for Operations Manager (step 1 of 2)'
 }
 export const MARGIN_TEXT = {
   VIEW_PO: 'PO reviews',
@@ -245,15 +254,22 @@ export const MARGIN_TEXT = {
   EMPTY: 'Nothing here.',
   KIND: { edit: 'Margin / rate change', add: 'New channel SKU' } as Record<string, string>,
   SOURCE: { masters: 'Masters page', price_check: 'Price check (PO approval)' } as Record<string, string>,
-  APPROVE_L1: 'Approve (layer 1)',
-  APPROVE_L2: 'Approve and apply (layer 2)',
+  APPROVE_L1: 'Approve (step 1 of 2)',
+  APPROVE_L2: 'Final approval: apply to master',
   APPROVE_ADD: 'Approve and add',
+  /** History lines of a card. */
+  APPROVED_BY: 'Approved by',
+  STEP1_BY: 'Step 1 (Operations Manager) approved by',
+  STEP2_BY: 'Final approval (Admin) by',
+  /** Waiting tab summary, counted from the cards shown. */
+  WAITING_SUMMARY: (adds: number, step1: number, step2: number) =>
+    `${adds} new SKU${adds === 1 ? '' : 's'} waiting for approval · ${step1} change${step1 === 1 ? '' : 's'} waiting for Operations Manager · ${step2} waiting for Admin`,
   NEEDS: { 1: '1 approval', 2: '2 approvals' } as Record<number, string>,
   REJECT: 'Reject',
   REMARK: 'Remark (required to reject)',
   REMARK_NEEDED: 'Write why it is rejected',
-  APPROVED_L1: (id: string) => `Request #${id} approved at layer 1: now waiting for an Admin.`,
-  APPLIED: (id: string) => `Request #${id} approved at layer 2 and applied to the master.`,
+  APPROVED_L1: (id: string) => `Request #${id} approved (step 1 of 2): now waiting for an Admin's final approval.`,
+  APPLIED: (id: string) => `Request #${id} finally approved and applied to the master.`,
   ADDED: (id: string) => `Request #${id} approved: the channel SKU is added to the master.`,
   REJECTED: (id: string) => `Request #${id} rejected.`,
 } as const

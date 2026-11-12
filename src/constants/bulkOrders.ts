@@ -22,6 +22,9 @@ export const BULK_ENDPOINT = {
   TEAM_ORDER: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}`,
   TEAM_DOCUMENTS: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/documents`,
   TEAM_DOCUMENT: (id: string, docId: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}`,
+  /** Step 3b (2026-11-12): warehouses + matching saved customers; create the sale order (PO review editor). */
+  TEAM_PROCESS_OPTIONS: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/process-options`,
+  TEAM_PROCESS: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/process`,
   /** Sign-in started here comes back to the portal (backend BULK_PORTAL_URL). */
   GOOGLE: '/auth/google?app=bulk',
 } as const
@@ -37,14 +40,22 @@ export const BULK_PAGE = {
   APPROVE: '/bulk-orders/approve',
 } as const
 
-export const BULK_STATUS = { PENDING: 'pending_approval', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled' } as const
+export const BULK_STATUS = { PENDING: 'pending_approval', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled', PROCESSING: 'processing' } as const
 export type BulkStatus = (typeof BULK_STATUS)[keyof typeof BULK_STATUS]
-export const BULK_STATUS_LABEL: Record<string, string> = { pending_approval: 'Pending approval', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' }
-export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral'> = { pending_approval: 'warn', approved: 'ok', rejected: 'crit', cancelled: 'neutral' }
+export const BULK_STATUS_LABEL: Record<string, string> = { pending_approval: 'Pending approval', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', processing: 'Processing' }
+export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = { pending_approval: 'warn', approved: 'ok', rejected: 'crit', cancelled: 'neutral', processing: 'info' }
+/** Institutional requester checks (same as the backend BULK_INSTITUTION). */
+export const BULK_INSTITUTION_RE = {
+  GSTIN: /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/,
+  EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+} as const
+/** Order types our team can process into a sale order now (backend BULK_SALE.TYPES; Marketing next). */
+export const BULK_PROCESS_TYPES: BulkType[] = [BULK_TYPE.INSTITUTIONAL]
 
 /** Timeline words per event (backend BULK_EVENT). */
 export const BULK_EVENT_LABEL: Record<string, string> = {
   created: 'Created', edited: 'Edited', cancelled: 'Cancelled', approved: 'Approved', rejected: 'Rejected', document_added: 'Document uploaded', payment: 'Payment',
+  processed: 'Sale order created', sent_back: 'Sale order sent back',
 }
 
 /**
@@ -73,7 +84,7 @@ export const BULK_DOC_MAX_BYTES = 10 * 1024 * 1024
  */
 export const BULK_STEPS = ['Submitted', 'Approved', 'Processing', 'Ready to Dispatch', 'Dispatched', 'Delivered'] as const
 /** How far an order status is on BULK_STEPS (index of the last step done). */
-export const BULK_STEP_OF: Record<string, number> = { pending_approval: 0, approved: 1 }
+export const BULK_STEP_OF: Record<string, number> = { pending_approval: 0, approved: 1, processing: 2 }
 
 /** The design's markers (figma-make-bulk-orders): mode for Marketing only. */
 export const BULK_MODES = ['Porter', 'Courier', 'Self pickup'] as const
@@ -240,4 +251,33 @@ export const BULK_TEXT = {
   CHANGED: (what: string, from: string, to: string) => `${what} ${from} → ${to}`,
   REMOVED: 'removed',
   EDITED_FIELDS: (n: number) => `${n} detail${n === 1 ? '' : 's'} changed`,
+  // Institutional requester details (2026-11-12, required where marked)
+  INSTITUTION_TITLE: 'Institution (billing)',
+  INSTITUTION_SUB: 'Used for the invoice and the customer in Uniware.',
+  INSTITUTION_NAME: 'Institution name',
+  GSTIN: 'GSTIN (optional)',
+  CONTACT_EMAIL: 'Contact email (optional)',
+  BILLING_SAME: 'Billing address is the same as the delivery address',
+  BILLING_LINE: 'Billing address',
+  BAD_GSTIN: 'GSTIN: 15 characters, e.g. 27AAAAA0000A1Z5',
+  BAD_EMAIL: 'Not an email address',
+  // Step 3b: our team creates the sale order in POST_FG
+  SALE_ORDER: 'Sale order',
+  PROCESS_TITLE: 'Create sale order',
+  PROCESS_SUB: 'Create the customer in Uniware if needed, then fill these. The sale order goes to Processed and PO Overview like any PO.',
+  WAREHOUSE: 'Warehouse',
+  PICK_WAREHOUSE: 'Pick a warehouse',
+  SEARCH_WAREHOUSE: 'Search warehouse code or name…',
+  NO_WAREHOUSE: 'No warehouse matches',
+  UNIWARE_CHANNEL: 'Uniware channel',
+  CUSTOMER_CODE: 'Uniware customer code',
+  SUGGESTED: 'Used before for this customer',
+  USE: 'Use',
+  USED_TIMES: (n: number) => `used on ${n} order${n === 1 ? '' : 's'}`,
+  MATCHED_BY: { gstin: 'same GSTIN', name: 'same name + pincode' } as Record<string, string>,
+  CREATE_SALE_ORDER: 'Create sale order',
+  CREATING: 'Creating…',
+  CREATED: (code: string) => `Sale order ${code} created`,
+  PROCESS_LATER: 'Marketing orders are processed in POST_FG in the next step.',
+  PAYMENT_PENDING_NOTE: 'Payment not verified yet: you can still create the sale order; check payment before dispatch.',
 } as const

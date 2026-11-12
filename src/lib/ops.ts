@@ -149,7 +149,7 @@ export function statusTone(s: string): 'ok' | 'warn' | 'crit' | 'info' | 'neutra
 }
 
 // ---- PO Processing & Review ------------------------------------------
-export type IngestSource = 'API' | 'Webhook' | 'Email' | 'Manual'
+export type IngestSource = 'API' | 'Webhook' | 'Email' | 'Manual' | 'Bulk order'
 export interface ProcessedPO { id: string; poNumber: string; channel: string; brand: string; source: IngestSource; processedAt: string; lines: number; units: number; value: number; file: string; parser: string }
 export interface ReviewField { field: string; parsed: string; expected?: string; error?: string }
 export interface ReviewPO { id: string; poNumber: string; channel: string; brand: string; source: IngestSource; receivedAt: string; file: string; labels: string[]; fields: ReviewField[] }
