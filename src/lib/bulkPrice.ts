@@ -8,7 +8,10 @@ export const priceAfterDiscount = (mrp: number, discountPct: number): number =>
 
 export const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100
 
-export const lineTotal = (mrp: number, discountPct: number, qty: number): number => round2(priceAfterDiscount(mrp, discountPct) * qty)
+/** Unit price: a type's fixed price (Marketing ₹1, constants BULK_FIXED_PRICE) or MRP less discount %. */
+export const unitPrice = (mrp: number, discountPct: number, fixed?: number): number => fixed ?? priceAfterDiscount(mrp, discountPct)
+
+export const lineTotal = (mrp: number, discountPct: number, qty: number, fixed?: number): number => round2(unitPrice(mrp, discountPct, fixed) * qty)
 
 /** A discount the server accepts: 0-100, at most 2 decimals. */
 export const validDiscount = (d: number): boolean => Number.isFinite(d) && d >= 0 && d <= 100 && round2(d) === d

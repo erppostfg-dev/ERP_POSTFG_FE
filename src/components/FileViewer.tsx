@@ -3,7 +3,7 @@ import { Download, FileSpreadsheet, FileText } from 'lucide-react'
 import { downloadCsv } from './ui'
 import { FindBox, findAll, findTerms, useDebounced, type ExternalFind, type FindResult } from './FindBox'
 import { jsonTables, sheetTables, type ViewTable } from '../lib/fileTables'
-import { FILE_VIEWER, FILE_VIEWER_TEXT, PREVIEW_TYPES } from '../constants/poReview'
+import { FILE_VIEWER, FILE_VIEWER_TEXT, IMAGE_ZOOM, PREVIEW_TYPES } from '../constants/poReview'
 
 /*
  * Every PO file shown in the app, nothing downloaded (2026-10-21, user: "a good format viewer for all formats; if it's
@@ -192,10 +192,30 @@ function PlainView({ bytes, kind, ext, fileName, title, actions, externalFind, o
   )
 }
 
+/**
+ * An image fitted to the viewer (2026-11-13: a phone screenshot showed far too big). A click zooms it IMAGE_ZOOM times in
+ * place, smoothly, around the point clicked; while zoomed the mouse moves the view (a magnifier); another click zooms out.
+ */
 function ImageView({ bytes, ext, fileName }: { bytes: ArrayBuffer; ext: string; fileName: string }) {
   const url = useMemo(() => URL.createObjectURL(new Blob([bytes], { type: MIME[ext] })), [bytes, ext])
   useEffect(() => () => URL.revokeObjectURL(url), [url])
-  return <div className="h-full overflow-auto p-5"><img src={url} alt={fileName} className="mx-auto bg-white shadow-xl" /></div>
+  const [zoomed, setZoomed] = useState(false)
+  const [origin, setOrigin] = useState('50% 50%')
+  const at = (e: React.MouseEvent<HTMLImageElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    // the point under the mouse, measured on the unzoomed box (the transform scales around it)
+    const x = Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100))
+    const y = Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100))
+    setOrigin(`${x}% ${y}%`)
+  }
+  return (
+    <div className="flex h-full items-center justify-center overflow-hidden p-5">
+      <img src={url} alt={fileName} title={zoomed ? FILE_VIEWER_TEXT.IMAGE_FIT : FILE_VIEWER_TEXT.IMAGE_FULL}
+        onClick={(e) => { at(e); setZoomed(!zoomed) }} onMouseMove={(e) => zoomed && at(e)}
+        style={{ transform: zoomed ? `scale(${IMAGE_ZOOM})` : 'none', transformOrigin: origin }}
+        className={`pf-zoom max-h-full max-w-full bg-white object-contain shadow-xl ${zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'}`} />
+    </div>
+  )
 }
 
 /** Class of the current match inside the email body. */

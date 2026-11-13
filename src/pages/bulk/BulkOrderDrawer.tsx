@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, FileText, RotateCcw, Trash2, Upload } from 'lucide-react'
+import { Check, ChevronDown, RotateCcw, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { approveBulkOrder, bulkDocumentUrl, cancelBulkOrder, getBulkOrder, rejectBulkOrder, setBulkPayment, uploadBulkDocument, type BulkOrderEvent, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
+import { approveBulkOrder, cancelBulkOrder, getBulkOrder, rejectBulkOrder, setBulkPayment, uploadBulkDocument, type BulkOrderEvent, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
 import { Badge, Drawer } from '../../components/ui'
 import {
-  BULK_DOC_ACCEPT, BULK_DOC_KIND, BULK_DOC_KIND_LABEL, BULK_DOC_MAX_BYTES, BULK_EVENT_LABEL, BULK_PAYMENT, BULK_PAYMENT_ACTION, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE,
-  BULK_PROCESS_TYPES, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_STEP_OF, BULK_STEPS, BULK_TEXT, BULK_TYPE_LABEL, type BulkPaymentAction,
+  BULK_DOC_KIND_LABEL, BULK_DOC_MAX_BYTES, BULK_EVENT_LABEL, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE,
+  BULK_FIXED_PRICE, bulkHidesMoney, BULK_PROCESS_TYPES, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_STEP_OF, BULK_STEPS, BULK_TEXT, BULK_TYPE_LABEL, type BulkPaymentAction,
 } from '../../constants/bulkOrders'
 import { BulkProcessPanel } from '../ops/BulkProcessPanel'
-import { lineTotal, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
+import { BulkDocumentViewer } from './BulkDocumentViewer'
+import { BulkDocumentsSection } from './BulkDocumentsSection'
+import { lineTotal, round2, rupees, unitPrice, validDiscount } from '../../lib/bulkPrice'
 
 /*
  * One bulk order (step 1 + 2): status timeline on top, details, lines, History (activity log, folded). While it waits for approval: its type's people may Edit /
@@ -17,10 +19,12 @@ import { lineTotal, priceAfterDiscount, round2, rupees, validDiscount } from '..
  * prices the approval on today's MRP; the screen shows the order's MRP until then.
  * Read only (step 3a, POST_FG PO Processing & Review > Bulk Orders): pass `load` (the team API) and no `rights`.
  * Payment + documents (2026-11-12): payment line under the status timeline (only orders with a payment check), the
- * approver verifies / refuses the proof or marks it not needed; documents list + upload (portal: the type's editors and
+ * "verify payments" permission verifies / refuses the proof or marks it not needed; documents list + upload (portal: the type's editors and
  * approvers; our team: `teamCanUpload`). Nothing here blocks approval or processing.
  * Step 3b (2026-11-12): Institution details; our team's editors (`teamCanUpload`) get "Create sale order" on an approved
  * Institutional order (BulkProcessPanel); the sale order shows under the timeline (Processing step).
+ * Marketing (2026-11-13): every unit ₹1, no discount; in the PORTAL (requester + approver) no amount at all (SKU + qty only),
+ * our team (POST_FG) sees the ₹1 prices and gets "Create sale order" as for Institutional.
  */
 
 const day = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -84,7 +88,7 @@ function StatusTimeline({ d }: { d: BulkOrderFull }) {
   )
 }
 
-function Timeline({ events }: { events: BulkOrderEvent[] }) {
+function Timeline({ events, noMoney = false }: { events: BulkOrderEvent[]; noMoney?: boolean }) {
   return (
     <ol className="relative ml-1 border-l border-line pl-4">
       {events.map((e, i) => (
@@ -97,8 +101,8 @@ function Timeline({ events }: { events: BulkOrderEvent[] }) {
               <span className="font-mono">{c.pepCode}</span>:{' '}
               {c.removed ? BULK_TEXT.REMOVED : [
                 c.qty && BULK_TEXT.CHANGED('qty', String(c.qty[0]), String(c.qty[1])),
-                c.discountPct && BULK_TEXT.CHANGED('discount', `${c.discountPct[0]}%`, `${c.discountPct[1]}%`),
-                c.mrp && BULK_TEXT.CHANGED('MRP', rupees(c.mrp[0]), rupees(c.mrp[1])),
+                !noMoney && c.discountPct && BULK_TEXT.CHANGED('discount', `${c.discountPct[0]}%`, `${c.discountPct[1]}%`),
+                !noMoney && c.mrp && BULK_TEXT.CHANGED('MRP', rupees(c.mrp[0]), rupees(c.mrp[1])),
               ].filter(Boolean).join(', ')}
             </div>
           ))}
@@ -112,8 +116,10 @@ function Timeline({ events }: { events: BulkOrderEvent[] }) {
   )
 }
 
-export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, onClose, onEdit, onToast }: {
+export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamCanVerifyPayment, onClose, onEdit, onToast }: {
   id: string | null
+  /** Our team's view: may they verify payments (special permission "Bulk Orders: verify payments", 2026-11-13). */
+  teamCanVerifyPayment?: boolean
   /** Our team's view (load given): may they upload documents (PO review editor). */
   teamCanUpload?: boolean
   /** The portal person's rights; none = read only (no Edit / Cancel / Approve / Reject). */
@@ -137,11 +143,11 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, onClo
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
   const [history, setHistory] = useState(false)
-  const [payNote, setPayNote] = useState('')
-  const [docKind, setDocKind] = useState('')
+  // the document shown in the in-app viewer (2026-11-13; was a new tab)
+  const [viewDoc, setViewDoc] = useState<string | null>(null)
 
-  const reset = () => { setEdits({}); setRemoved(new Set()); setNote(''); setAsk(''); setReason(''); setError(''); setPayNote('') }
-  const close = () => { reset(); onClose() }
+  const reset = () => { setEdits({}); setRemoved(new Set()); setNote(''); setAsk(''); setReason(''); setError('') }
+  const close = () => { reset(); setViewDoc(null); onClose() }
   const done = (text: string) => (r: BulkOrderFull) => {
     qc.setQueryData(key, r)
     void qc.invalidateQueries({ queryKey: ['bulk', 'orders'] })
@@ -154,21 +160,24 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, onClo
   const pending = d?.status === BULK_STATUS.PENDING
   const canDecide = !!d && pending && !!rights?.approve
   const canChange = !!d && pending && !!rights?.create.includes(d.type)
+  // Marketing: the portal shows no money; prices at the type's fixed price
+  const fixed = d ? BULK_FIXED_PRICE[d.type] : undefined
+  const noMoney = !team && !!d && bulkHidesMoney(d.type)
 
   const rows = (d?.lines ?? []).map((l) => {
     const e = edits[l.lineNo]
     const qty = e ? Number(e.qty) : l.qty
-    const disc = e ? (e.discount === '' ? 0 : Number(e.discount)) : l.discountPct
+    const disc = fixed !== undefined ? 0 : e ? (e.discount === '' ? 0 : Number(e.discount)) : l.discountPct
     const ok = Number.isInteger(qty) && qty >= 1 && validDiscount(disc)
     return { l, qty, disc, ok, gone: removed.has(l.lineNo) }
   })
   const keptRows = rows.filter((r) => !r.gone)
-  const preview = keptRows.reduce((t, r) => (r.ok ? round2(t + lineTotal(r.l.mrp, r.disc, r.qty)) : t), 0)
+  const preview = keptRows.reduce((t, r) => (r.ok ? round2(t + lineTotal(r.l.mrp, r.disc, r.qty, fixed)) : t), 0)
   const valid = keptRows.length > 0 && keptRows.every((r) => r.ok)
 
   const approve = useMutation({
     mutationFn: () => approveBulkOrder(id!, {
-      lines: keptRows.filter((r) => r.qty !== r.l.qty || r.disc !== r.l.discountPct).map((r) => ({ lineNo: r.l.lineNo, qty: r.qty, discountPct: r.disc })),
+      lines: keptRows.filter((r) => r.qty !== r.l.qty || r.disc !== r.l.discountPct).map((r) => (fixed !== undefined ? { lineNo: r.l.lineNo, qty: r.qty } : { lineNo: r.l.lineNo, qty: r.qty, discountPct: r.disc })),
       ...(removed.size ? { removeLines: [...removed] } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
     }),
@@ -179,21 +188,20 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, onClo
   const cancel = useMutation({ mutationFn: () => cancelBulkOrder(id!, reason.trim() || undefined), onSuccess: (r) => done(BULK_TEXT.CANCELLED(r.poNumber))(r), onError: fail })
   const open = !!d && d.status !== BULK_STATUS.REJECTED && d.status !== BULK_STATUS.CANCELLED
   const canUpload = open && (team ? !!teamCanUpload : !!rights && (rights.create.includes(d.type) || rights.approve))
-  const canPay = open && !team && !!rights?.approve && !!d?.payment
-  const kind = docKind || (d?.payment ? BULK_DOC_KIND.PAYMENT_PROOF : BULK_DOC_KIND.PROFORMA)
+  // who verifies payments (2026-11-13): the special permission, in the portal and in POST_FG (was the portal approver)
+  const canPay = open && !!d?.payment && (team ? !!teamCanVerifyPayment : !!rights?.verifyPayment)
   const upload = useMutation({
-    mutationFn: (file: File) => uploadBulkDocument(id!, kind, file, team),
-    onSuccess: (r) => { done(BULK_TEXT.UPLOADED(r.documents[0]?.fileName ?? ''))(r); setDocKind('') },
+    mutationFn: ({ kind, file }: { kind: string; file: File }) => uploadBulkDocument(id!, kind, file, team),
+    onSuccess: (r) => done(BULK_TEXT.UPLOADED(r.documents[0]?.fileName ?? ''))(r),
     onError: fail,
   })
-  const pick = (f: File | undefined) => {
-    if (!f) return
+  const pick = (kind: string, f: File) => {
     if (f.size > BULK_DOC_MAX_BYTES) { setError(BULK_TEXT.TOO_BIG); return }
     setError('')
-    upload.mutate(f)
+    upload.mutate({ kind, file: f })
   }
   const pay = useMutation({
-    mutationFn: (action: BulkPaymentAction) => setBulkPayment(id!, action, payNote.trim() || undefined),
+    mutationFn: ({ action, note: n }: { action: BulkPaymentAction; note: string }) => setBulkPayment(id!, action, n.trim() || undefined, team),
     onSuccess: (r) => done(BULK_TEXT.PAYMENT_SAVED(BULK_PAYMENT_LABEL[r.payment?.status ?? ''] ?? ''))(r),
     onError: fail,
   })
@@ -219,7 +227,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, onClo
         {canChange && <button disabled={busy} onClick={() => setAsk('cancel')} className={`${btn} mr-auto text-crit hover:bg-crit-soft`}>{BULK_TEXT.CANCEL_ORDER}</button>}
         {canChange && <button disabled={busy} onClick={() => d && onEdit?.(d)} className={`${btn} border border-line`}>{BULK_TEXT.EDIT}</button>}
         {canDecide && <button disabled={busy} onClick={() => setAsk('reject')} className={`${btn} border border-crit text-crit`}>{BULK_TEXT.REJECT}</button>}
-        {canDecide && <button disabled={busy || !valid} onClick={() => approve.mutate()} className={`${btn} bg-ok text-white`}>{BULK_TEXT.APPROVE}{valid ? ` · ${rupees(preview)}` : ''}</button>}
+        {canDecide && <button disabled={busy || !valid} onClick={() => approve.mutate()} className={`${btn} bg-ok text-white`}>{BULK_TEXT.APPROVE}{valid && !noMoney ? ` · ${rupees(preview)}` : ''}</button>}
       </>
     )
   ) : undefined
@@ -244,8 +252,10 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, onClo
               {row(BULK_TEXT.CREATED_BY, `${d.createdBy.name ?? ''} · ${when(d.createdAt)}`)}
               {row(BULK_TEXT.PRIORITY, d.priority)}
               {d.mode && row(BULK_TEXT.MODE, d.mode)}
-              {row(BULK_TEXT.TOTAL_MRP, rupees(d.totalMrp))}
-              {row(BULK_TEXT.TOTAL_VALUE, <strong>{rupees(d.totalValue)}</strong>)}
+              {noMoney ? row(BULK_TEXT.COL_QTY, `${d.totalUnits} ${BULK_TEXT.TOTAL_UNITS}`) : <>
+                {row(BULK_TEXT.TOTAL_MRP, rupees(d.totalMrp))}
+                {row(BULK_TEXT.TOTAL_VALUE, <strong>{rupees(d.totalValue)}</strong>)}
+              </>}
               {d.note && <p className="mt-2 rounded-md bg-alt px-3 py-2 text-[12px] text-ink-600">{d.note}</p>}
             </section>
             <section>
@@ -274,33 +284,39 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, onClo
 
           <section>
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{BULK_TEXT.DRAWER_LINES} ({d.lines.length})</h3>
-            {canDecide && <p className="mb-2 text-[12px] text-ink-600">{BULK_TEXT.APPROVE_HINT}</p>}
+            {canDecide && <p className="mb-2 text-[12px] text-ink-600">{fixed !== undefined ? BULK_TEXT.APPROVE_HINT_QTY_ONLY : BULK_TEXT.APPROVE_HINT}</p>}
             <div className="overflow-x-auto rounded-md border border-line">
-              <table className="w-full min-w-[640px] text-left text-[13px]">
+              <table className={`w-full ${noMoney ? 'min-w-[420px]' : 'min-w-[640px]'} text-left text-[13px]`}>
                 <thead className="bg-alt/60 text-[11px] font-semibold uppercase text-ink-600">
-                  <tr><th className="px-3 py-2">{BULK_TEXT.COL_SKU}</th><th className="px-3 py-2 text-right">{BULK_TEXT.COL_MRP}</th><th className="px-3 py-2 text-right">{BULK_TEXT.COL_QTY}</th><th className="px-3 py-2 text-right">{BULK_TEXT.COL_DISCOUNT}</th><th className="px-3 py-2 text-right">{BULK_TEXT.COL_PRICE}</th><th className="px-3 py-2 text-right">{BULK_TEXT.COL_TOTAL}</th>{canDecide && <th className="w-8" />}</tr>
+                  <tr><th className="px-3 py-2">{BULK_TEXT.COL_SKU}</th>{!noMoney && <th className="px-3 py-2 text-right">{BULK_TEXT.COL_MRP}</th>}<th className="px-3 py-2 text-right">{BULK_TEXT.COL_QTY}</th>{!noMoney && <><th className="px-3 py-2 text-right">{BULK_TEXT.COL_DISCOUNT}</th><th className="px-3 py-2 text-right">{BULK_TEXT.COL_PRICE}</th><th className="px-3 py-2 text-right">{BULK_TEXT.COL_TOTAL}</th></>}{canDecide && <th className="w-8" />}</tr>
                 </thead>
                 <tbody>
                   {rows.map(({ l, qty, disc, ok, gone }) => (
                     <tr key={l.lineNo} className={`border-t border-line ${gone ? 'opacity-40 line-through' : ''}`}>
                       <td className="px-3 py-2"><div className="font-mono text-[12px] font-semibold">{l.pepCode}</div><div className="text-[11px] text-ink-600">{l.name}</div>
-                        {(l.qty !== l.requestedQty || l.discountPct !== l.requestedDiscountPct) && <div className="text-[11px] text-warn">{BULK_TEXT.CHANGED_BY_APPROVER(l.requestedQty, l.requestedDiscountPct)}</div>}</td>
-                      <td className="px-3 py-2 text-right tnum">{rupees(l.mrp)}</td>
+                        {fixed !== undefined
+                          ? l.qty !== l.requestedQty && <div className="text-[11px] text-warn">{BULK_TEXT.ASKED_QTY(l.requestedQty)}</div>
+                          : (l.qty !== l.requestedQty || l.discountPct !== l.requestedDiscountPct) && <div className="text-[11px] text-warn">{BULK_TEXT.CHANGED_BY_APPROVER(l.requestedQty, l.requestedDiscountPct)}</div>}</td>
+                      {!noMoney && <td className="px-3 py-2 text-right tnum">{rupees(l.mrp)}</td>}
                       {canDecide && !gone ? (
                         <>
                           <td className="w-24 px-2 py-1.5"><input type="number" min={1} step={1} className={`${input} ${Number.isInteger(qty) && qty >= 1 ? '' : 'border-crit'}`} value={edits[l.lineNo]?.qty ?? String(l.qty)}
                             onChange={(e) => setEdits({ ...edits, [l.lineNo]: { qty: e.target.value, discount: edits[l.lineNo]?.discount ?? String(l.discountPct) } })} /></td>
-                          <td className="w-24 px-2 py-1.5"><input type="number" min={0} max={100} step={0.01} className={`${input} ${validDiscount(disc) ? '' : 'border-crit'}`} value={edits[l.lineNo]?.discount ?? String(l.discountPct)}
-                            onChange={(e) => setEdits({ ...edits, [l.lineNo]: { qty: edits[l.lineNo]?.qty ?? String(l.qty), discount: e.target.value } })} /></td>
+                          {!noMoney && (fixed !== undefined
+                            ? <td className="px-3 py-2 text-right tnum">0%</td>
+                            : <td className="w-24 px-2 py-1.5"><input type="number" min={0} max={100} step={0.01} className={`${input} ${validDiscount(disc) ? '' : 'border-crit'}`} value={edits[l.lineNo]?.discount ?? String(l.discountPct)}
+                              onChange={(e) => setEdits({ ...edits, [l.lineNo]: { qty: edits[l.lineNo]?.qty ?? String(l.qty), discount: e.target.value } })} /></td>)}
                         </>
                       ) : (
                         <>
                           <td className="px-3 py-2 text-right tnum">{l.qty}</td>
-                          <td className="px-3 py-2 text-right tnum">{l.discountPct}%</td>
+                          {!noMoney && <td className="px-3 py-2 text-right tnum">{l.discountPct}%</td>}
                         </>
                       )}
-                      <td className="px-3 py-2 text-right tnum">{ok ? rupees(priceAfterDiscount(l.mrp, disc)) : '–'}</td>
-                      <td className="px-3 py-2 text-right font-semibold tnum">{ok ? rupees(lineTotal(l.mrp, disc, qty)) : '–'}</td>
+                      {!noMoney && <>
+                        <td className="px-3 py-2 text-right tnum">{ok ? rupees(unitPrice(l.mrp, disc, fixed)) : '–'}</td>
+                        <td className="px-3 py-2 text-right font-semibold tnum">{ok ? rupees(lineTotal(l.mrp, disc, qty, fixed)) : '–'}</td>
+                      </>}
                       {canDecide && (
                         <td className="px-1 text-right">
                           <button title={gone ? BULK_TEXT.RESTORE_LINE : BULK_TEXT.REMOVE_LINE} disabled={!gone && keptRows.length === 1}
@@ -318,47 +334,8 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, onClo
             )}
           </section>
 
-          {(d.documents.length > 0 || canUpload || canPay) && (
-            <section>
-              <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{BULK_TEXT.DOCUMENTS}</h3>
-              <p className="mb-2 text-[12px] text-ink-600">{BULK_TEXT.DOCUMENTS_SUB}</p>
-              <div className="divide-y divide-line rounded-md border border-line">
-                {d.documents.map((doc) => (
-                  <div key={doc.id} className={`flex items-center gap-3 px-3 py-2 text-[13px] ${doc.replacedAt ? 'opacity-50' : ''}`}>
-                    <FileText className="size-4 shrink-0 text-ink-400" />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{doc.fileName}{doc.replacedAt && <span className="ml-2 text-[11px] font-normal text-ink-400">({BULK_TEXT.REPLACED})</span>}</div>
-                      <div className="text-[11px] text-ink-600">{BULK_DOC_KIND_LABEL[doc.kind] ?? doc.kind} · {doc.by.name} · {when(doc.at)}</div>
-                    </div>
-                    <a href={bulkDocumentUrl(d.id, doc.id, team)} target="_blank" rel="noreferrer" className="text-[12px] font-semibold text-primary">{BULK_TEXT.VIEW}</a>
-                  </div>
-                ))}
-                {!d.documents.length && <div className="px-3 py-3 text-[12px] text-ink-400">{BULK_TEXT.NO_DOCUMENTS}</div>}
-              </div>
-              {canUpload && (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <select value={kind} onChange={(e) => setDocKind(e.target.value)} className="rounded-md border border-line bg-surface px-2 py-1.5 text-[13px]">
-                    {Object.values(BULK_DOC_KIND).map((k) => <option key={k} value={k}>{BULK_DOC_KIND_LABEL[k]}</option>)}
-                  </select>
-                  <label className={`${btn} inline-flex cursor-pointer items-center gap-1.5 border border-line ${busy ? 'pointer-events-none opacity-50' : 'hover:bg-alt'}`}>
-                    <Upload className="size-3.5" />{upload.isPending ? BULK_TEXT.UPLOADING : BULK_TEXT.UPLOAD}
-                    <input type="file" accept={BULK_DOC_ACCEPT} className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />
-                  </label>
-                </div>
-              )}
-              {canPay && d.payment && (
-                <div className="mt-3 rounded-md bg-alt/60 p-3">
-                  <p className="mb-2 text-[12px] text-ink-600">{BULK_TEXT.PAYMENT_HINT}</p>
-                  <input className="mb-2 w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-primary" placeholder={BULK_TEXT.PAYMENT_NOTE} value={payNote} onChange={(e) => setPayNote(e.target.value)} />
-                  <div className="flex flex-wrap gap-2">
-                    {d.payment.status === BULK_PAYMENT.UPLOADED && <button disabled={busy} onClick={() => pay.mutate(BULK_PAYMENT_ACTION.VERIFY)} className={`${btn} bg-ok text-white`}>{BULK_TEXT.VERIFY_PAYMENT}</button>}
-                    {d.payment.status === BULK_PAYMENT.UPLOADED && <button disabled={busy || !payNote.trim()} onClick={() => pay.mutate(BULK_PAYMENT_ACTION.REFUSE)} className={`${btn} border border-crit text-crit`}>{BULK_TEXT.REFUSE_PROOF}</button>}
-                    {d.payment.status !== BULK_PAYMENT.NOT_NEEDED && <button disabled={busy} onClick={() => pay.mutate(BULK_PAYMENT_ACTION.NOT_NEEDED)} className={`${btn} border border-line`}>{BULK_TEXT.PAYMENT_NOT_NEEDED}</button>}
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
+          <BulkDocumentsSection d={d} canUpload={canUpload} canPay={canPay} busy={busy} uploading={upload.isPending}
+            onUpload={pick} onOpen={setViewDoc} onPay={(action, n) => pay.mutate({ action, note: n })} />
 
           {d.events.length > 0 && (
             <section className="rounded-md border border-line">
@@ -366,10 +343,14 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, onClo
                 {BULK_TEXT.TIMELINE} ({d.events.length})
                 <ChevronDown className={`size-4 transition-transform ${history ? 'rotate-180' : ''}`} />
               </button>
-              {history && <div className="border-t border-line px-3 py-3"><Timeline events={d.events} /></div>}
+              {history && <div className="border-t border-line px-3 py-3"><Timeline events={d.events} noMoney={noMoney} /></div>}
             </section>
           )}
         </div>
+      )}
+      {d && viewDoc && d.documents.some((x) => x.id === viewDoc) && (
+        <BulkDocumentViewer d={d} docId={viewDoc} team={team} canPay={canPay} busy={busy}
+          onPay={(action, n) => pay.mutate({ action, note: n })} onClose={() => setViewDoc(null)} />
       )}
     </Drawer>
   )

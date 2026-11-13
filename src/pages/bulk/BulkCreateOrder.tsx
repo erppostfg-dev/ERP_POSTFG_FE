@@ -5,7 +5,7 @@ import { Plus, Search, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import { createBulkOrder, listBulkLocations, updateBulkOrder, searchBulkSkus, type BulkOrderFull, type BulkOrderInput, type BulkSku } from '../../api/bulkOrders'
 import { Modal } from '../../components/ui'
-import { BULK_INSTITUTION_RE, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
+import { BULK_INSTITUTION_RE, bulkHidesMoney, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
 import { lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
 
 /*
@@ -44,7 +44,7 @@ function Choice<T extends string>({ value, options, onChange }: { value: T; opti
 }
 
 /** SKU search box with a result list (code / name / EAN; active SKUs with an MRP only). */
-function SkuPicker({ value, taken, onPick }: { value: BulkSku | null; taken: Set<string>; onPick: (s: BulkSku) => void }) {
+function SkuPicker({ value, taken, onPick, hideMrp = false }: { value: BulkSku | null; taken: Set<string>; onPick: (s: BulkSku) => void; hideMrp?: boolean }) {
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -99,7 +99,7 @@ function SkuPicker({ value, taken, onPick }: { value: BulkSku | null; taken: Set
                 onClick={() => { onPick(s); setOpen(false); setText('') }}
                 className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left hover:bg-alt disabled:opacity-40">
                 <span className="min-w-0"><span className="block font-mono text-[12px] font-semibold">{s.pepCode}</span><span className="block truncate text-[11px] text-ink-600">{s.name}</span></span>
-                <span className="text-[12px] tnum text-ink-900">{rupees(s.mrp)}</span>
+                {!hideMrp && <span className="text-[12px] tnum text-ink-900">{rupees(s.mrp)}</span>}
               </button>
             ))}
         </div>,
@@ -138,7 +138,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const setLine = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
   const taken = useMemo(() => new Set(lines.flatMap((l) => (l.sku ? [l.sku.pepCode] : []))), [lines])
 
-  const parsed = lines.map((l) => ({ ...l, q: Number(l.qty), d: l.discount === '' ? 0 : Number(l.discount) }))
+  const parsed = lines.map((l) => ({ ...l, q: Number(l.qty), d: l.discount === '' || bulkHidesMoney(type) ? 0 : Number(l.discount) }))
   const lineOk = (l: (typeof parsed)[number]) => !!l.sku && Number.isInteger(l.q) && l.q >= 1 && validDiscount(l.d)
   const itemsOk = parsed.length > 0 && parsed.every(lineOk)
   const totals = parsed.reduce((t, l) => (l.sku && lineOk(l) ? { units: t.units + l.q, mrp: round2(t.mrp + l.sku.mrp * l.q), value: round2(t.value + lineTotal(l.sku.mrp, l.d, l.q)) } : t), { units: 0, mrp: 0, value: 0 })
@@ -146,6 +146,8 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const phone = normalPhone(form.receiverPhone)
   const addressOk = where !== 'new' || (!!address.line.trim() && !!address.city.trim() && !!address.state.trim() && /^[1-9]\d{5}$/.test(address.pincode.trim()))
   const isInst = type === BULK_TYPE.INSTITUTIONAL
+  // Marketing (2026-11-13): every unit ₹1 on the server, no discount; the portal shows SKU + qty only
+  const noMoney = bulkHidesMoney(type)
   const gstinBad = !!inst.gstin.trim() && !GSTIN_RE.test(inst.gstin.trim().toUpperCase())
   const emailBad = !!inst.email.trim() && !EMAIL_RE.test(inst.email.trim())
   const billingOk = inst.same || (!!inst.billing.line.trim() && !!inst.billing.city.trim() && !!inst.billing.state.trim() && /^[1-9]\d{5}$/.test(inst.billing.pincode.trim()))
@@ -178,7 +180,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       ...(type === BULK_TYPE.MARKETING ? { mode: form.mode } : {}),
       priority: form.priority,
       ...(form.note.trim() ? { note: form.note.trim() } : {}),
-      lines: parsed.map((l) => ({ pepCode: l.sku!.pepCode, qty: l.q, discountPct: l.d })),
+      lines: parsed.map((l) => (noMoney ? { pepCode: l.sku!.pepCode, qty: l.q } : { pepCode: l.sku!.pepCode, qty: l.q, discountPct: l.d })),
       ...(isInst ? {
         institutionName: inst.name.trim(),
         ...(inst.gstin.trim() ? { gstin: inst.gstin.trim().toUpperCase() } : {}),
@@ -226,11 +228,13 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       {step === 1 && (
         <div>
           <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.ITEMS_TITLE}</h3>
-          <p className="mb-3 text-[12px] text-ink-600">{BULK_TEXT.ITEMS_SUB}</p>
+          <p className="mb-3 text-[12px] text-ink-600">{noMoney ? BULK_TEXT.ITEMS_SUB_QTY_ONLY : BULK_TEXT.ITEMS_SUB}</p>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-[13px]">
+            <table className={`w-full ${noMoney ? 'min-w-[480px]' : 'min-w-[720px]'} text-left text-[13px]`}>
               <thead className="text-[11px] font-semibold uppercase text-ink-600">
-                <tr><th className="w-8 py-1.5">#</th><th className="py-1.5">{BULK_TEXT.COL_SKU}</th><th className="py-1.5 text-right">{BULK_TEXT.COL_MRP}</th><th className="w-24 py-1.5 pl-3">{BULK_TEXT.COL_QTY}</th><th className="w-28 py-1.5 pl-3">{BULK_TEXT.COL_DISCOUNT}</th><th className="py-1.5 text-right">{BULK_TEXT.COL_PRICE}</th><th className="py-1.5 text-right">{BULK_TEXT.COL_TOTAL}</th><th className="w-8" /></tr>
+                {noMoney
+                  ? <tr><th className="w-8 py-1.5">#</th><th className="py-1.5">{BULK_TEXT.COL_SKU}</th><th className="w-28 py-1.5 pl-3">{BULK_TEXT.COL_QTY}</th><th className="w-8" /></tr>
+                  : <tr><th className="w-8 py-1.5">#</th><th className="py-1.5">{BULK_TEXT.COL_SKU}</th><th className="py-1.5 text-right">{BULK_TEXT.COL_MRP}</th><th className="w-24 py-1.5 pl-3">{BULK_TEXT.COL_QTY}</th><th className="w-28 py-1.5 pl-3">{BULK_TEXT.COL_DISCOUNT}</th><th className="py-1.5 text-right">{BULK_TEXT.COL_PRICE}</th><th className="py-1.5 text-right">{BULK_TEXT.COL_TOTAL}</th><th className="w-8" /></tr>}
               </thead>
               <tbody>
                 {parsed.map((l, i) => {
@@ -239,12 +243,14 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
                   return (
                     <tr key={l.key} className="border-t border-line align-top">
                       <td className="py-2 text-[11px] text-ink-400">{String(i + 1).padStart(2, '0')}</td>
-                      <td className="py-2 pr-2"><SkuPicker value={l.sku} taken={taken} onPick={(s) => setLine(l.key, { sku: s })} /></td>
-                      <td className="py-2 text-right tnum">{l.sku ? rupees(l.sku.mrp) : '–'}</td>
+                      <td className="py-2 pr-2"><SkuPicker value={l.sku} taken={taken} hideMrp={noMoney} onPick={(s) => setLine(l.key, { sku: s })} /></td>
+                      {!noMoney && <td className="py-2 text-right tnum">{l.sku ? rupees(l.sku.mrp) : '–'}</td>}
                       <td className="py-2 pl-3"><input type="number" min={1} step={1} value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} className={`${input} ${badQty ? 'border-crit' : ''}`} /></td>
-                      <td className="py-2 pl-3"><input type="number" min={0} max={100} step={0.01} value={l.discount} onChange={(e) => setLine(l.key, { discount: e.target.value })} className={`${input} ${badD ? 'border-crit' : ''}`} /></td>
-                      <td className="py-2 text-right tnum">{l.sku && !badD ? rupees(priceAfterDiscount(l.sku.mrp, l.d)) : '–'}</td>
-                      <td className="py-2 text-right font-semibold tnum">{l.sku && !badD && !badQty ? rupees(lineTotal(l.sku.mrp, l.d, l.q)) : '–'}</td>
+                      {!noMoney && <>
+                        <td className="py-2 pl-3"><input type="number" min={0} max={100} step={0.01} value={l.discount} onChange={(e) => setLine(l.key, { discount: e.target.value })} className={`${input} ${badD ? 'border-crit' : ''}`} /></td>
+                        <td className="py-2 text-right tnum">{l.sku && !badD ? rupees(priceAfterDiscount(l.sku.mrp, l.d)) : '–'}</td>
+                        <td className="py-2 text-right font-semibold tnum">{l.sku && !badD && !badQty ? rupees(lineTotal(l.sku.mrp, l.d, l.q)) : '–'}</td>
+                      </>}
                       <td className="py-2 text-right">
                         <button type="button" disabled={lines.length === 1} onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} className="rounded p-1 text-ink-400 hover:text-crit disabled:opacity-30"><Trash2 className="size-4" /></button>
                       </td>
@@ -340,11 +346,17 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
               {parsed.map((l) => l.sku && (
                 <tr key={l.key} className="border-t border-line">
                   <td className="py-1.5"><span className="font-mono text-[12px] font-semibold">{l.sku.pepCode}</span> <span className="text-ink-600">{l.sku.name}</span></td>
-                  <td className="py-1.5 text-right tnum">{l.q} × {rupees(priceAfterDiscount(l.sku.mrp, l.d))}{l.d ? <span className="text-ink-400"> ({l.d}% off {rupees(l.sku.mrp)})</span> : null}</td>
-                  <td className="py-1.5 text-right font-semibold tnum">{rupees(lineTotal(l.sku.mrp, l.d, l.q))}</td>
+                  {noMoney
+                    ? <td className="py-1.5 text-right font-semibold tnum" colSpan={2}>{l.q}</td>
+                    : <>
+                      <td className="py-1.5 text-right tnum">{l.q} × {rupees(priceAfterDiscount(l.sku.mrp, l.d))}{l.d ? <span className="text-ink-400"> ({l.d}% off {rupees(l.sku.mrp)})</span> : null}</td>
+                      <td className="py-1.5 text-right font-semibold tnum">{rupees(lineTotal(l.sku.mrp, l.d, l.q))}</td>
+                    </>}
                 </tr>
               ))}
-              <tr className="border-t border-line"><td className="py-2 text-ink-600">{BULK_TEXT.TOTAL_MRP} {rupees(totals.mrp)}</td><td className="py-2 text-right text-ink-600">{totals.units} {BULK_TEXT.TOTAL_UNITS}</td><td className="py-2 text-right text-[14px] font-semibold tnum">{rupees(totals.value)}</td></tr>
+              {noMoney
+                ? <tr className="border-t border-line"><td className="py-2" /><td className="py-2 text-right text-[14px] font-semibold text-ink-900" colSpan={2}>{totals.units} {BULK_TEXT.TOTAL_UNITS}</td></tr>
+                : <tr className="border-t border-line"><td className="py-2 text-ink-600">{BULK_TEXT.TOTAL_MRP} {rupees(totals.mrp)}</td><td className="py-2 text-right text-ink-600">{totals.units} {BULK_TEXT.TOTAL_UNITS}</td><td className="py-2 text-right text-[14px] font-semibold tnum">{rupees(totals.value)}</td></tr>}
             </tbody>
           </table>
         </div>

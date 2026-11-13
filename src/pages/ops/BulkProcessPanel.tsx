@@ -3,7 +3,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { ApiError } from '../../api/client'
 import { TreeSelect } from '../../components/pickers'
 import { getBulkProcessOptions, processBulkOrder, type BulkOrderFull } from '../../api/bulkOrders'
-import { BULK_PAYMENT, BULK_TEXT } from '../../constants/bulkOrders'
+import { BULK_FIXED_PRICE, BULK_PAYMENT, BULK_TEXT } from '../../constants/bulkOrders'
+import { rupees } from '../../lib/bulkPrice'
 
 /*
  * Bulk Orders step 3b (2026-11-12, POST_FG PO Processing & Review > Bulk Orders, PO review editors): an APPROVED
@@ -11,6 +12,8 @@ import { BULK_PAYMENT, BULK_TEXT } from '../../constants/bulkOrders'
  * creates the customer in Uniware first) -> Create sale order (a normal saved PO: Processed tab, PO Overview; no Verify
  * step). A customer processed before (same GSTIN, or same name + pincode) is offered: one click fills channel + code.
  * Payment is shown, never blocks.
+ * Marketing (2026-11-13): the same panel; every unit at ₹1 (BULK_FIXED_PRICE), channel (e.g. Jiva) + customer code typed
+ * for now (user: auto-filled later); no customer book suggestions (no institution).
  */
 
 const input = 'w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-primary'
@@ -27,12 +30,14 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
   })
   const ready = !!f.facilityCode && !!f.uniwareChannel.trim() && !!f.customerCode.trim()
   const warehouses = useMemo(() => (opts.data?.facilities ?? []).map((w) => ({ value: w.code, label: w.code, sub: w.name, parent: w.parentCode })), [opts.data])
+  const fixed = BULK_FIXED_PRICE[d.type]
   const unpaid = !!d.payment && d.payment.status !== BULK_PAYMENT.VERIFIED && d.payment.status !== BULK_PAYMENT.NOT_NEEDED
 
   return (
     <section className="rounded-md border border-primary/40 bg-primary-soft/30 p-3">
       <h3 className="text-[13px] font-semibold text-ink-900">{BULK_TEXT.PROCESS_TITLE}</h3>
       <p className="mb-3 text-[12px] text-ink-600">{BULK_TEXT.PROCESS_SUB}</p>
+      {fixed !== undefined && <p className="mb-3 rounded-md bg-primary-soft px-3 py-1.5 text-[12px] text-ink-600">{BULK_TEXT.FIXED_PRICE_NOTE(rupees(fixed))}</p>}
       {unpaid && <p className="mb-3 rounded-md bg-warn-soft px-3 py-1.5 text-[12px] text-ink-600">{BULK_TEXT.PAYMENT_PENDING_NOTE}</p>}
       {opts.isError && <p className="mb-2 text-[12px] text-crit">{opts.error.message}</p>}
 

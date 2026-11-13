@@ -160,6 +160,8 @@ export const FILE_VIEWER = { MAX_ROWS: 2000, MAX_COLS: 100, DETAILS: 'Details', 
 
 /** In-app file viewer texts. */
 export const FILE_VIEWER_TEXT = {
+  IMAGE_FULL: 'Click to zoom in (move the mouse to look around)',
+  IMAGE_FIT: 'Click to zoom out',
   LOADING: 'Loading the file…',
   FAILED: 'Could not read this file here. Download it to view it.',
   EMPTY: 'This sheet is empty.',
@@ -191,6 +193,11 @@ export const PDF_VIEWER = { ZOOM_STEPS: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 
 
 /** The full-screen "View" opens PDFs at 50% of fit-to-width, so the whole page shows at once (user, 2026-10-21). */
 export const FULL_SCREEN_PDF_ZOOM = 0.5
+/** A bulk order document in its window (2026-11-13): a whole A4 page shows at once. */
+export const DOCUMENT_PDF_ZOOM = 0.75
+/** An image click zooms it this much in place (2026-11-13: full size was far too big); the window leaves after this many ms. */
+export const IMAGE_ZOOM = 1.8
+export const DIALOG_OUT_MS = 180
 
 /** Search in the viewer: waits this long after the last key before searching. */
 export const FIND_DEBOUNCE_MS = 250

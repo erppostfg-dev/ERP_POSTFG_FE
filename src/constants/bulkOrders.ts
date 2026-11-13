@@ -25,6 +25,7 @@ export const BULK_ENDPOINT = {
   /** Step 3b (2026-11-12): warehouses + matching saved customers; create the sale order (PO review editor). */
   TEAM_PROCESS_OPTIONS: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/process-options`,
   TEAM_PROCESS: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/process`,
+  TEAM_PAYMENT: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/payment`,
   /** Sign-in started here comes back to the portal (backend BULK_PORTAL_URL). */
   GOOGLE: '/auth/google?app=bulk',
 } as const
@@ -49,8 +50,16 @@ export const BULK_INSTITUTION_RE = {
   GSTIN: /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/,
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
 } as const
-/** Order types our team can process into a sale order now (backend BULK_SALE.TYPES; Marketing next). */
-export const BULK_PROCESS_TYPES: BulkType[] = [BULK_TYPE.INSTITUTIONAL]
+/** Order types our team can process into a sale order now (backend BULK_SALE.TYPES; Marketing since 2026-11-13). */
+export const BULK_PROCESS_TYPES: BulkType[] = [BULK_TYPE.INSTITUTIONAL, BULK_TYPE.MARKETING]
+/**
+ * Fixed price per unit by type (backend BULK_ORDERS.FIXED_UNIT_PRICE; user 2026-11-13, Marketing: every unit ₹1, no
+ * discount, "don't show the amount to them"): the PORTAL shows no MRP / discount / price / totals for these types (only
+ * SKU + qty); our team in POST_FG sees the ₹1 prices.
+ */
+export const BULK_FIXED_PRICE: Partial<Record<BulkType, number>> = { [BULK_TYPE.MARKETING]: 1 }
+/** The portal hides every amount on orders of this type. */
+export const bulkHidesMoney = (type: string): boolean => BULK_FIXED_PRICE[type as BulkType] !== undefined
 
 /** Timeline words per event (backend BULK_EVENT). */
 export const BULK_EVENT_LABEL: Record<string, string> = {
@@ -60,7 +69,7 @@ export const BULK_EVENT_LABEL: Record<string, string> = {
 
 /**
  * Payment check (backend BULK_PAYMENT_STATUS, 2026-11-12): only orders whose type has it ON (Settings); never blocks
- * approval or processing; the approver verifies / refuses the proof or marks it not needed.
+ * approval or processing; people with "Bulk Orders: verify payments" verify / refuses the proof or marks it not needed.
  */
 export const BULK_PAYMENT = { AWAITING: 'awaiting_proof', UPLOADED: 'proof_uploaded', VERIFIED: 'verified', REFUSED: 'refused', NOT_NEEDED: 'not_needed' } as const
 export const BULK_PAYMENT_LABEL: Record<string, string> = {
@@ -74,6 +83,8 @@ export type BulkPaymentAction = (typeof BULK_PAYMENT_ACTION)[keyof typeof BULK_P
 
 /** Documents on an order (backend BULK_DOC_KIND); PDF / PNG / JPG up to 10 MB. */
 export const BULK_DOC_KIND = { PROFORMA: 'proforma_invoice', INVOICE: 'invoice', PAYMENT_PROOF: 'payment_proof' } as const
+/** A document's content type -> the file viewer's type (the name may have no extension). */
+export const BULK_DOC_EXT: Record<string, string> = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg' }
 export const BULK_DOC_KIND_LABEL: Record<string, string> = { proforma_invoice: 'Proforma invoice', invoice: 'Invoice', payment_proof: 'Proof of payment' }
 export const BULK_DOC_ACCEPT = '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg'
 export const BULK_DOC_MAX_BYTES = 10 * 1024 * 1024
@@ -135,6 +146,7 @@ export const BULK_TEXT = {
   STEPS: ['Order items', 'Delivery details', 'Review & submit'],
   ITEMS_TITLE: 'What would you like to order?',
   ITEMS_SUB: 'Search our SKUs by code, name or EAN. The MRP fills in; add your discount % per SKU.',
+  ITEMS_SUB_QTY_ONLY: 'Search our SKUs by code, name or EAN and type the quantity of each.',
   SKU_SEARCH: 'Search SKU code, name or EAN',
   SKU_NONE: 'No active SKU with an MRP matches',
   SKU_TYPE_MORE: 'Type at least 2 characters of the SKU code, name or EAN',
@@ -198,6 +210,8 @@ export const BULK_TEXT = {
   TEAM_TAB: 'Bulk Orders',
   TEAM_SUB: 'Marketing and Institutional orders from the Bulk Orders portal. Approved ones wait for our team; processing them (warehouse, customer code, sale order) comes next.',
   TEAM_ALL: 'All',
+  /** POST_FG Bulk Orders filter (2026-11-13): proofs of payment waiting to be checked. */
+  PAYMENTS_TO_VERIFY: 'Payments to verify',
   TEAM_WAITING: (n: number) => `${n} approved, waiting for us`,
   COL_APPROVED: 'Approved by',
   LOCATION_SAVED: (label: string) => `"${label}" saved`,
@@ -213,6 +227,8 @@ export const BULK_TEXT = {
   KEEP: 'Keep it',
   APPROVE: 'Approve',
   APPROVE_HINT: "Change a quantity or discount if needed; prices are worked out again on today's MRP when you approve.",
+  APPROVE_HINT_QTY_ONLY: 'Change a quantity or remove a SKU if needed, then approve.',
+  ASKED_QTY: (qty: number) => `Asked: ${qty}`,
   APPROVER_NOTE: 'Note for the requester (optional)',
   REJECT: 'Reject',
   REJECT_REASON: 'Reason (required)',
@@ -236,15 +252,31 @@ export const BULK_TEXT = {
   REPLACED: 'replaced',
   PAYMENT_NOTE: 'Note (required to refuse)',
   VERIFY_PAYMENT: 'Verify payment',
+  VERIFY_HERE: 'Check the proof on the left against the order, then verify it or refuse it with a reason.',
+  CHECKED_BY: 'Checked by',
   REFUSE_PROOF: 'Refuse proof',
   PAYMENT_NOT_NEEDED: 'Payment not needed',
+  /** Payment card + documents (2026-11-13, BulkDocumentsSection). */
+  DOCUMENTS_ONLY: 'Documents',
+  PAY_AWAITING: 'Waiting for the proof of payment',
+  PAY_AWAITING_SUB: 'Upload it below when it comes. It never holds the order.',
+  PAY_UPLOADED: 'Proof uploaded · waiting to be checked',
+  PAY_UPLOADED_SUB: 'Open the proof to check it against the order.',
+  PAY_VERIFIED: 'Payment verified',
+  PAY_REFUSED: 'Proof refused',
+  PAY_REFUSED_SUB: 'Upload a new proof below.',
+  PAY_NOT_NEEDED: 'Payment not needed',
+  PAY_BY: (name: string, at: string) => `by ${name} · ${at}`,
+  REVIEW_VERIFY: 'Review & verify',
+  DROP_FILE: (kind: string) => `Drop the ${kind.toLowerCase()} here, or click to choose`,
+  DROP_TYPES: 'PDF, PNG or JPG · up to 10 MB · a new file of the same kind replaces the old one (kept)',
   PAYMENT_SAVED: (label: string) => `Payment: ${label}`,
   PAYMENT_HINT: 'Payment never holds the order: approve and process as usual, check the proof whenever it comes.',
   COL_PAYMENT: 'Payment',
   // POST_FG Users & Roles -> Settings -> Bulk Orders (central admin)
   SETTINGS_SUB: 'Bulk Orders portal, per order type. A change applies to orders created after it.',
   PAYMENT_CHECK: 'Proof of payment check',
-  PAYMENT_CHECK_HINT: 'ON: new orders get a payment status (awaiting proof); the approver verifies the proof. Never blocks the order.',
+  PAYMENT_CHECK_HINT: 'ON: new orders get a payment status (awaiting proof); people with "Bulk Orders: verify payments" (admin, developer, or a role it is on for) verify the proof. Never blocks the order.',
   CHANGED_BY: (name: string, at: string) => `Changed by ${name} · ${at}`,
   STATUS_TIMELINE: 'Status timeline',
   CLOSED: 'Order closed',
@@ -279,5 +311,6 @@ export const BULK_TEXT = {
   CREATING: 'Creating…',
   CREATED: (code: string) => `Sale order ${code} created`,
   PROCESS_LATER: 'Marketing orders are processed in POST_FG in the next step.',
+  FIXED_PRICE_NOTE: (price: string) => `Every unit goes to Uniware at ${price} (no discount). Type the Uniware channel (e.g. JIVA) and its customer code.`,
   PAYMENT_PENDING_NOTE: 'Payment not verified yet: you can still create the sale order; check payment before dispatch.',
 } as const

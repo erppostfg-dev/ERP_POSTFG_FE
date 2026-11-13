@@ -7,18 +7,20 @@ import { ACCESS, AUTH_ENDPOINTS, ERROR_CODE, LOGIN_ERROR_FALLBACK, LOGIN_ERROR_M
 import { BULK_ENDPOINT, BULK_PAGE, BULK_STATUS, BULK_TEXT, BULK_TYPES } from '../../constants/bulkOrders'
 import BulkOrders from './BulkOrders'
 import BulkLocations from './BulkLocations'
+import { CAPABILITY } from '../../constants/reviewEdit'
 
 /*
  * The Bulk Orders portal (2026-11-11): its own app (src/bulk-main.tsx). Same Google login as POST_FG (the sign-in
  * returns here: /auth/google?app=bulk); what the person may do comes from GET /auth/me's /bulk-orders pages.
  */
 
-type Me = { user: { id: string; name: string; email: string; roleLabels?: Record<string, string>; roles: string[] }; access: Record<string, AccessLevel> }
+type Me = { user: { id: string; name: string; email: string; roleLabels?: Record<string, string>; roles: string[] }; access: Record<string, AccessLevel>; capabilities?: Record<string, boolean> }
 
-const rightsOf = (access: Record<string, AccessLevel>): BulkRights => ({
+const rightsOf = (access: Record<string, AccessLevel>, capabilities: Record<string, boolean> = {}): BulkRights => ({
   view: BULK_TYPES.filter((t) => [ACCESS.VIEWER, ACCESS.EDITOR].includes(access[BULK_PAGE.TYPE[t]] as 'viewer' | 'editor')),
   create: BULK_TYPES.filter((t) => access[BULK_PAGE.TYPE[t]] === ACCESS.EDITOR),
   approve: access[BULK_PAGE.APPROVE] === ACCESS.EDITOR,
+  verifyPayment: !!capabilities[CAPABILITY.BULK_PAYMENT_VERIFY],
 })
 
 type Page = 'orders' | 'approvals' | 'locations'
@@ -63,8 +65,8 @@ export default function BulkApp() {
     return <SignIn error={urlError ?? (code === ERROR_CODE.UNAUTHENTICATED ? undefined : code)} />
   }
 
-  const { user, access } = me.data
-  const rights = rightsOf(access)
+  const { user, access, capabilities } = me.data
+  const rights = rightsOf(access, capabilities)
   const signOut = async () => {
     try {
       await api(AUTH_ENDPOINTS.LOGOUT, { method: 'POST' })

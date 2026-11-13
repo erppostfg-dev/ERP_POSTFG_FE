@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQueries } from '@tanstack/react-query'
 import { ChevronRight, Plus, Search } from 'lucide-react'
 import { listBulkOrders, type BulkOrder, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
 import { Badge, PageTitle } from '../../components/ui'
-import { BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
+import { BULK_STATUS, bulkHidesMoney, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
 import { rupees } from '../../lib/bulkPrice'
 import BulkCreateOrder from './BulkCreateOrder'
 import BulkOrderDrawer from './BulkOrderDrawer'
@@ -130,7 +130,7 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
                     <td className="px-3 py-2.5"><div className="font-medium tnum">{o.totalUnits} {BULK_TEXT.TOTAL_UNITS}</div><div className="text-[11px] text-ink-600">{o.lineCount} SKU{o.lineCount === 1 ? '' : 's'}</div></td>
                     <td className="px-3 py-2.5 whitespace-nowrap">{day(o.neededBy)}</td>
                     <td className="px-3 py-2.5"><div className="max-w-[220px] truncate">{o.location.label ?? o.location.address.line}</div><div className="text-[11px] text-ink-600">{o.location.address.city} {o.location.address.pincode}</div></td>
-                    <td className="px-3 py-2.5 text-right tnum">{rupees(o.totalValue)}</td>
+                    <td className="px-3 py-2.5 text-right tnum">{bulkHidesMoney(o.type) ? '–' : rupees(o.totalValue)}</td>
                     <td className="px-3 py-2.5"><Badge tone={BULK_STATUS_TONE[o.status] ?? 'neutral'}>{BULK_STATUS_LABEL[o.status] ?? o.status}</Badge></td>
                     <td className="px-3 py-2.5 text-ink-400"><ChevronRight className="size-4" /></td>
                   </tr>

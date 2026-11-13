@@ -1,4 +1,5 @@
-import { api, apiForm, apiUrl, apiWithMeta } from './client'
+import { api, ApiError, apiForm, apiUrl, apiWithMeta } from './client'
+import { ERROR_CODE } from '../constants/auth'
 import { BULK_ENDPOINT, BULK_LIMIT, type BulkType } from '../constants/bulkOrders'
 
 /* Bulk Orders portal API (POST_FG routes/bulk-orders.routes.ts, API_REFERENCE #124-129). */
@@ -9,6 +10,8 @@ export interface BulkRights {
   view: BulkType[]
   create: BulkType[]
   approve: boolean
+  /** Special permission "Bulk Orders: verify payments" (2026-11-13; admin / developer, or a role it is on for). */
+  verifyPayment: boolean
 }
 
 export interface BulkAddress { line: string; city: string; state: string; pincode: string }
@@ -108,7 +111,7 @@ export interface BulkOrderInput {
   mode?: string
   priority: string
   note?: string
-  lines: { pepCode: string; qty: number; discountPct: number }[]
+  lines: { pepCode: string; qty: number; discountPct?: number }[]
   /** Institutional only (required: name + billing address or billingSameAsDelivery). */
   institutionName?: string
   gstin?: string
@@ -117,7 +120,7 @@ export interface BulkOrderInput {
   billingAddress?: BulkAddress
 }
 
-export interface BulkListQuery { type?: BulkType | ''; status?: string; q?: string; page?: number; pageSize?: number }
+export interface BulkListQuery { type?: BulkType | ''; status?: string; payment?: string; q?: string; page?: number; pageSize?: number }
 
 const qs = (o: Record<string, string | number | undefined>) => {
   const p = new URLSearchParams()
@@ -149,8 +152,8 @@ export const rejectBulkOrder = (id: string, reason: string) =>
 
 /** POST_FG PO Processing & Review > Bulk Orders (step 3a, PO review access, read only): both types + meta.waiting. */
 export const listTeamBulkOrders = (q: BulkListQuery) =>
-  apiWithMeta<BulkOrder[], { total: number; page: number; pageSize: number; waiting: Record<BulkType, number> }>(
-    `${BULK_ENDPOINT.TEAM}${qs({ type: q.type, status: q.status, q: q.q, page: q.page, pageSize: q.pageSize ?? BULK_LIMIT.PAGE_SIZE })}`,
+  apiWithMeta<BulkOrder[], { total: number; page: number; pageSize: number; waiting: Record<BulkType, number>; paymentsToVerify: Record<BulkType, number> }>(
+    `${BULK_ENDPOINT.TEAM}${qs({ type: q.type, status: q.status, payment: q.payment, q: q.q, page: q.page, pageSize: q.pageSize ?? BULK_LIMIT.PAGE_SIZE })}`,
   )
 export const getTeamBulkOrder = (id: string) => api<BulkOrderFull>(BULK_ENDPOINT.TEAM_ORDER(id))
 /** Step 3b (2026-11-12): warehouses + matching saved customers; create the sale order (PO review editor). */
@@ -165,10 +168,25 @@ export const uploadBulkDocument = (id: string, kind: string, file: File, team = 
   form.append('file', file)
   return apiForm<BulkOrderFull>(team ? BULK_ENDPOINT.TEAM_DOCUMENTS(id) : BULK_ENDPOINT.DOCUMENTS(id), form)
 }
+/** A document's bytes for the in-app viewer (2026-11-13; BulkDocumentViewer). */
+export async function getBulkDocumentBytes(id: string, docId: string, team: boolean, signal?: AbortSignal): Promise<ArrayBuffer> {
+  let res: Response
+  try {
+    res = await fetch(apiUrl(team ? BULK_ENDPOINT.TEAM_DOCUMENT(id, docId) : BULK_ENDPOINT.DOCUMENT(id, docId)), { credentials: 'include', signal })
+  } catch {
+    throw new ApiError(0, ERROR_CODE.NETWORK, 'Cannot reach the server')
+  }
+  if (!res.ok) {
+    const err = (await res.json().catch(() => null) as { error?: { code?: string; message?: string } } | null)?.error
+    throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? res.statusText)
+  }
+  return res.arrayBuffer()
+}
 /** Opens in a new tab (the browser sends the login cookie). */
 export const bulkDocumentUrl = (id: string, docId: string, team = false) => apiUrl(team ? BULK_ENDPOINT.TEAM_DOCUMENT(id, docId) : BULK_ENDPOINT.DOCUMENT(id, docId))
-export const setBulkPayment = (id: string, action: string, note?: string) =>
-  api<BulkOrderFull>(BULK_ENDPOINT.PAYMENT(id), { method: 'POST', body: JSON.stringify(note ? { action, note } : { action }) })
+/** team = POST_FG's route (2026-11-13); both need "Bulk Orders: verify payments". */
+export const setBulkPayment = (id: string, action: string, note?: string, team = false) =>
+  api<BulkOrderFull>(team ? BULK_ENDPOINT.TEAM_PAYMENT(id) : BULK_ENDPOINT.PAYMENT(id), { method: 'POST', body: JSON.stringify(note ? { action, note } : { action }) })
 export const listBulkSettings = () => api<BulkSetting[]>(BULK_ENDPOINT.SETTINGS)
 export const updateBulkSetting = (type: BulkType, paymentCheck: boolean) =>
   api<BulkSetting[]>(BULK_ENDPOINT.SETTING(type), { method: 'PUT', body: JSON.stringify({ paymentCheck }) })

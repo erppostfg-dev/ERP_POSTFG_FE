@@ -6,7 +6,12 @@
  *   that field · Total mismatch -> qty + rate of every line · OCR problem (line) -> that line; (PO) -> everything.
  */
 
-export const CAPABILITY = { PO_REVIEW_EDIT_ALL: 'po-review:edit-all' } as const
+/** Special permissions (backend constants/auth.ts CAPABILITY; Roles tab; admin / developer always). */
+export const CAPABILITY = {
+  PO_REVIEW_EDIT_ALL: 'po-review:edit-all',
+  /** Bulk Orders: verify / refuse a proof of payment or mark it not needed (2026-11-13). */
+  BULK_PAYMENT_VERIFY: 'bulk-orders:verify-payment',
+} as const
 
 export type LineField = 'pep' | 'qty' | 'mrp' | 'rate'
 const ALL: LineField[] = ['pep', 'qty', 'mrp', 'rate']

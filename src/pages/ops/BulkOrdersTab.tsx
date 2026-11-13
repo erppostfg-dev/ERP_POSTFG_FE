@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { ChevronRight, Search } from 'lucide-react'
 import { getTeamBulkOrder, listTeamBulkOrders, type BulkOrder } from '../../api/bulkOrders'
+import { useAuth } from '../../auth/AuthContext'
+import { CAPABILITY } from '../../constants/reviewEdit'
 import { Badge } from '../../components/ui'
-import { BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, BULK_TYPES, type BulkType } from '../../constants/bulkOrders'
+import { BULK_PAYMENT, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, BULK_TYPES, type BulkType } from '../../constants/bulkOrders'
 import { PATHS, URL_PARAM } from '../../constants/pages'
 import { rupees } from '../../lib/bulkPrice'
 import { oneOf, useUrlParam } from '../../lib/urlState'
@@ -14,7 +16,12 @@ import BulkOrderDrawer from '../bulk/BulkOrderDrawer'
  * for our team, READ ONLY (GET /po-review/bulk-orders, PO review access). Approved = waiting for us (the tab count);
  * processing them (warehouse, customer code, Create PO -> the same sale order / CSV chain) is step 3b.
  * 2026-11-12: Payment column (unpaid orders can still be processed) + documents in the drawer (PO review editors upload).
+ * 2026-11-13: "Payments to verify" chip (proof uploaded, open orders; count per type) + Verify / Refuse / Not needed in the
+ * drawer for people with "Bulk Orders: verify payments" (admin / developer now; a role can get it in the Roles tab).
  */
+
+/** The chip key of "Payments to verify" (a payment filter, not an order status). */
+const PAY_CHIP = 'pay'
 
 const STATUS_CHIPS: [string, string][] = [
   [BULK_STATUS.APPROVED, BULK_STATUS_LABEL[BULK_STATUS.APPROVED]],
@@ -30,6 +37,9 @@ export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => vo
   // Marketing / Institutional in the address (?section=), like the other tabs' views
   const [type, setType] = useUrlParam<BulkType>(PATHS.PO_REVIEW, URL_PARAM.SECTION, oneOf(BULK_TYPES), BULK_TYPES[0])
   const [status, setStatus] = useState<string>(BULK_STATUS.APPROVED)
+  const { can } = useAuth()
+  const canVerifyPayment = can(CAPABILITY.BULK_PAYMENT_VERIFY)
+  const payView = status === PAY_CHIP
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
@@ -40,11 +50,12 @@ export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => vo
 
   const list = useInfiniteQuery({
     queryKey: ['bulk', 'team-orders', type, status, q],
-    queryFn: ({ pageParam }) => listTeamBulkOrders({ type, status, q, page: pageParam }),
+    queryFn: ({ pageParam }) => listTeamBulkOrders(payView ? { type, payment: BULK_PAYMENT.UPLOADED, q, page: pageParam } : { type, status, q, page: pageParam }),
     initialPageParam: 1,
     getNextPageParam: (last) => (last.meta.page * last.meta.pageSize < last.meta.total ? last.meta.page + 1 : undefined),
   })
   const waiting = list.data?.pages[0]?.meta.waiting
+  const toVerify = list.data?.pages[0]?.meta.paymentsToVerify?.[type] ?? 0
   useEffect(() => {
     if (waiting) onCount(BULK_TYPES.reduce((n, t) => n + (waiting[t] ?? 0), 0))
   }, [waiting, onCount])
@@ -66,6 +77,9 @@ export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => vo
           {STATUS_CHIPS.map(([k, label]) => (
             <button key={k || 'all'} onClick={() => setStatus(k)} className={`rounded-full border px-2.5 py-1 text-[12px] ${status === k ? 'border-primary bg-primary-soft font-semibold text-primary' : 'border-line text-ink-600 hover:bg-alt'}`}>{label}</button>
           ))}
+          <button onClick={() => setStatus(PAY_CHIP)} className={`rounded-full border px-2.5 py-1 text-[12px] ${payView ? 'border-primary bg-primary-soft font-semibold text-primary' : 'border-line text-ink-600 hover:bg-alt'}`}>
+            {BULK_TEXT.PAYMENTS_TO_VERIFY}{toVerify > 0 && <span className="ml-1.5 rounded-full bg-warn px-1.5 text-[11px] font-semibold text-white">{toVerify}</span>}
+          </button>
         </div>
         <div className="ml-auto flex min-w-[240px] items-center gap-2 rounded-md border border-line bg-surface px-2.5 py-1.5">
           <Search className="size-4 text-ink-400" />
@@ -114,7 +128,7 @@ export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => vo
         </div>
       </div>
 
-      <BulkOrderDrawer id={openId} load={getTeamBulkOrder} teamCanUpload={canEdit} onClose={() => setOpenId(null)} />
+      <BulkOrderDrawer id={openId} load={getTeamBulkOrder} teamCanUpload={canEdit} teamCanVerifyPayment={canVerifyPayment} onClose={() => setOpenId(null)} />
     </div>
   )
 }
