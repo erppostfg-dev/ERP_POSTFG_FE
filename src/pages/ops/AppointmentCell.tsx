@@ -28,11 +28,18 @@ export function AppointmentCell({ row }: { row: AppointmentRow }) {
       {/* stopPropagation: the click opens the history, not the row's drawer or the cell copy */}
       <button type="button" title={`${T.MARK_TITLE[source]} · ${T.OPEN}`} onClick={(e) => { e.stopPropagation(); setOpen(true) }} onDoubleClick={(e) => e.stopPropagation()}
         className="pf-press inline-flex items-center gap-1.5 rounded-md text-left hover:opacity-80">
-        {source === 'cancelled'
-          ? <Badge tone="crit">{T.CANCELLED}</Badge>
-          : <span className="tnum text-[12.5px]">{fmtDate(date)}</span>}
-        {source === 'email' && <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-primary"><Mail className="size-3" />email</span>}
-        {source === 'cancelled' && <span className="inline-flex items-center gap-0.5 text-[11px] text-ink-400"><Mail className="size-3" />{T.MARK.cancelled}</span>}
+        {/* from the email = a green pill with the mail icon (user 2026-11-16: "a colour so we know it came from the email") */}
+        {source === 'email' && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-ok-soft px-2 py-0.5 text-[12.5px] font-semibold text-ok ring-1 ring-ok/30">
+            <Mail className="size-3" /><span className="tnum">{fmtDate(date)}</span>
+          </span>
+        )}
+        {source === 'cancelled' && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-crit-soft px-2 py-0.5 text-[11.5px] font-semibold text-crit ring-1 ring-crit/30">
+            <Mail className="size-3" />{T.CANCELLED} {T.MARK.cancelled}
+          </span>
+        )}
+        {(source === 'typed' || source === 'none') && <span className="tnum text-[12.5px]">{fmtDate(date)}</span>}
         {source === 'typed' && <span className="inline-flex items-center gap-0.5 text-[11px] text-ink-400"><PencilLine className="size-3" />typed</span>}
         {source === 'none' && <CalendarClock className="size-3.5 text-ink-400" />}
       </button>
@@ -88,5 +95,18 @@ function AppointmentHistory({ uid, poNumber, onClose }: { uid: string; poNumber:
       </Modal>
     </div>,
     document.body,
+  )
+}
+
+/** One line above the Shipment Status table: what the appointment date colours mean. */
+export function AppointmentLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-600">
+      <span className="font-semibold text-ink-900">{T.LEGEND.TITLE}</span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-ok-soft px-2 py-0.5 font-semibold text-ok ring-1 ring-ok/30"><Mail className="size-3" />{T.LEGEND.EMAIL}</span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-crit-soft px-2 py-0.5 font-semibold text-crit ring-1 ring-crit/30"><Mail className="size-3" />{T.LEGEND.CANCELLED}</span>
+      <span>{T.LEGEND.PLAIN}</span>
+      <span className="text-ink-400">{T.LEGEND.CLICK}</span>
+    </div>
   )
 }

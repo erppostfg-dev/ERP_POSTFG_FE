@@ -17,7 +17,7 @@ export type AppointmentSource = 'email' | 'typed' | 'cancelled' | 'none'
 export const APPOINTMENT_TEXT = {
   OPEN: 'Appointment history',
   TITLE: (po: string) => `Appointment history · PO ${po}`,
-  SUB: 'Newest first. Dates from the channel emails (Scootsy, Zepto) and changes made by people; the newest change wins.',
+  SUB: 'Newest first. Dates from the channel emails (Scootsy, Zepto, Blinkit) and changes made by people; the newest change wins.',
   CLOSE: 'Close',
   LOADING: 'Loading…',
   EMPTY: 'No appointment yet: no email for this PO and nobody set a date.',
@@ -38,6 +38,13 @@ export const APPOINTMENT_TEXT = {
     unreadable: 'Not readable',
   } as Record<string, string>,
   CURRENT: 'Current',
+  LEGEND: {
+    TITLE: 'Appointment date:',
+    EMAIL: 'from the channel email',
+    CANCELLED: 'cancelled by the channel email',
+    PLAIN: 'plain = typed by a person',
+    CLICK: '· click a date to see its history',
+  },
   EMAIL_BY: (channel: string) => `${channel} email`,
   BY_APP: 'The app',
   WAS: (d: string) => `was ${d}`,

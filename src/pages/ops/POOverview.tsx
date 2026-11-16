@@ -16,7 +16,7 @@ import { readPageSize } from '../../lib/pageSize'
 import { LiveDot } from '../../components/LiveDot'
 import { ShipmentDrawer } from './ShipmentDrawer'
 import { HistoryDrawer } from './ShipmentHistory'
-import { AppointmentCell } from './AppointmentCell'
+import { AppointmentCell, AppointmentLegend } from './AppointmentCell'
 import { APPOINTMENT_FIELD, APPOINTMENT_FILTER } from '../../constants/appointments'
 import { NOT_AVAILABLE_YET } from '../../constants/masters'
 import { PATHS, URL_PARAM } from '../../constants/pages'
@@ -293,6 +293,7 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
       {columns && <TeamTabs teams={teams} value={tab} onChange={setTab} />}
       {columns?.facilityScoped && <FacilityNote mine={columns.facilities} filters={s.filters} setFilters={s.setFilters} editHere={editable.size > 0} />}
       <ListStatus s={s} entity="shipments" />
+      {parts.some((p) => p.cols.some((c) => c.field === APPOINTMENT_FIELD)) && <AppointmentLegend />}
       {/* key = the team tab: the grid fades in with the new columns on every team switch */}
       <div key={tab} className="pf-tab-in">
       <DataGrid
