@@ -16,6 +16,8 @@ import { readPageSize } from '../../lib/pageSize'
 import { LiveDot } from '../../components/LiveDot'
 import { ShipmentDrawer } from './ShipmentDrawer'
 import { HistoryDrawer } from './ShipmentHistory'
+import { AppointmentCell } from './AppointmentCell'
+import { APPOINTMENT_FIELD, APPOINTMENT_FILTER } from '../../constants/appointments'
 import { NOT_AVAILABLE_YET } from '../../constants/masters'
 import { PATHS, URL_PARAM } from '../../constants/pages'
 import { oneOf, useUrlParam } from '../../lib/urlState'
@@ -51,6 +53,7 @@ const commonFilters = (o: FilterOptions | null): FilterDef[] => {
 }
 const shipFilters = (o: FilterOptions | null): FilterDef[] => [
   multi('notAssigned', 'Not Assigned Dates', NOT_ASSIGNED_DATES),
+  multi(APPOINTMENT_FILTER.KEY, APPOINTMENT_FILTER.LABEL, APPOINTMENT_FILTER.OPTIONS),
   { key: 'poDateFrom', label: 'PO Date From', type: 'date' }, { key: 'poDateTo', label: 'PO Date To', type: 'date' },
   { key: 'workingDateFrom', label: 'Working Date From', type: 'date' }, { key: 'workingDateTo', label: 'Working Date To', type: 'date' },
   { key: 'dispatchDateFrom', label: 'Dispatch Date From', type: 'date' }, { key: 'dispatchDateTo', label: 'Dispatch Date To', type: 'date' },
@@ -296,6 +299,7 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
         cols={cols} rows={s.rows} rowKey={(r) => String(r.uid)} sticky={fixedCols} stickyWidths={KEY_FIXED_WIDTHS} stickyFit onRowClick={setSel} groups={groups} editable={editable} rowEditable={(r) => r.canEdit === true} onRowHistory={setHistoryOf} rowClass={(r) => (flash[String(r.uid)] ? 'pf-row-flash' : '')} maxHeight={tableHeight}
         pageSize={PO_OVERVIEW_ROWS.DEFAULT} pageSizeKey={s.key} maxPageSize={PO_OVERVIEW_ROWS.MAX} onPageSizeChange={s.setPerPage}
         trailing={[{ label: STATUS_POPUP.COLUMN, render: (r) => <StatusCell row={r} /> }]}
+        cellRender={(key, r) => (key === APPOINTMENT_FIELD ? <AppointmentCell row={r} /> : undefined)}
         rowMenu={(r) => [{ label: 'View details', onClick: () => setSel(r) }, { label: 'History', onClick: () => setHistoryOf(r) }]}
       />
       </div>

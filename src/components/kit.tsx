@@ -415,8 +415,10 @@ const cellText = (kind: ColKind, v: unknown): string => {
 
 export function DataGrid<T>({
   cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, stickyFit, maxHeight, onScrolledChange,
-  selected, onSelectedChange, headFilter, pageSizeKey, maxPageSize = GRID_PAGE_SIZE.MAX, onPageSizeChange,
+  selected, onSelectedChange, headFilter, pageSizeKey, maxPageSize = GRID_PAGE_SIZE.MAX, onPageSizeChange, cellRender,
 }: {
+  /** A cell of its own for some columns (2026-11-16, PO Overview appointment date); undefined = the usual cell. */
+  cellRender?: (key: keyof T, r: T) => ReactNode | undefined
   /** A control shown after a column's name in its header (e.g. ColumnSort); null = none (2026-10-29). */
   headFilter?: (key: keyof T) => ReactNode
   /** Every table: the person picks the rows per page (footer box, any number 1..maxPageSize), kept in this browser under this key. */
@@ -622,7 +624,7 @@ export function DataGrid<T>({
                       onClick={copyable(label) ? (e) => copyCell(e, `${k}|${i}`) : undefined}
                       className={`${copyable(label) ? 'cursor-copy' : ''} whitespace-nowrap border-b border-line px-3 py-2.5 transition-colors duration-200 group-hover:bg-canvas ${i < sticky ? 'sticky z-[5] overflow-hidden text-ellipsis bg-surface' : 'relative'} ${i === sticky - 1 ? 'border-r' : ''} ${copied === `${k}|${i}` ? '!bg-primary-soft' : ''}`}
                     >
-                      <Cell kind={kind} v={r[key]} />
+                      {cellRender?.(key, r) ?? <Cell kind={kind} v={r[key]} />}
                       {chip(`${k}|${i}`)}
                     </td>
                   ))}
