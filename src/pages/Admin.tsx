@@ -131,7 +131,7 @@ function UsersTab() {
         <div className="ml-auto"><Button variant="primary" icon={<UserPlus className="size-4" />} onClick={() => setEdit('new')}>{ADMIN_TEXT.ADD_USER}</Button></div>
       </div>
       {users.isError ? <p className="text-[12.5px] text-crit">{errText(users.error)}</p> : (
-        <DataGrid cols={UCOLS} rows={rows} rowKey={(r) => String(r.id)} onRowClick={(r) => setEdit(r.user)} pageSize={25}
+        <DataGrid pageSizeKey="users" cols={UCOLS} rows={rows} rowKey={(r) => String(r.id)} onRowClick={(r) => setEdit(r.user)} pageSize={25}
           trailing={[
             { label: 'Status', render: (r) => <Badge tone={r.status === 'active' ? 'ok' : 'neutral'}>{r.status === 'active' ? 'Active' : 'Off'}</Badge> },
             { label: 'Welcome email', render: (r) => r.user.welcomeSentAt

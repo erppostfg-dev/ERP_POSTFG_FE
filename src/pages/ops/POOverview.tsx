@@ -6,12 +6,13 @@ import { DataGrid, Field, FilterPanel, SectionToolbar, exportRows, countActive, 
 import { PO_LINE_COLS, type ColKind, type POLineRow } from '../../lib/ops'
 import { ApiError } from '../../api/client'
 import { getColumns, getFilterOptions, listLines, listShipments, type ColumnDef, type FilterOptions, type LineItem, type ListParams, type PoOverviewColumns, type ShipmentItem, type TeamColumns } from '../../api/poOverview'
-import { COLUMN_GROUP_LABEL, FACILITY_SCOPE_NOTE, NOT_ASSIGNED_DATES, OVERVIEW_TAB, PO_OVERVIEW_PAGE_SIZE, SEARCH_DELAY_MS, STATUS_POPUP } from '../../constants/poOverview'
+import { COLUMN_GROUP_LABEL, FACILITY_SCOPE_NOTE, NOT_ASSIGNED_DATES, OVERVIEW_TAB, PO_OVERVIEW_PAGE_SIZE, PO_OVERVIEW_ROWS, SEARCH_DELAY_MS, STATUS_POPUP } from '../../constants/poOverview'
 import { StatusCell } from './StatusPopup'
 import { UniwareSyncButton } from '../../components/UniwareSyncButton'
 import { TABLE_HEIGHT } from '../../constants/ui'
 import { Reveal } from '../../components/shell'
 import { useLiveShipments } from '../../lib/liveShipments'
+import { readPageSize } from '../../lib/pageSize'
 import { LiveDot } from '../../components/LiveDot'
 import { ShipmentDrawer } from './ShipmentDrawer'
 import { HistoryDrawer } from './ShipmentHistory'
@@ -21,7 +22,7 @@ import { oneOf, useUrlParam } from '../../lib/urlState'
 
 /*
  * PO Overview from the backend (GET /po-overview/shipments, /lines, /filter-options, /columns): our POs, filtered and
- * paged on the server (200 per request, "Load more" for the next). Shipment Status: an Overview tab (every column) and
+ * paged on the server (200 per request, or the rows per page the person typed up to 500; "Load more" for the next). Shipment Status: an Overview tab (every column) and
  * one tab per team with ONLY that team's columns (GET /po-overview/columns, workflow order); the person's editable teams
  * come right after Overview, marked with a pencil (no colour), each tab keeps its workflow step number. Line columns stay
  * the design's (lib/ops PO_LINE_COLS). Saving has no backend yet: buttons disabled.
@@ -80,14 +81,17 @@ function useServerList<I, R>(
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<FilterValues>({})
   const [open, setOpen] = useState(false)
+  // rows per page the person picked (the grid's box, same key): a request loads at least that many, so a page is full
+  const [perPage, setPerPage] = useState(() => readPageSize(key, PO_OVERVIEW_ROWS.DEFAULT, PO_OVERVIEW_ROWS.MAX))
+  const fetchSize = Math.min(Math.max(PO_OVERVIEW_PAGE_SIZE, perPage), PO_OVERVIEW_ROWS.MAX)
   useEffect(() => {
     const t = setTimeout(() => { if (q.trim() !== search) setSearch(q.trim()) }, SEARCH_DELAY_MS)
     return () => clearTimeout(t)
   }, [q, search])
 
   const query = useInfiniteQuery({
-    queryKey: [key, search, filters],
-    queryFn: ({ pageParam, signal }) => load({ ...filters, q: search, page: pageParam, pageSize: PO_OVERVIEW_PAGE_SIZE }, signal),
+    queryKey: [key, search, filters, fetchSize],
+    queryFn: ({ pageParam, signal }) => load({ ...filters, q: search, page: pageParam, pageSize: fetchSize }, signal),
     initialPageParam: 1,
     getNextPageParam: (last, all) => (all.reduce((n, pg) => n + pg.data.length, 0) < last.meta.total ? all.length + 1 : undefined),
     placeholderData: keepPreviousData,
@@ -96,7 +100,7 @@ function useServerList<I, R>(
   const total = query.data?.pages.at(-1)?.meta.total ?? 0
   const err = query.error
   return {
-    q, setQ, filters, setFilters, open, setOpen, rows, total, active: countActive(filters),
+    key, setPerPage, q, setQ, filters, setFilters, open, setOpen, rows, total, active: countActive(filters),
     state: { loading: query.isPending || query.isFetchingNextPage, error: err ? (err instanceof ApiError ? err.message : String(err)) : undefined },
     more: query.hasNextPage, loadMore: () => void query.fetchNextPage(), retry: () => void query.refetch(),
   }
@@ -289,7 +293,8 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
       {/* key = the team tab: the grid fades in with the new columns on every team switch */}
       <div key={tab} className="pf-tab-in">
       <DataGrid
-        cols={cols} rows={s.rows} rowKey={(r) => String(r.uid)} sticky={fixedCols} stickyWidths={KEY_FIXED_WIDTHS} stickyFit onRowClick={setSel} groups={groups} editable={editable} rowEditable={(r) => r.canEdit === true} onRowHistory={setHistoryOf} rowClass={(r) => (flash[String(r.uid)] ? 'pf-row-flash' : '')} maxHeight={tableHeight} pageSize={50}
+        cols={cols} rows={s.rows} rowKey={(r) => String(r.uid)} sticky={fixedCols} stickyWidths={KEY_FIXED_WIDTHS} stickyFit onRowClick={setSel} groups={groups} editable={editable} rowEditable={(r) => r.canEdit === true} onRowHistory={setHistoryOf} rowClass={(r) => (flash[String(r.uid)] ? 'pf-row-flash' : '')} maxHeight={tableHeight}
+        pageSize={PO_OVERVIEW_ROWS.DEFAULT} pageSizeKey={s.key} maxPageSize={PO_OVERVIEW_ROWS.MAX} onPageSizeChange={s.setPerPage}
         trailing={[{ label: STATUS_POPUP.COLUMN, render: (r) => <StatusCell row={r} /> }]}
         rowMenu={(r) => [{ label: 'View details', onClick: () => setSel(r) }, { label: 'History', onClick: () => setHistoryOf(r) }]}
       />
@@ -322,7 +327,8 @@ function LinesTab({ options, columns, onTotal, tableHeight }: { options: FilterO
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={(f) => { s.setFilters(f); s.setOpen(false) }} onClose={() => s.setOpen(false)} /></Reveal>
       <ListStatus s={s} entity="PO lines" />
       <DataGrid
-        cols={PO_LINE_COLS} rows={s.rows} rowKey={(r) => `${r.shipmentUid}-${r.srNo}`} sticky={LINE_FIXED_COLS} stickyWidths={LINE_FIXED_WIDTHS} stickyFit maxHeight={tableHeight} pageSize={50} onRowClick={setSel}
+        cols={PO_LINE_COLS} rows={s.rows} rowKey={(r) => `${r.shipmentUid}-${r.srNo}`} sticky={LINE_FIXED_COLS} stickyWidths={LINE_FIXED_WIDTHS} stickyFit maxHeight={tableHeight} onRowClick={setSel}
+        pageSize={PO_OVERVIEW_ROWS.DEFAULT} pageSizeKey={s.key} maxPageSize={PO_OVERVIEW_ROWS.MAX} onPageSizeChange={s.setPerPage}
         trailing={[{ label: STATUS_POPUP.COLUMN, render: (r) => <StatusCell row={{ ...r, statusFinal: r.status }} /> }]}
         rowMenu={(r) => [{ label: 'View details', onClick: () => setSel(r) }]}
       />

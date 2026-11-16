@@ -78,7 +78,7 @@ export default function ShortSkus({ priority }: { priority: Record<string, numbe
       {rows.length === 0 ? (
         <div className="flex items-center gap-2 rounded-[var(--radius-card)] border border-line bg-surface px-4 py-6 text-[13px] text-ok"><Check className="size-4" /> No shortages in this window</div>
       ) : (
-        <DataGrid cols={SCOLS} rows={s.filtered} rowKey={(r) => r.code} sticky={1} onRowClick={(r) => setSel(r.code)}
+        <DataGrid pageSizeKey="short-skus" cols={SCOLS} rows={s.filtered} rowKey={(r) => r.code} sticky={1} onRowClick={(r) => setSel(r.code)}
           rowClass={(r) => (r.net > 0 ? '[&>td:first-child]:shadow-[inset_3px_0_0_var(--color-crit)]' : '')}
           trailing={[
             { label: 'Net short', render: (r) => r.net === 0 ? <Badge tone="ok">Covered by incoming</Badge> : <span className="tnum font-semibold text-crit">−{r.net.toLocaleString('en-IN')}</span> },

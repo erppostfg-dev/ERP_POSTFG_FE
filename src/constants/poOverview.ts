@@ -16,6 +16,11 @@ export const PO_OVERVIEW_ENDPOINT = {
 
 /** Rows per request (the backend's default; PEPIMS loads 200 at a time). */
 export const PO_OVERVIEW_PAGE_SIZE = 200
+/**
+ * Rows per page on both tables (2026-11-16, user): the person types 1..MAX (MAX = the most one request may return,
+ * backend PO_OVERVIEW_LIST.MAX_PAGE_SIZE); a request loads max(PO_OVERVIEW_PAGE_SIZE, their number) rows so a page is full.
+ */
+export const PO_OVERVIEW_ROWS = { DEFAULT: 50, MAX: 500 } as const
 
 /** Wait this long after typing before searching. */
 export const SEARCH_DELAY_MS = 350

@@ -38,7 +38,7 @@ function Grid({ rows, name }: { rows: DrrRow[]; name: string }) {
     <div className="space-y-3">
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search SKU…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active} entity="DRR overrides" onExport={(e) => exportRows(name, e, COLS, s.filtered)} />
       <Reveal open={s.open}><FilterPanel defs={[{ key: 'sku', label: 'SKU Code', type: 'text', placeholder: 'Enter SKU code' }, { key: 'name', label: 'Name contains', type: 'text' }]} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
-      <DataGrid cols={COLS} rows={s.filtered} rowKey={(r) => r.sku}
+      <DataGrid pageSizeKey="drr-aging" cols={COLS} rows={s.filtered} rowKey={(r) => r.sku}
         trailing={[{ label: 'Deviation', render: (r) => <Dev v={r.deviation} /> }, { label: 'Current aging', render: (r) => <AgingBadge d={r.aging} /> }]} />
     </div>
   )
