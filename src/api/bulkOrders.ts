@@ -49,10 +49,18 @@ export interface BulkOrder {
   } | null
 }
 
-/** A customer our team processed before that matches an order (process-options). */
+/**
+ * A saved address + Uniware code of the customer book that matches an order (process-options, 2026-11-13: address book).
+ * Best first: matchedBy 'address' (same delivery address: the panel fills the first one), then 'gstin', then 'name'.
+ */
 export interface BulkCustomerMatch {
-  id: string; name: string; gstin: string | null; address: BulkAddress; uniwareChannel: string; customerCode: string
-  usedCount: number; lastUsedAt: string; matchedBy: 'gstin' | 'name'
+  id: string; name: string; gstin: string | null; receiverName: string | null
+  /** The customer's (billing) address. */
+  address: BulkAddress
+  /** The delivery address the code was used for (null on rows saved before 2026-11-13 without an order). */
+  deliveryAddress: BulkAddress | null
+  uniwareChannel: string; customerCode: string
+  usedCount: number; lastUsedAt: string; matchedBy: 'address' | 'gstin' | 'name'
 }
 export interface BulkProcessOptions {
   /** Active warehouses; parentCode = its main (mother) warehouse, null = a main one. */
@@ -160,6 +168,9 @@ export const getTeamBulkOrder = (id: string) => api<BulkOrderFull>(BULK_ENDPOINT
 export const getBulkProcessOptions = (id: string) => api<BulkProcessOptions>(BULK_ENDPOINT.TEAM_PROCESS_OPTIONS(id))
 export const processBulkOrder = (id: string, input: BulkProcessInput) =>
   api<BulkOrderFull>(BULK_ENDPOINT.TEAM_PROCESS(id), { method: 'POST', body: JSON.stringify(input) })
+/** "Don't suggest again" on a saved address (PO review editor; hidden, never deleted). */
+export const hideBulkCustomer = (customerId: string) =>
+  api<{ id: string; hidden: true }>(BULK_ENDPOINT.TEAM_CUSTOMER_HIDE(customerId), { method: 'POST', body: '{}' })
 
 /** Payment + documents (2026-11-12). team = our team's routes (PO review access). */
 export const uploadBulkDocument = (id: string, kind: string, file: File, team = false) => {

@@ -25,6 +25,7 @@ export const BULK_ENDPOINT = {
   /** Step 3b (2026-11-12): warehouses + matching saved customers; create the sale order (PO review editor). */
   TEAM_PROCESS_OPTIONS: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/process-options`,
   TEAM_PROCESS: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/process`,
+  TEAM_CUSTOMER_HIDE: (customerId: string) => `/po-review/bulk-orders/customers/${encodeURIComponent(customerId)}/hide`,
   TEAM_PAYMENT: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/payment`,
   /** Sign-in started here comes back to the portal (backend BULK_PORTAL_URL). */
   GOOGLE: '/auth/google?app=bulk',
@@ -303,10 +304,18 @@ export const BULK_TEXT = {
   NO_WAREHOUSE: 'No warehouse matches',
   UNIWARE_CHANNEL: 'Uniware channel',
   CUSTOMER_CODE: 'Uniware customer code',
-  SUGGESTED: 'Used before for this customer',
+  SUGGESTED: 'Saved before for this address / customer',
   USE: 'Use',
   USED_TIMES: (n: number) => `used on ${n} order${n === 1 ? '' : 's'}`,
-  MATCHED_BY: { gstin: 'same GSTIN', name: 'same name + pincode' } as Record<string, string>,
+  MATCHED_BY: { address: 'same delivery address', gstin: 'same GSTIN, other address', name: 'same name + pincode' } as Record<string, string>,
+  // address book (2026-11-13, user: "fill it, but they have to create the sale order by checking")
+  FILLED_FROM: (n: number, at: string) => `Filled from a saved address (${n === 1 ? 'used once' : `used ${n} times`}, last on ${at}). Check the Uniware channel and customer code before creating.`,
+  CHECKED: 'I checked the Uniware channel and customer code for this address',
+  HIDE: "Don't suggest",
+  HIDE_ASK: 'Stop suggesting this?',
+  HIDE_YES: 'Yes',
+  HIDE_NO: 'No',
+  LAST_USED: (at: string) => `last ${at}`,
   CREATE_SALE_ORDER: 'Create sale order',
   CREATING: 'Creating…',
   CREATED: (code: string) => `Sale order ${code} created`,
