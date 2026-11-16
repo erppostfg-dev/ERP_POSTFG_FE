@@ -12,6 +12,8 @@ export const PO_OVERVIEW_ENDPOINT = {
   CHANGES: '/po-overview/changes',
   /** Uniware sale order status (2026-11-06): GET last run, POST Sync now. */
   UNIWARE_SYNC: '/po-overview/uniware-sync',
+  /** PEPIMS -> POST_FG sync (2026-11-16): GET last run; POST start (admin / developer). */
+  PEPIMS_SYNC: '/po-overview/pepims-sync',
 } as const
 
 /** Rows per request (the backend's default; PEPIMS loads 200 at a time). */
@@ -80,6 +82,21 @@ export const UNIWARE_SYNC_TEXT = {
   WAIT_HINT: (by: string | null, at: string) => `Synced from this button${by ? ` by ${by}` : ''} at ${at}. The button works once every 30 minutes for the whole team; the server also syncs every 30 minutes by itself.`,
 } as const
 export const UNIWARE_SYNC_REFRESH_MS = 30_000
+
+/** Sync from PEPIMS (2026-11-16): PEPIMS's POs and changes into POST_FG (admin / developer start it; server timer too). */
+export const PEPIMS_SYNC_ROLES = ['admin', 'developer'] as const
+export const PEPIMS_SYNC_TEXT = {
+  BUTTON: 'Sync from PEPIMS',
+  RUNNING: 'Syncing from PEPIMS…',
+  NEVER: 'PEPIMS: not synced yet',
+  LAST: (at: string, by: string | null, s: { inserted: number; updated: number; linked: number; conflicts: number } | null) =>
+    `PEPIMS · synced ${at}${by ? ` (${by})` : ''}${s ? ` · new ${s.inserted}, updated ${s.updated}, linked ${s.linked}${s.conflicts ? `, ${s.conflicts} kept ours` : ''}` : ''}`,
+  FAILED_LAST: (why: string) => `PEPIMS sync failed: ${why}`,
+  STARTED: 'Reading PEPIMS: new and changed POs come in (newest change wins).',
+  FAILED: (why: string) => `PEPIMS sync: ${why}`,
+  HINT: 'Takes the POs and changes made in PEPIMS into POST_FG (PEPIMS is only read). A field changed here later than in PEPIMS stays as it is here.',
+} as const
+export const PEPIMS_SYNC_REFRESH_MS = 15_000
 
 /** Group header labels of the grid. */
 export const COLUMN_GROUP_LABEL = { KEY: 'PO', SHIPMENT: 'Shipment' } as const

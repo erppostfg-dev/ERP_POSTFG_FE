@@ -6,9 +6,11 @@ import { DataGrid, Field, FilterPanel, SectionToolbar, exportRows, countActive, 
 import { PO_LINE_COLS, type ColKind, type POLineRow } from '../../lib/ops'
 import { ApiError } from '../../api/client'
 import { getColumns, getFilterOptions, listLines, listShipments, type ColumnDef, type FilterOptions, type LineItem, type ListParams, type PoOverviewColumns, type ShipmentItem, type TeamColumns } from '../../api/poOverview'
-import { COLUMN_GROUP_LABEL, FACILITY_SCOPE_NOTE, NOT_ASSIGNED_DATES, OVERVIEW_TAB, PO_OVERVIEW_PAGE_SIZE, PO_OVERVIEW_ROWS, SEARCH_DELAY_MS, STATUS_POPUP } from '../../constants/poOverview'
+import { COLUMN_GROUP_LABEL, FACILITY_SCOPE_NOTE, NOT_ASSIGNED_DATES, OVERVIEW_TAB, PEPIMS_SYNC_ROLES, PO_OVERVIEW_PAGE_SIZE, PO_OVERVIEW_ROWS, SEARCH_DELAY_MS, STATUS_POPUP } from '../../constants/poOverview'
 import { StatusCell } from './StatusPopup'
 import { UniwareSyncButton } from '../../components/UniwareSyncButton'
+import { PepimsSyncButton } from '../../components/PepimsSyncButton'
+import { useAuth } from '../../auth/AuthContext'
 import { TABLE_HEIGHT } from '../../constants/ui'
 import { Reveal } from '../../components/shell'
 import { useLiveShipments } from '../../lib/liveShipments'
@@ -278,6 +280,7 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
   const fieldLabel = useCallback((f: string) => labels.get(f) ?? f, [labels])
   useEffect(() => { if (!s.state.loading && !s.state.error) onTotal(s.total) }, [s.total, s.state, onTotal])
   useFacilityPreset(columns, s)
+  const auth = useAuth()
   return (
     <div className="space-y-3">
       <SectionToolbar
@@ -287,6 +290,8 @@ function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { option
       />
       {/* Uniware sale order status (2026-11-06): synced every 30 min; Sync now for people who edit a team's columns */}
       <UniwareSyncButton canSync={!!columns?.teams.some((t) => t.access === 'edit')} />
+      {/* PEPIMS -> POST_FG (2026-11-16): last run for everyone; Sync now for admin / developer */}
+      <PepimsSyncButton canSync={'user' in auth && auth.user.roles.some((r) => (PEPIMS_SYNC_ROLES as readonly string[]).includes(r))} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={(f) => { s.setFilters(f); s.setOpen(false) }} onClose={() => s.setOpen(false)} /></Reveal>
       {columns && <TeamTabs teams={teams} value={tab} onChange={setTab} />}
       {columns?.facilityScoped && <FacilityNote mine={columns.facilities} filters={s.filters} setFilters={s.setFilters} editHere={editable.size > 0} />}
