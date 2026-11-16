@@ -43,7 +43,8 @@ const multi = (key: string, label: string, options: readonly string[]): FilterDe
 const commonFilters = (o: FilterOptions | null): FilterDef[] => {
   const opt = (k: keyof Omit<FilterOptions, 'notAssigned'>) => (o ? [...o[k], o.notAssigned] : [])
   return [
-    multi('brand', 'Brand', opt('brand')), multi('channel', 'Channel', opt('channel')), multi('facility', 'Facility', opt('facility')),
+    multi('brand', 'Brand', opt('brand')), multi('channel', 'Channel', opt('channel')), multi('poGroup', 'Group', o ? o.poGroup : []),
+    multi('facility', 'Facility', opt('facility')),
     multi('location', 'Location', opt('location')), multi('statusPlanning', 'Status Planning', opt('statusPlanning')),
     multi('statusWarehouse', 'Status Warehouse', opt('statusWarehouse')), multi('statusLogistics', 'Status Logistics', opt('statusLogistics')),
     multi('statusFinal', 'Final Status', opt('statusFinal')),

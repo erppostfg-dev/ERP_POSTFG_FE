@@ -22,6 +22,12 @@ export type ShipmentItem = {
   ratePerKg: number | null
   deliveryType: string
   channelType: string | null
+  /** Channel / D2C / Marketing / Institutional / Internal Transfer / Others (PEPIMS -> prod migration, 2026-11-16). */
+  poGroup: string
+  /** The buyer's own name when the channel is only a bucket (Marketing / Institutional / Others ...). */
+  partyName: string | null
+  /** 'pepims' = imported from PEPIMS; null = made by POST_FG. */
+  importedFrom: string | null
 }
 
 export type LineItem = {
@@ -59,6 +65,8 @@ export type ListMeta = { page: number; pageSize: number; total: number }
 export type FilterOptions = {
   brand: string[]
   channel: string[]
+  /** Every group (never empty, so no "Not Assigned"). */
+  poGroup: string[]
   facility: string[]
   location: string[]
   statusPlanning: string[]
