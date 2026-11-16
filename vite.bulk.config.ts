@@ -24,7 +24,7 @@ const bulkPage = (): Plugin => ({
 })
 
 export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/bulk-orders/' : '/',
+  base: command === 'build' ? '/postfg/bulk-orders/' : '/',
   plugins: [react(), tailwindcss(), bulkPage()],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   build: { outDir: 'dist-bulk', emptyOutDir: true, rollupOptions: { input: path.resolve(__dirname, 'bulk.html') } },
