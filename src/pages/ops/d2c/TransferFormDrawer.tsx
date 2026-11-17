@@ -5,7 +5,7 @@ import { Button, Drawer, PillToggle } from '../../../components/ui'
 import { DateInput, inputCls, textareaCls } from '../../../components/kit'
 import { SelectBox } from '../../../components/pickers'
 import { createTransfer, editTransfer, getTransfer, nextReference, type D2cDetail, type D2cOptions, type D2cSku } from '../../../api/d2cTransfers'
-import { D2C_DEFAULT_PRIORITY, D2C_ERROR, D2C_PRIORITIES, D2C_REMARKS_MAX, D2C_TEXT } from '../../../constants/d2cTransfers'
+import { D2C_DEFAULT_PRIORITY, D2C_ERROR, D2C_PRIORITIES, D2C_PRIORITY_MAX, D2C_REMARKS_MAX, D2C_TEXT } from '../../../constants/d2cTransfers'
 import { D2C_KEY } from '../../../lib/liveTransfers'
 import { ErrorBox, WarnBox } from './bits'
 import { addDays, errorOf, money, num, todayIst } from './format'
@@ -104,7 +104,7 @@ export function TransferFormDrawer({ options, detail, onClose, onSaved }: {
     setBusy(true)
     setError(null)
     const header = {
-      senderId: sender.id, channel: f.channel, locationId: location.id, poDate: f.poDate, priority: f.priority, type: f.type, expiry: f.expiry, remarks: f.remarks.trim(),
+      senderId: sender.id, channel: f.channel, locationId: location.id, poDate: f.poDate, priority: f.priority.trim() || D2C_DEFAULT_PRIORITY, type: f.type, expiry: f.expiry, remarks: f.remarks.trim(),
       ...(route ? { routeId: route.routeId } : {}),
     }
     const lines = filled.map((l) => ({ skuCode: l.skuCode, qty: qtyOf(l) }))
@@ -174,7 +174,18 @@ export function TransferFormDrawer({ options, detail, onClose, onSaved }: {
           </div>
           <div>
             <span className={label}>Priority *</span>
-            <PillToggle value={f.priority} onChange={(v) => set({ priority: v })} options={D2C_PRIORITIES.map((p) => ({ key: p, label: p }))} />
+            {/* P0-P3, or any other priority typed in (2026-11-17) */}
+            <div className="flex flex-wrap items-center gap-2">
+              <PillToggle value={f.priority} onChange={(v) => set({ priority: v })} options={D2C_PRIORITIES.map((p) => ({ key: p, label: p }))} />
+              <input
+                value={(D2C_PRIORITIES as readonly string[]).includes(f.priority) ? '' : f.priority}
+                onChange={(e) => set({ priority: e.target.value.trim() ? e.target.value : D2C_DEFAULT_PRIORITY })}
+                maxLength={D2C_PRIORITY_MAX} placeholder="Other…" list="d2c-priorities" className={`${inputCls} w-28`}
+              />
+              <datalist id="d2c-priorities">
+                {options.priorities.filter((p) => !(D2C_PRIORITIES as readonly string[]).includes(p)).map((p) => <option key={p} value={p} />)}
+              </datalist>
+            </div>
           </div>
           <div>
             <span className={label}>Reference ID</span>

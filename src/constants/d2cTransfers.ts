@@ -134,9 +134,11 @@ export const D2C_VARIANCE_NOTE_MAX = 1000
 /** Result of one transfer in a create-SO job. */
 export const D2C_SO_OUTCOME_LABEL: Record<string, string> = { created: 'SO created', failed: 'Refused by Uniware', unknown: 'No clear answer: checking', skipped: 'Not sent' }
 
-export const D2C_PRIORITIES = ['P1', 'P2', 'P3'] as const
+/** The usual priorities, most urgent first; any other text (up to D2C_PRIORITY_MAX) is allowed too (2026-11-17). */
+export const D2C_PRIORITIES = ['P0', 'P1', 'P2', 'P3'] as const
+export const D2C_PRIORITY_MAX = 20
 export const D2C_DEFAULT_PRIORITY = 'P2'
-export const D2C_PRIORITY_TONE: Record<string, 'crit' | 'warn' | 'neutral'> = { P1: 'crit', P2: 'warn', P3: 'neutral' }
+export const D2C_PRIORITY_TONE: Record<string, 'crit' | 'warn' | 'neutral'> = { P0: 'crit', P1: 'crit', P2: 'warn', P3: 'neutral' }
 
 /** Rows per request (backend default 100, at most 500). */
 export const D2C_PAGE_SIZE = 100
@@ -228,12 +230,17 @@ export const D2C_TEXT = {
   RECEIVING_OFF: 'The receiving warehouse is inactive or not allowed for internal transfers (Masters → Warehouses)',
   SAME_WH: 'Dispatch and receiving warehouse are the same',
   STALE: 'Someone changed this transfer since you opened it. Load the latest values and make your change again.',
-  CREATE_INWARD_PO_HELP: 'One inward PO per dispatched invoice, made at the receiving warehouse (vendor = the route\'s vendor code, unit price 1, qty = what was dispatched on that invoice). The warehouse approves it in Uniware. A refused one can be sent again with the same PO number.',
+  CREATE_INWARD_PO_HELP: 'One inward PO per dispatched invoice, made at the receiving warehouse (vendor = the route\'s vendor code, unit price 1, qty = what was dispatched on that invoice). The warehouse approves it in Uniware. PO date = today; pick when the warehouse should receive it. A refused one can be sent again with the same PO number.',
   INWARD_EMPTY: 'No dispatched invoice is waiting for an inward PO.',
   INWARD_POS_EMPTY: 'No inward PO is open.',
   VENDOR_MISSING: 'Vendor missing',
   PO_APPROVAL: 'Waiting for the warehouse to approve it in Uniware',
   VARIANCE_HELP: 'Received is not equal to dispatched on this invoice. Say why: the transfer closes once every variance has a reason. A saved reason can be changed later; every change is kept in the history.',
   GRN_PENDING: 'GRN not complete yet',
-  UPLOAD_HELP: 'One row per SKU line. Rows with the same Group make one transfer; rows without a group are combined when dispatch, receiving, date and priority match. Import is all or nothing.',
+  UPLOAD_HELP: 'One row per SKU line. A filled PO Number becomes the PO number of the transfer (rows with the same one make one transfer); left empty, one is generated. Rows with the same Group make one transfer; other rows are combined when dispatch, receiving, date and priority match. Import is all or nothing.',
 } as const
+
+/** Inward PO dates (user, 2026-11-12): PO date = the day it is created; expiry = PO date + this many days (as the backend). */
+export const D2C_INWARD_EXPIRY_DAYS = 15
+/** "Receive by" offered in the Create inward PO dialog: today + this many days (any day from today to the expiry). */
+export const D2C_RECEIVE_BY_DEFAULT_DAYS = 7
