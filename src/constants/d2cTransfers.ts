@@ -134,9 +134,11 @@ export const D2C_VARIANCE_NOTE_MAX = 1000
 /** Result of one transfer in a create-SO job. */
 export const D2C_SO_OUTCOME_LABEL: Record<string, string> = { created: 'SO created', failed: 'Refused by Uniware', unknown: 'No clear answer: checking', skipped: 'Not sent' }
 
-export const D2C_PRIORITIES = ['P1', 'P2', 'P3'] as const
+/** The usual priorities, most urgent first; any other text (up to D2C_PRIORITY_MAX) is allowed too (2026-11-17). */
+export const D2C_PRIORITIES = ['P0', 'P1', 'P2', 'P3'] as const
+export const D2C_PRIORITY_MAX = 20
 export const D2C_DEFAULT_PRIORITY = 'P2'
-export const D2C_PRIORITY_TONE: Record<string, 'crit' | 'warn' | 'neutral'> = { P1: 'crit', P2: 'warn', P3: 'neutral' }
+export const D2C_PRIORITY_TONE: Record<string, 'crit' | 'warn' | 'neutral'> = { P0: 'crit', P1: 'crit', P2: 'warn', P3: 'neutral' }
 
 /** Rows per request (backend default 100, at most 500). */
 export const D2C_PAGE_SIZE = 100

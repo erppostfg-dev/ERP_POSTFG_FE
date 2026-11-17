@@ -347,7 +347,7 @@ const previewFile = async (file: File): Promise<D2cUploadPreview> => {
     if (!sku) errors.push({ field: 'SKU Code', message: `${col(r, 'SKU Code') || '(empty)'} is not an active SKU with an MRP` })
     if (!Number.isInteger(qty) || qty <= 0) errors.push({ field: 'Qty', message: 'must be a whole number above 0' })
     if (!poDate) errors.push({ field: 'PO Date', message: 'must be a date (YYYY-MM-DD or DD-MM-YYYY)' })
-    if (!['P1', 'P2', 'P3'].includes(priority)) errors.push({ field: 'Priority', message: 'must be P1, P2 or P3' })
+    if (priority.length > 20) errors.push({ field: 'Priority', message: 'must be at most 20 characters' })
     if (sku && col(r, 'SKU Name') && col(r, 'SKU Name') !== sku.name) warnings.push({ field: 'SKU Name', message: `differs from the master (${sku.name}): the master name is used` })
     const all = sender && loc ? routesOf(sender.id, loc[0]) : []
     const route = sender && loc ? routeOf(sender.id, loc[0], { channel: col(r, 'Uniware Channel') }) : null
