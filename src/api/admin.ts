@@ -76,6 +76,22 @@ export type ServerView = {
 export const getServer = (signal?: AbortSignal) => api<ServerView>(ADMIN_ENDPOINT.SERVER, { signal })
 export const runServerCleanup = (apply: boolean) => api<ServerView & { run: CleanupRun | null }>(ADMIN_ENDPOINT.SERVER_CLEANUP, json('POST', { apply }))
 
+/* Admin > Data sync (2026-11-17; developers only): GET /admin/data-sync, POST /admin/data-sync/pepims | dev-copy, PUT /admin/data-sync/nightly. */
+export type DataSyncJob = 'pepims' | 'devCopy'
+export type DataSyncRun = { startedAt: string | null; finishedAt: string | null; by: string | null; ok: boolean | null; error: string | null; summary: Record<string, number> | null }
+export type DataSyncStatus = {
+  database: string
+  targetDb: string
+  allowed: boolean
+  running: DataSyncJob | null
+  pepims: DataSyncRun
+  devCopy: DataSyncRun
+  nightly: { enabled: boolean; lastDate: string | null; changedBy: string | null; changedAt: string | null; atIst: string; timerOn: boolean }
+}
+export const getDataSync = (signal?: AbortSignal) => api<DataSyncStatus>(ADMIN_ENDPOINT.DATA_SYNC, { signal })
+export const startDataSync = (job: DataSyncJob) => api<DataSyncStatus & { state: 'started' }>(ADMIN_ENDPOINT.DATA_SYNC_RUN(job === 'pepims' ? 'pepims' : 'dev-copy'), json('POST', {}))
+export const setNightlyDataSync = (enabled: boolean) => api<DataSyncStatus>(ADMIN_ENDPOINT.DATA_SYNC_NIGHTLY, json('PUT', { enabled }))
+
 /* Admin > Monitor (2026-11-05; developers only): GET /admin/monitor/access, /overview?window=, /peak?at=. */
 export type MonitorPart<T> = { ok: boolean; error: string | null; data: T | null }
 export type MonitorAccessCheck = { action: string; ok: boolean; error: string | null }

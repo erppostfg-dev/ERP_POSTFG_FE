@@ -178,20 +178,6 @@ export interface UniwareSyncStatus {
   /** The Sync button (2026-11-09): one click per everyMinutes for the whole team; nextAt null = clickable now. */
   button?: { lastAt: string | null; lastBy: string | null; everyMinutes: number; nextAt: string | null }
 }
-/* PEPIMS -> POST_FG sync (2026-11-16, backend modules/pepims-sync). */
-export interface PepimsSyncStatus {
-  startedAt: string | null
-  finishedAt: string | null
-  by: string | null
-  ok: boolean | null
-  error: string | null
-  summary: { read: number; inserted: number; linked: number; updated: number; unchanged: number; conflicts: number; logsAdded: number } | null
-  running: boolean
-  everyMinutes: number
-  timerOn: boolean
-}
-export const getPepimsSync = (signal?: AbortSignal) => api<PepimsSyncStatus>(PO_OVERVIEW_ENDPOINT.PEPIMS_SYNC, { signal })
-export const startPepimsSync = () => api<PepimsSyncStatus & { state: 'started' }>(PO_OVERVIEW_ENDPOINT.PEPIMS_SYNC, { method: 'POST', body: JSON.stringify({}) })
 export const getUniwareSync = (signal?: AbortSignal) => api<UniwareSyncStatus>(PO_OVERVIEW_ENDPOINT.UNIWARE_SYNC, { signal })
 export const startUniwareSync = (uids?: string[]) =>
   api<UniwareSyncStatus & { state: 'started' | 'queued' }>(PO_OVERVIEW_ENDPOINT.UNIWARE_SYNC, { method: 'POST', body: JSON.stringify(uids?.length ? { uids } : {}) })
