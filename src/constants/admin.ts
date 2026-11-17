@@ -133,7 +133,7 @@ export const DATA_SYNC_TEXT = {
   STARTED: 'Started: the result shows here when it ends.',
   SUMMARY: {
     read: 'PEPIMS POs read', inserted: 'new', linked: 'linked', updated: 'updated', unchanged: 'unchanged', conflicts: 'kept ours', logsAdded: 'History lines',
-    posLinked: 'dev POs matched', posAdded: 'dev POs added', posUpdated: 'dev-only POs updated', linesAdded: 'lines added', usersAdded: 'users added', history: 'History rows', uploads: 'uploads copied / updated',
+    posLinked: 'dev POs matched', posAdded: 'dev POs added', posUpdated: 'dev-only POs updated', linesAdded: 'lines added', usersAdded: 'users added', history: 'History rows', uploads: 'uploads copied / updated', rowsWritten: 'rows written in all', prodOwnKept: "prod's own rows kept (not overwritten)",
   } as Record<string, string>,
 } as const
 export const DATA_SYNC_REFRESH_MS = 10_000
