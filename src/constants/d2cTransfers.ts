@@ -237,7 +237,7 @@ export const D2C_TEXT = {
   PO_APPROVAL: 'Waiting for the warehouse to approve it in Uniware',
   VARIANCE_HELP: 'Received is not equal to dispatched on this invoice. Say why: the transfer closes once every variance has a reason. A saved reason can be changed later; every change is kept in the history.',
   GRN_PENDING: 'GRN not complete yet',
-  UPLOAD_HELP: 'One row per SKU line. Rows with the same Group make one transfer; rows without a group are combined when dispatch, receiving, date and priority match. Import is all or nothing.',
+  UPLOAD_HELP: 'One row per SKU line. A filled PO Number becomes the PO number of the transfer (rows with the same one make one transfer); left empty, one is generated. Rows with the same Group make one transfer; other rows are combined when dispatch, receiving, date and priority match. Import is all or nothing.',
 } as const
 
 /** Inward PO dates (user, 2026-11-12): PO date = the day it is created; expiry = PO date + this many days (as the backend). */

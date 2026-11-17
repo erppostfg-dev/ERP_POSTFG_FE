@@ -110,7 +110,7 @@ export function UploadDialog({ onClose }: { onClose: () => void }) {
                   <table className="w-full text-[12.5px]">
                     <thead className="sticky top-0 bg-alt text-left text-[10.5px] font-semibold uppercase tracking-wide text-ink-600">
                       <tr>
-                        <th className="px-3 py-2"></th><th className="px-3 py-2">Route</th><th className="px-3 py-2">Reference ID</th><th className="px-3 py-2">Channel / location</th><th className="px-3 py-2">Uniware channel</th><th className="px-3 py-2">PO date</th>
+                        <th className="px-3 py-2"></th><th className="px-3 py-2">Route</th><th className="px-3 py-2">PO number</th><th className="px-3 py-2">Channel / location</th><th className="px-3 py-2">Uniware channel</th><th className="px-3 py-2">PO date</th>
                         <th className="px-3 py-2">Priority</th><th className="px-3 py-2">Type</th><th className="px-3 py-2 text-right">Lines</th><th className="px-3 py-2 text-right">Units</th><th className="px-3 py-2">Rows</th>
                       </tr>
                     </thead>
@@ -119,7 +119,7 @@ export function UploadDialog({ onClose }: { onClose: () => void }) {
                         <tr key={t.key} className="border-t border-line">
                           <td className="px-3 py-2">{t.valid ? <CheckCircle2 className="size-4 text-ok" /> : <XCircle className="size-4 text-crit" />}</td>
                           <td className="whitespace-nowrap px-3 py-2 font-mono">{t.senderCode ?? '?'} → {t.receivingCode ?? '?'}</td>
-                          <td className="whitespace-nowrap px-3 py-2 font-mono">{t.referencePreview ?? <span className="text-ink-400">—</span>}</td>
+                          <td className="whitespace-nowrap px-3 py-2 font-mono">{t.referencePreview ?? <span className="text-ink-400">—</span>}{t.poNumber && <span className="font-sans text-[11px] text-ink-400"> · from sheet</span>}</td>
                           <td className="whitespace-nowrap px-3 py-2">{t.channel ?? '—'} / {t.location ?? '—'}{t.group && <span className="text-ink-400"> · group {t.group}</span>}</td>
                           <td className="whitespace-nowrap px-3 py-2 font-mono" title={t.routeChannels.length > 1 ? D2C_TEXT.CHANNELS_HINT : undefined}>
                             {t.route?.uniwareChannelCode ?? <span className="text-ink-400">—</span>}

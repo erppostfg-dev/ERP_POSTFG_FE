@@ -217,6 +217,8 @@ export type D2cProposedTransfer = {
   routeChannels: string[]
   lines: { skuCode: string; skuName: string | null; brand: string | null; qty: number; mrp: number; gmv: number; poValue: number; rows: number[] }[]
   totalUnits: number
+  /** The sheet's PO Number (null = generated); referencePreview is then that number. */
+  poNumber?: string | null
   referencePreview: string | null
 }
 export type D2cUploadPreview = {
