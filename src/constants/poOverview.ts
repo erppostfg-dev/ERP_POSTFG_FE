@@ -12,6 +12,7 @@ export const PO_OVERVIEW_ENDPOINT = {
   CHANGES: '/po-overview/changes',
   /** Uniware sale order status (2026-11-06): GET last run, POST Sync now. */
   UNIWARE_SYNC: '/po-overview/uniware-sync',
+  /** PEPIMS -> POST_FG sync (2026-11-16): GET last run; POST start (admin / developer). */
 } as const
 
 /** Rows per request (the backend's default; PEPIMS loads 200 at a time). */
@@ -80,6 +81,7 @@ export const UNIWARE_SYNC_TEXT = {
   WAIT_HINT: (by: string | null, at: string) => `Synced from this button${by ? ` by ${by}` : ''} at ${at}. The button works once every 30 minutes for the whole team; the server also syncs every 30 minutes by itself.`,
 } as const
 export const UNIWARE_SYNC_REFRESH_MS = 30_000
+
 
 /** Group header labels of the grid. */
 export const COLUMN_GROUP_LABEL = { KEY: 'PO', SHIPMENT: 'Shipment' } as const
