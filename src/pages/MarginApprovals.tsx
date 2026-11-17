@@ -5,7 +5,7 @@ import { Badge, Button, SubTabs } from '../components/ui'
 import { inputCls } from '../components/kit'
 import { ApiError } from '../api/client'
 import { approveMarginRequest, listMarginRequests, rejectMarginRequest, type MarginPerson, type MarginRequest } from '../api/approvals'
-import { MARGIN_STATUS_LABEL, MARGIN_TABS, MARGIN_TEXT as T, PO_REVIEW_REMARK_MAX } from '../constants/poReview'
+import { marginStatusLabel, MARGIN_TABS, MARGIN_TEXT as T, PO_REVIEW_REMARK_MAX } from '../constants/poReview'
 import { istDateTime } from '../lib/time'
 
 /*
@@ -63,7 +63,7 @@ function RequestCard({ r, onDone }: { r: MarginRequest; onDone: (text: string) =
           <div className="text-[13.5px] font-semibold text-ink-900">#{r.id} · {T.KIND[r.kind] ?? r.kind} · {T.NEEDS[r.approvalsNeeded]} · {r.channel} <span className="font-mono">{r.channelCode}</span></div>
           <div className="text-[12px] text-ink-600">PEP <span className="font-mono">{r.pepCode}</span> · {T.SOURCE[r.source] ?? r.source} · asked by {who(r.requestedBy)} · {istDateTime(r.requestedAt)}</div>
         </div>
-        <Badge tone={tone(r.status)}>{MARGIN_STATUS_LABEL[r.status] ?? r.status}</Badge>
+        <Badge tone={tone(r.status)}>{marginStatusLabel(r.status, r.approvalsNeeded)}</Badge>
       </div>
       <div className="space-y-1">
         <Change label="Margin" from={r.oldMarginPercent} to={r.newMarginPercent} fmt={pct} />
@@ -72,8 +72,8 @@ function RequestCard({ r, onDone }: { r: MarginRequest; onDone: (text: string) =
       </div>
       {r.remark && <div className="rounded-md bg-alt px-3 py-2 text-[12.5px] text-ink-700">“{r.remark}”</div>}
       <div className="space-y-0.5 text-[12px] text-ink-600">
-        {r.l1 && <div>{single ? 'Approved' : 'Layer 1 approved'} by {who(r.l1.by)} · {istDateTime(r.l1.at)}{r.l1.remark ? ` · “${r.l1.remark}”` : ''}</div>}
-        {r.l2 && <div>{single ? 'Approved' : 'Layer 2 approved'} by {who(r.l2.by)} · {istDateTime(r.l2.at)}{r.l2.remark ? ` · “${r.l2.remark}”` : ''}</div>}
+        {r.l1 && <div>{single ? T.APPROVED_BY : T.STEP1_BY} {who(r.l1.by)} · {istDateTime(r.l1.at)}{r.l1.remark ? ` · “${r.l1.remark}”` : ''}</div>}
+        {r.l2 && <div>{single ? T.APPROVED_BY : T.STEP2_BY} {who(r.l2.by)} · {istDateTime(r.l2.at)}{r.l2.remark ? ` · “${r.l2.remark}”` : ''}</div>}
         {r.rejected && <div className="text-crit">Rejected by {who(r.rejected.by)} · {istDateTime(r.rejected.at)} · “{r.rejected.reason}”</div>}
       </div>
       {open && (r.canDecide ? (
@@ -103,6 +103,7 @@ export default function MarginApprovals() {
   const [notice, setNotice] = useState('')
   const list = useQuery({ queryKey: ['approvals', 'margins', tab], queryFn: ({ signal }) => listMarginRequests(tab, signal), placeholderData: keepPreviousData })
   const counts = list.data?.counts
+  const items = list.data?.items
   return (
     <div className="space-y-4">
       <p className="text-[12.5px] text-ink-600">{T.SUB}</p>
@@ -110,7 +111,7 @@ export default function MarginApprovals() {
         tabs={MARGIN_TABS.map((t) => ({ ...t, ...(t.key === 'open' && counts ? { count: counts.open } : {}) }))} />
       {notice && <div className="rounded-md bg-ok-soft px-3 py-2 text-[12.5px] text-ok">{notice}</div>}
       {list.error && <div className="rounded-md bg-crit-soft px-3 py-2 text-[12.5px] text-crit">{list.error instanceof ApiError ? list.error.message : String(list.error)}</div>}
-      {tab === 'open' && counts && <div className="text-[12px] text-ink-600">{counts.waitingL1} waiting for layer 1 · {counts.waitingL2} waiting for layer 2</div>}
+      {tab === 'open' && items && <div className="text-[12px] text-ink-600">{T.WAITING_SUMMARY(items.filter((r) => r.approvalsNeeded === 1).length, items.filter((r) => r.approvalsNeeded === 2 && r.status === 'pending_l1').length, items.filter((r) => r.approvalsNeeded === 2 && r.status === 'pending_l2').length)}</div>}
       {list.isPending ? <div className="text-[13px] text-ink-400">Loading…</div> : !list.data?.items.length ? (
         <div className="rounded-[var(--radius-card)] border border-dashed border-line px-4 py-10 text-center text-[13px] text-ink-400">{T.EMPTY}</div>
       ) : (

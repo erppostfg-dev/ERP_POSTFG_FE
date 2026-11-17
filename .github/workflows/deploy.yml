@@ -91,6 +91,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The Bulk Orders portal: a second app of this repo, served at <domain>/bulk-orders/
+      # (dist-bulk/, base /bulk-orders/, the same VITE_API_BASE_URL).
+      - name: Build (Bulk Orders portal)
+        run: npm run build:bulk
+
       - name: AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v5
         with:
@@ -113,12 +118,28 @@ jobs:
             --content-type "text/javascript" \
             --cache-control "public, max-age=31536000, immutable"
           # Other top-level files (favicon etc., if any): short cache; stale ones removed.
+          # bulk-orders/ is the Bulk Orders portal's folder (next step): never deleted here.
           aws s3 sync dist "s3://$S3_BUCKET" \
-            --exclude "assets/*" --exclude "index.html" \
+            --exclude "assets/*" --exclude "index.html" --exclude "bulk-orders/*" \
             --delete \
             --cache-control "public, max-age=300"
           # The entry page: always revalidated, so a new deploy shows up at once.
           aws s3 cp dist/index.html "s3://$S3_BUCKET/index.html" \
+            --content-type "text/html; charset=utf-8" \
+            --cache-control "no-cache"
+
+      # The Bulk Orders portal: same bucket under bulk-orders/, same order (assets first,
+      # index.html last).
+      - name: Upload Bulk Orders portal to S3
+        run: |
+          aws s3 sync dist-bulk/assets "s3://$S3_BUCKET/bulk-orders/assets" \
+            --exclude "*.mjs" \
+            --cache-control "public, max-age=31536000, immutable"
+          aws s3 sync dist-bulk/assets "s3://$S3_BUCKET/bulk-orders/assets" \
+            --exclude "*" --include "*.mjs" \
+            --content-type "text/javascript" \
+            --cache-control "public, max-age=31536000, immutable"
+          aws s3 cp dist-bulk/index.html "s3://$S3_BUCKET/bulk-orders/index.html" \
             --content-type "text/html; charset=utf-8" \
             --cache-control "no-cache"
 

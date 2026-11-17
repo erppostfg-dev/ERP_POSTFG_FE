@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "dev:lan": "vite --mode lan",
+    "dev:bulk": "vite --config vite.bulk.config.ts",
     "build": "vite build",
+    "build:bulk": "vite build --config vite.bulk.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

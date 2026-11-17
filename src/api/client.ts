@@ -42,6 +42,23 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body?.data as T
 }
 
+/** Like api(), for a multipart form (file uploads): the browser sets the multipart Content-Type itself. */
+export async function apiForm<T>(path: string, form: FormData): Promise<T> {
+  let res: Response
+  try {
+    res = await fetch(apiUrl(path), { method: 'POST', body: form, credentials: 'include', headers: { Accept: 'application/json' } })
+  } catch {
+    throw new ApiError(0, ERROR_CODE.NETWORK, 'Cannot reach the server')
+  }
+  const body = await res.json().catch(() => null)
+  if (!res.ok) {
+    const err = body?.error
+    if (res.status !== 401) rememberError({ status: res.status, code: err?.code ?? `HTTP_${res.status}`, message: err?.message ?? res.statusText, requestId: err?.requestId ?? res.headers.get('X-Request-Id') ?? undefined, path })
+    throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? res.statusText, err?.details)
+  }
+  return body?.data as T
+}
+
 /** Like api(), for list endpoints: also returns the body's meta (paging totals). */
 export async function apiWithMeta<T, M>(path: string, init: RequestInit = {}): Promise<{ data: T; meta: M }> {
   let res: Response

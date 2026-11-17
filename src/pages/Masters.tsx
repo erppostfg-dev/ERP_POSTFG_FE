@@ -312,7 +312,7 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
         </div>
       )}
       <Reveal open={s.open}><FilterPanel defs={filters} value={s.filters} onApply={(f) => { s.setFilters(f); s.setOpen(false) }} onClose={() => s.setOpen(false)} /></Reveal>
-      <DataGrid cols={c.cols} rows={view} rowKey={(r) => String(r[c.key])} sticky={1}
+      <DataGrid pageSizeKey={`masters-${id}`} cols={c.cols} rows={view} rowKey={(r) => String(r[c.key])} sticky={1}
         onRowClick={(r) => setEdit({ row: r, prev: String(r[c.key]) })}
         trailing={[
           ...(c.trailing ?? []),

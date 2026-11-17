@@ -74,7 +74,7 @@ export default function HistoryTab({ canEdit, onNotice, openCsv }: { canEdit: bo
         ]} />
         {runs.isPending && <span className="text-[12px] text-ink-400">Loading…</span>}
       </div>
-      {kind === 'periods' ? <Periods onFail={fail} /> : <DataGrid cols={cols} rows={rows} rowKey={(r) => r.id}
+      {kind === 'periods' ? <Periods onFail={fail} /> : <DataGrid pageSizeKey="intransit-history" cols={cols} rows={rows} rowKey={(r) => r.id}
         onRowClick={(r) => r.run.kind === 'report' && setOpen(r.id)}
         rowClass={(r) => (r.id === open ? 'bg-primary-soft/40' : '')}
         trailing={[
@@ -131,7 +131,7 @@ function Periods({ onFail }: { onFail: (err: unknown) => void }) {
   }))
   const cols: [string, keyof PeriodRow, ColKind][] = [['Period', 'kind', 'text'], ['FY', 'fy', 'text'], ['Name', 'label', 'mono'], ['From', 'from', 'date'], ['Size', 'size', 'mono'], ['Updated', 'updated', 'mono']]
   return (
-    <DataGrid cols={cols} rows={rows} rowKey={(r) => r.id} trailing={[
+    <DataGrid pageSizeKey="intransit-periods" cols={cols} rows={rows} rowKey={(r) => r.id} trailing={[
       { label: '', render: (r) => <button onClick={() => void downloadPeriod(r.copy).catch(onFail)} className="text-primary hover:underline">Download</button> },
     ]} />
   )

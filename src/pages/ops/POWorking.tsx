@@ -52,7 +52,7 @@ export default function POWorking({ prio, setPrio }: { prio: Record<string, numb
         primary={<PrimaryBtn icon={<Truck className="size-4" />}>Bulk logistics update</PrimaryBtn>} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
 
-      <DataGrid cols={COLS} rows={s.filtered} rowKey={(r) => r.uid} onRowClick={setSel}
+      <DataGrid pageSizeKey="po-working" cols={COLS} rows={s.filtered} rowKey={(r) => r.uid} onRowClick={setSel}
         rowClass={(r) => (r.crit === 'Critical' ? '[&>td:first-child]:shadow-[inset_3px_0_0_var(--color-crit)]' : '')}
         trailing={[
           { label: 'Criticality', render: (r) => <Badge tone={CRIT_TONE[r.crit]}>{r.crit}</Badge> },

@@ -91,7 +91,7 @@ export default function Feedback() {
       {list.isPending ? <div className="text-[13px] text-ink-400">{T.LOADING}</div> : !rows.length ? (
         <div className="rounded-[var(--radius-card)] border border-dashed border-line px-4 py-10 text-center text-[13px] text-ink-400">{T.EMPTY}</div>
       ) : (
-        <DataGrid cols={COLS} rows={rows} rowKey={(r) => r.id} sticky={1} pageSize={25} onRowClick={(r) => setOpenId(r.id)}
+        <DataGrid pageSizeKey="feedback" cols={COLS} rows={rows} rowKey={(r) => r.id} sticky={1} pageSize={25} onRowClick={(r) => setOpenId(r.id)}
           trailing={[{ label: T.STATUS, render: (r) => <Badge tone={FEEDBACK_STATUS_TONE[r.raw.status]}>{r.status}</Badge>, sortValue: (r) => STATUS_KEYS.indexOf(r.raw.status) }]} />
       )}
       <FeedbackForm open={creating} onClose={() => setCreating(false)} onSent={(item) => setOpenId(item.id)} />

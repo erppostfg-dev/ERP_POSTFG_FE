@@ -236,10 +236,10 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
         shownItems.length === 0 ? (
           <div className="rounded-md border border-dashed border-line px-4 py-6 text-center text-[12.5px] text-ink-400">{byEmail ? (onlyFailed ? T.NO_FAILED : T.NO_STRS) : T.NO_ITEMS}</div>
         ) : byEmail ? (
-          <DataGrid cols={STR_COLS} rows={shownItems.map(toStrRow)} rowKey={(row) => row.id} pageSize={10}
+          <DataGrid pageSizeKey="channel-pulls-strs" cols={STR_COLS} rows={shownItems.map(toStrRow)} rowKey={(row) => row.id} pageSize={10}
             trailing={[{ label: 'State', render: (row) => <StrStateCell item={row.raw} /> }, { label: 'PO', render: (row) => <PoCell item={row.raw} /> }]} />
         ) : (
-          <DataGrid cols={COLS} rows={(items.data ?? []).map(toRow)} rowKey={(row) => row.id} pageSize={10}
+          <DataGrid pageSizeKey="channel-pulls-items" cols={COLS} rows={(items.data ?? []).map(toRow)} rowKey={(row) => row.id} pageSize={10}
             trailing={[{ label: 'PO', render: (row) => <PoCell item={row.raw} /> }]} />
         )
       )}

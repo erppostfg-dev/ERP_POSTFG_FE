@@ -9,17 +9,19 @@ import {
   createUser, getRolePages, getUserOptions, listRoles, listUsers, resendWelcome, updateRole, updateUser,
   type AccessLevel, type AdminUser, type RoleItem, type RolePage, type UserBody, type UserOptions,
 } from '../api/admin'
-import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT, DEVELOPER_ROLE, EMAIL_TEXT, MONITOR_TEXT, SERVER_TEXT, SETTINGS_SECTIONS, type SettingsSection } from '../constants/admin'
+import { ACCESS_LABEL, ACCESS_LEVELS, ADMIN_TEXT, DATA_SYNC_TEXT, DEVELOPER_ROLE, EMAIL_TEXT, MONITOR_TEXT, SERVER_TEXT, SETTINGS_SECTIONS, type SettingsSection } from '../constants/admin'
 import { istDateTime } from '../lib/time'
 import { PATHS, URL_PARAM } from '../constants/pages'
 import { oneOf, useUrlParam } from '../lib/urlState'
 import type { ColKind } from '../lib/ops'
 import { Toggle, VerifySettings } from './ops/VerifySettings'
 import { NoticeSettings } from './admin/NoticeSettings'
+import { BulkOrderSettings } from './admin/BulkOrderSettings'
 import { ReviewRulesDummy } from './SettingsDummy'
 import { EmailTab } from './admin/EmailTab'
 import { ServerTab } from './admin/ServerTab'
 import { MonitorTab } from './admin/MonitorTab'
+import { DataSyncTab } from './admin/DataSyncTab'
 import { useAuth } from '../auth/AuthContext'
 import { IntakeSettings } from './ops/IntakeSettings'
 import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
@@ -34,7 +36,7 @@ import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
  * Email tab (2026-10-30): who gets each mail the ERP sends (pages/admin/EmailTab.tsx).
  */
 
-const TABS = ['users', 'roles', 'email', 'settings', 'server', 'monitor'] as const
+const TABS = ['users', 'roles', 'email', 'settings', 'server', 'monitor', 'data-sync'] as const
 type Tab = (typeof TABS)[number]
 type Notice = { tone: 'ok' | 'err'; text: string } | null
 const errText = (e: unknown) => (e instanceof ApiError ? (Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message) : String(e))
@@ -44,14 +46,14 @@ export default function Admin() {
   // the Server tab (2026-11-04): developers only (the backend refuses everyone else too)
   const auth = useAuth()
   const isDeveloper = auth.status === 'signedIn' && auth.user.roles.includes(DEVELOPER_ROLE)
-  const shown: Tab = (tab === 'server' || tab === 'monitor') && !isDeveloper ? 'users' : tab
+  const shown: Tab = (tab === 'server' || tab === 'monitor' || tab === 'data-sync') && !isDeveloper ? 'users' : tab
   const users = useQuery({ queryKey: ['admin', 'users'], queryFn: ({ signal }) => listUsers(signal) })
   const roles = useQuery({ queryKey: ['admin', 'roles'], queryFn: ({ signal }) => listRoles(signal) })
   return (
     <div className="space-y-5">
       <PageTitle title={ADMIN_TEXT.TITLE} sub={ADMIN_TEXT.SUB} />
-      <SubTabs value={shown} onChange={setTab} tabs={[{ key: 'users', label: 'Users', count: users.data?.length }, { key: 'roles', label: 'Roles', count: roles.data?.length }, { key: 'email', label: EMAIL_TEXT.TAB }, { key: 'settings', label: VERIFY_SETTINGS_TEXT.TAB }, ...(isDeveloper ? [{ key: 'server' as const, label: SERVER_TEXT.TAB }, { key: 'monitor' as const, label: MONITOR_TEXT.TAB }] : [])]} />
-      <div key={shown} className="pf-tab-in">{shown === 'users' ? <UsersTab /> : shown === 'roles' ? <RolesTab /> : shown === 'email' ? <EmailTab /> : shown === 'server' ? <ServerTab /> : shown === 'monitor' ? <MonitorTab /> : <SettingsTab />}</div>
+      <SubTabs value={shown} onChange={setTab} tabs={[{ key: 'users', label: 'Users', count: users.data?.length }, { key: 'roles', label: 'Roles', count: roles.data?.length }, { key: 'email', label: EMAIL_TEXT.TAB }, { key: 'settings', label: VERIFY_SETTINGS_TEXT.TAB }, ...(isDeveloper ? [{ key: 'server' as const, label: SERVER_TEXT.TAB }, { key: 'monitor' as const, label: MONITOR_TEXT.TAB }, { key: 'data-sync' as const, label: DATA_SYNC_TEXT.TAB }] : [])]} />
+      <div key={shown} className="pf-tab-in">{shown === 'users' ? <UsersTab /> : shown === 'roles' ? <RolesTab /> : shown === 'email' ? <EmailTab /> : shown === 'server' ? <ServerTab /> : shown === 'monitor' ? <MonitorTab /> : shown === 'data-sync' ? <DataSyncTab /> : <SettingsTab />}</div>
     </div>
   )
 }
@@ -76,6 +78,7 @@ function SettingsTab() {
         {section === 'review-rules' && <ReviewRulesDummy />}
         {section === 'po-intake' && <IntakeSettings />}
         {section === 'notices' && <NoticeSettings />}
+        {section === 'bulk-orders' && <BulkOrderSettings />}
       </div>
     </div>
   )
@@ -129,7 +132,7 @@ function UsersTab() {
         <div className="ml-auto"><Button variant="primary" icon={<UserPlus className="size-4" />} onClick={() => setEdit('new')}>{ADMIN_TEXT.ADD_USER}</Button></div>
       </div>
       {users.isError ? <p className="text-[12.5px] text-crit">{errText(users.error)}</p> : (
-        <DataGrid cols={UCOLS} rows={rows} rowKey={(r) => String(r.id)} onRowClick={(r) => setEdit(r.user)} pageSize={25}
+        <DataGrid pageSizeKey="users" cols={UCOLS} rows={rows} rowKey={(r) => String(r.id)} onRowClick={(r) => setEdit(r.user)} pageSize={25}
           trailing={[
             { label: 'Status', render: (r) => <Badge tone={r.status === 'active' ? 'ok' : 'neutral'}>{r.status === 'active' ? 'Active' : 'Off'}</Badge> },
             { label: 'Welcome email', render: (r) => r.user.welcomeSentAt

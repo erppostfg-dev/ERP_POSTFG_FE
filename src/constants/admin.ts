@@ -22,6 +22,10 @@ export const ADMIN_ENDPOINT = {
   MAIL_RECIPIENT: (key: string, id: number) => `/admin/mail-lists/${encodeURIComponent(key)}/recipients/${id}`,
   MAIL_HISTORY: (key: string) => `/admin/mail-lists/${encodeURIComponent(key)}/history`,
   MAIL_TEST: (key: string) => `/admin/mail-lists/${encodeURIComponent(key)}/test`,
+  // Data sync: PEPIMS -> prod + dev -> prod, one way (2026-11-17; developers only)
+  DATA_SYNC: '/admin/data-sync',
+  DATA_SYNC_RUN: (job: 'pepims' | 'dev-copy') => `/admin/data-sync/${job}`,
+  DATA_SYNC_NIGHTLY: '/admin/data-sync/nightly',
 } as const
 
 /** Only this role sees Admin > Server (2026-11-04; POST_FG ROLES.DEVELOPER). */
@@ -69,6 +73,7 @@ export const SETTINGS_SECTIONS = [
   { key: 'po-verify', label: 'PO verification', hint: 'Verify POs against the original before the Uniware CSV, per channel' },
   { key: 'po-intake', label: 'PO intake', hint: 'Which channels are processed and how many POs a day' },
   { key: 'notices', label: 'Notices', hint: 'Short notes people send each other in the bell (kept 2 days)' },
+  { key: 'bulk-orders', label: 'Bulk Orders', hint: 'Bulk Orders portal: proof of payment check per order type' },
   // DUMMY group (pages/SettingsDummy.tsx): only to see the layout; nothing is saved. (Notifications became the Email tab.)
   { key: 'review-rules', label: 'PO review rules', hint: 'Dummy: tolerances and approval', dummy: true },
 ] as const
@@ -106,6 +111,33 @@ export const SERVER_TEXT = {
 /** Admin > Monitor (2026-11-05; developers only): the server's CloudWatch logs + metrics, read with the EC2's own role. */
 export const MONITOR_WINDOWS = ['1h', '24h', '7d'] as const
 export type MonitorWindow = (typeof MONITOR_WINDOWS)[number]
+/** Admin > Data sync (2026-11-17, user: "nightly ~1 AM IST until I say; one way only; a tab for developers"). */
+export const DATA_SYNC_TEXT = {
+  TAB: 'Data sync',
+  SUB: 'One way only: PEPIMS → this database and dev → this database. Nothing is ever written into PEPIMS or dev. Developers only.',
+  NOT_HERE: (db: string, target: string) => `This server's database is ${db}: the jobs write only into ${target}, so they run only on prod.`,
+  NIGHTLY: 'Every night',
+  NIGHTLY_HINT: (at: string) => `At ${at} IST: Sync from PEPIMS, then Copy from dev. A server that was down at that time catches up until 07:00 IST.`,
+  NIGHTLY_ON: 'ON', NIGHTLY_OFF: 'OFF',
+  TURN_OFF: 'Turn off', TURN_ON: 'Turn on',
+  LAST_NIGHT: (d: string | null) => (d ? `Last nightly run: ${d}` : 'Not run at night yet'),
+  CHANGED: (by: string | null, at: string) => `Switched by ${by ?? 'someone'} at ${at}`,
+  JOBS: {
+    pepims: { TITLE: 'Sync from PEPIMS', WHAT: 'New and changed POs, lines and change logs of PEPIMS come in. PEPIMS is only read.', BUTTON: 'Sync from PEPIMS now' },
+    devCopy: { TITLE: 'Copy from dev', WHAT: 'New and changed work of dev (POs, uploads, reviews, approvals, History, users, masters) comes in. Dev is only read.', BUTTON: 'Copy from dev now' },
+  },
+  RUNNING: 'Running…',
+  NEVER: 'Never run',
+  LAST: (at: string, by: string | null) => `Last run ${at}${by ? ` · ${by}` : ''}`,
+  FAILED: (why: string) => `Failed: ${why}`,
+  STARTED: 'Started: the result shows here when it ends.',
+  SUMMARY: {
+    read: 'PEPIMS POs read', inserted: 'new', linked: 'linked', updated: 'updated', unchanged: 'unchanged', conflicts: 'kept ours', logsAdded: 'History lines',
+    posLinked: 'dev POs matched', posAdded: 'dev POs added', posUpdated: 'dev-only POs updated', linesAdded: 'lines added', usersAdded: 'users added', history: 'History rows', uploads: 'uploads copied / updated', rowsWritten: 'rows written in all', prodOwnKept: "prod's own rows kept (not overwritten)",
+  } as Record<string, string>,
+} as const
+export const DATA_SYNC_REFRESH_MS = 10_000
+
 export const MONITOR_TEXT = {
   TAB: 'Monitor',
   SUB: 'How the server is doing: memory, CPU, disk, database, every API and every warning or error, from CloudWatch. Click a point on a graph to see what was running then. Developers only.',

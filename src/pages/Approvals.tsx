@@ -206,7 +206,7 @@ function PoReviewApprovals({ switcher }: { switcher: ReactNode }) {
         </div>
       ) : (
         <div key={tab} className="pf-tab-in">
-          <DataGrid cols={COLS[tab]} rows={list.isPending ? [] : rows} rowKey={(r) => r.id} onRowClick={(r) => setSel(r.id)} pageSize={25}
+          <DataGrid pageSizeKey="approvals" cols={COLS[tab]} rows={list.isPending ? [] : rows} rowKey={(r) => r.id} onRowClick={(r) => setSel(r.id)} pageSize={25}
             rowMenu={(r) => [{ label: 'Open', onClick: () => setSel(r.id) }]}
             rowClass={(r) => (r.item.kind === APPROVAL_KIND.MASTER_UPDATE ? 'bg-warn-soft/40' : '')}
             selected={canTick ? tickedNow : undefined} onSelectedChange={canTick ? setTicked : undefined} />

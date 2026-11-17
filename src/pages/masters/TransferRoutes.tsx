@@ -103,7 +103,7 @@ export default function TransferRoutes() {
             </div>
           )}
           <Reveal open={s.open}><FilterPanel defs={filters} value={s.filters} onApply={(f) => { s.setFilters(f); s.setOpen(false) }} onClose={() => s.setOpen(false)} /></Reveal>
-          <DataGrid cols={COLS} rows={view} rowKey={(r) => String(r.rid)} sticky={1}
+          <DataGrid pageSizeKey="transfer-routes" cols={COLS} rows={view} rowKey={(r) => String(r.rid)} sticky={1}
             onRowClick={canEdit ? (r) => { const it = byId.get(r.rid); if (editable(it)) setEditing(it ?? null) } : undefined}
             trailing={[
               { label: 'Vendor Code', render: (r) => (r.vendorCode ? <span className="font-mono text-[12.5px]">{r.vendorCode}</span> : missingChip), sortValue: (r) => r.vendorCode },
