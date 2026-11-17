@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router'
 import { Button, PageTitle, SubTabs } from '../../components/ui'
 import { useAuth } from '../../auth/AuthContext'
 import { ACCESS } from '../../constants/auth'
 import { PATHS } from '../../constants/pages'
-import { getDay, type CsvTarget } from '../../api/intransit'
-import { INTRANSIT_POLL_MS, INTRANSIT_TABS, INTRANSIT_TEXT, type IntransitTab } from '../../constants/intransit'
+import { downloadInputsBook, getDay, getRun, type CsvTarget } from '../../api/intransit'
+import { INPUTS_BOOK, INTRANSIT_POLL_MS, INTRANSIT_TABS, INTRANSIT_TEXT, type IntransitTab } from '../../constants/intransit'
 import { istDay } from '../../lib/time'
 import CsvViewer from './CsvViewer'
 import DayRibbon from './intransit/DayRibbon'
@@ -35,6 +36,22 @@ export default function IntransitStock() {
   const [viewing, setViewing] = useState<{ target: CsvTarget; subtitle?: string } | null>(null)
   const openCsv: OpenCsv = (target, subtitle) => setViewing({ target, subtitle })
   const onNotice = (tone: 'ok' | 'warn', text: string) => setNotice({ tone, text })
+
+  // the mail's link to a build's input files (?run=<id>&get=inputs, 2026-11-02): downloaded once, then the link is cleared
+  const [params, setParams] = useSearchParams()
+  const linkRun = params.get(INPUTS_BOOK.PARAM_GET) === INPUTS_BOOK.GET_VALUE ? params.get(INPUTS_BOOK.PARAM_RUN) : null
+  useEffect(() => {
+    if (!linkRun) return
+    setParams({}, { replace: true })
+    onNotice('ok', INPUTS_BOOK.DOWNLOADING(linkRun))
+    void getRun(linkRun)
+      .then((r) => {
+        if (r.report?.state === 'expired') throw new Error(`it was kept until ${r.report.expiresOn} (90 days)`)
+        return downloadInputsBook(r.id, r.asOf)
+      })
+      .then(() => setNotice(null))
+      .catch((err: unknown) => onNotice('warn', INPUTS_BOOK.GONE(linkRun, err instanceof Error ? err.message : String(err))))
+  }, [linkRun])
 
   const day = useQuery({
     queryKey: ['intransit', 'day', date],

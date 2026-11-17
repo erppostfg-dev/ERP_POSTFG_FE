@@ -16,10 +16,14 @@ export const PATHS = {
   CHANNEL_CUSTOMERS: '/masters/channel-customers',
   CHANNEL_LOCATIONS: '/masters/channel-locations',
   WAREHOUSES: '/masters/warehouses',
+  /** D2C internal transfer routes (2026-11-03): not a backend page key; its access is the Warehouses page's (PAGE_ACCESS_OF). */
+  TRANSFER_ROUTES: '/masters/transfer-routes',
   OPERATIONS: '/operations',
   PO_OVERVIEW: '/operations/po-overview',
   PO_REVIEW: '/operations/po-review',
   PO_WORKING: '/operations/po-working',
+  /** D2C internal transfers (2026-11-03): backend page key /operations/d2c-transfers. */
+  D2C_TRANSFERS: '/operations/d2c-transfers',
   /** Channel Pulls (2026-10-30; was Amazon Inbound, same URL + page key): channels pulled by API / robot + Amazon's inbound tabs. */
   AMAZON_INBOUND: '/operations/amazon-inbound',
   SKUS_SHORT: '/operations/skus-short',
@@ -40,7 +44,7 @@ export const PATHS = {
  * Pages whose data comes from the API. Every other page still shows the design's sample data, and in dev it is tinted
  * amber with a "Dummy data" strip (see .dummy-data in index.css). Add a page here once it is wired to the backend.
  */
-export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
+const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
   PATHS.PO_REVIEW, // Processed tab live; In Review and Manual Upload still marked inside the page
   PATHS.ADMIN, // GET /admin/users + /admin/roles
   PATHS.APPROVALS, // GET /approvals/po-reviews (PO reviews only; other approval types not built, hidden)
@@ -50,10 +54,12 @@ export const LIVE_PAGES: ReadonlySet<string> = new Set<string>([
   PATHS.CHANNEL_CUSTOMERS, // GET /masters/channel-customers; legal name, type, GSTIN, terms, margin, PO source = NOT_IN_DB
   PATHS.CHANNEL_LOCATIONS, // GET /masters/channel-locations (details_channels)
   PATHS.WAREHOUSES, // GET /masters/warehouses/pep; no warehouse table, so most PEP facility fields = NOT_IN_DB
+  PATHS.TRANSFER_ROUTES, // GET /masters/transfer-routes (d2c_transfer_routes)
   PATHS.AMAZON_INBOUND, // GET /amazon/inbound/* (inbound plans + shipments)
   PATHS.INVENTORY, // GET /intransit/snapshot (the Daily Snapshot's Sheet35(2), worked out in the browser); DRR / aging / WoW not available yet
   PATHS.INTRANSIT_STOCK, // /intransit: input files, API fetches, report builds
   PATHS.FEEDBACK, // GET /feedback (2026-10-29)
+  PATHS.D2C_TRANSFERS, // GET /d2c-transfers (+ /counts, /options, /:id); Uniware columns empty until phase 4-6
 ])
 
 /**
@@ -71,7 +77,7 @@ export const isDummyPage = (path: string) => SHOW_DUMMY_MARK && !LIVE_PAGES.has(
  * Pages that open with the sidebar collapsed to its rail (wide tables; user, 2026-10-14). Temporary: the person's own
  * expand / collapse choice is back on the other pages; hovering the rail peeks it, its expand button opens it.
  */
-export const RAIL_PAGES: ReadonlySet<string> = new Set<string>([PATHS.PO_OVERVIEW])
+export const RAIL_PAGES: ReadonlySet<string> = new Set<string>([PATHS.PO_OVERVIEW, PATHS.D2C_TRANSFERS])
 
 /** Where the app opens after sign-in. */
 export const HOME_PATH = PATHS.PO_OVERVIEW
@@ -83,6 +89,15 @@ export const MASTER_TAB_BY_PATH: Record<string, string> = {
   [PATHS.CHANNEL_CUSTOMERS]: MASTER_TABS[2],
   [PATHS.CHANNEL_LOCATIONS]: MASTER_TABS[3],
   [PATHS.WAREHOUSES]: MASTER_TABS[4],
+  [PATHS.TRANSFER_ROUTES]: MASTER_TABS[5],
+}
+
+/**
+ * Pages that are not backend page keys: their access is another page's (the backend checks the same page). Transfer
+ * routes: GET /masters/transfer-routes needs viewer on /masters/warehouses.
+ */
+export const PAGE_ACCESS_OF: Record<string, string> = {
+  [PATHS.TRANSFER_ROUTES]: PATHS.WAREHOUSES,
 }
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -99,6 +114,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: PATHS.PO_REVIEW, label: 'PO Processing & Review' },
       { path: PATHS.PO_OVERVIEW, label: 'PO Overview' },
       { path: PATHS.PO_WORKING, label: 'PO Working' },
+      { path: PATHS.D2C_TRANSFERS, label: 'D2C Internal Transfers' },
       { path: PATHS.AMAZON_INBOUND, label: 'Channel Pulls' },
       { path: PATHS.SKUS_SHORT, label: 'SKUs Short' },
       { path: PATHS.OPS_ANALYTICS, label: 'Analytics' },

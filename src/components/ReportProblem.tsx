@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { MessageSquarePlus } from 'lucide-react'
+import { MessageSquarePlus, X } from 'lucide-react'
 import { Button, Drawer } from './ui'
 import { Field, inputCls, textareaCls } from './kit'
 import { ImagePicker } from './FeedbackImages'
@@ -10,10 +10,11 @@ import { ApiError } from '../api/client'
 import { createFeedback, feedbackPeople, feedbackPeopleKey, type FeedbackDetail, type FeedbackPerson } from '../api/feedback'
 import { useAuth } from '../auth/AuthContext'
 import {
-  FEEDBACK_DESCRIPTION_ROWS, FEEDBACK_MAX_IMAGES, FEEDBACK_SEVERITIES, FEEDBACK_TEXT as T, FEEDBACK_TEXT_MAX, FEEDBACK_TITLE_MAX, FEEDBACK_TYPES,
+  FEEDBACK_DESCRIPTION_ROWS, FEEDBACK_HINT, FEEDBACK_MAX_IMAGES, FEEDBACK_SEVERITIES, FEEDBACK_TEXT as T, FEEDBACK_TEXT_MAX, FEEDBACK_TITLE_MAX, FEEDBACK_TYPES,
   type FeedbackSeverity, type FeedbackType,
 } from '../constants/feedback'
-import { lastError } from '../lib/lastError'
+import { lastError, onError } from '../lib/lastError'
+import { istDay } from '../lib/time'
 
 /** "Assigned to": nobody, or one active person (name + email). Used by the form and the item drawer. */
 export function AssigneeSelect({ value, people, onChange, disabled }: { value: number | null; people: FeedbackPerson[]; onChange: (id: number | null) => void; disabled?: boolean }) {
@@ -134,17 +135,70 @@ export function FeedbackForm({ open, onClose, onSent }: { open: boolean; onClose
   )
 }
 
-/** The top-bar button: opens the form on any page; says the item number once sent. */
+/** Browser storage may be blocked (private window): the hint then simply shows each visit. */
+const shownToday = () => {
+  try { return localStorage.getItem(FEEDBACK_HINT.STORAGE_KEY) === istDay(new Date()) } catch { return false }
+}
+const markShown = () => {
+  try { localStorage.setItem(FEEDBACK_HINT.STORAGE_KEY, istDay(new Date())) } catch { /* not kept: fine */ }
+}
+
+/**
+ * The top-bar button: opens the form on any page; says the item number once sent. Hint (2026-11-05, user: "blink or pop
+ * so people report problems"): the button pulses with a small "Facing a problem?" pop-up once a day, and again (as
+ * "Something went wrong?") after a server error, at most every 10 minutes. The daily one stays until Got it / Report now /
+ * the X; the error one goes after 15 s.
+ * Between pop-ups the button keeps a soft pulse (dev only, like the pop-up).
+ */
 export function ReportProblemButton() {
   const [open, setOpen] = useState(false)
   const [sent, setSent] = useState<string | null>(null)
+  const [hint, setHint] = useState<'daily' | 'error' | null>(null)
+  const lastErrorHint = useRef(0)
+  useEffect(() => {
+    if (!FEEDBACK_HINT.ENABLED) return
+    // once a day: marked as shown the moment it opens; it stays open until Got it / Report now / the X
+    // ?hint in the address (dev only) = show it now, for testing
+    const force = new URLSearchParams(window.location.search).has('hint')
+    const first = shownToday() && !force ? undefined : window.setTimeout(() => { markShown(); setHint('daily') }, FEEDBACK_HINT.FIRST_DELAY_MS)
+    const off = onError((e) => {
+      if (e.status > 0 && e.status < 500) return
+      if (Date.now() - lastErrorHint.current < FEEDBACK_HINT.ERROR_GAP_MS) return
+      lastErrorHint.current = Date.now()
+      setHint('error')
+    })
+    return () => { window.clearTimeout(first); off() }
+  }, [])
+  useEffect(() => {
+    if (hint !== 'error') return
+    const t = window.setTimeout(() => setHint(null), FEEDBACK_HINT.SHOW_MS)
+    return () => window.clearTimeout(t)
+  }, [hint])
+  const dismiss = () => setHint(null)
+  const report = () => { setHint(null); setSent(null); setOpen(true) }
   return (
-    <>
-      <button type="button" onClick={() => { setSent(null); setOpen(true) }} title={T.REPORT}
-        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-line px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-600 hover:bg-alt hover:text-ink-900">
+    <div className="relative">
+      <button type="button" onClick={report} title={T.REPORT}
+        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-line px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-600 hover:bg-alt hover:text-ink-900 ${hint ? 'pf-attn' : FEEDBACK_HINT.ENABLED ? 'pf-attn-soft' : ''}`}>
         <MessageSquarePlus className="size-3.5" /><span className="hidden xl:inline">{sent ? T.SENT(sent) : T.REPORT}</span>
       </button>
+      {hint && (
+        <div role="status" className="pf-pop-in absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-line bg-surface p-3 text-left shadow-lg">
+          <div className="absolute -top-1.5 right-4 size-3 rotate-45 border-l border-t border-line bg-surface" />
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-[12.5px] font-semibold text-ink-900">{hint === 'error' ? T.HINT_ERROR_TITLE : T.HINT_TITLE}</div>
+              <p className="mt-0.5 text-[12px] leading-snug text-ink-600">{hint === 'error' ? T.HINT_ERROR_BODY : T.HINT_BODY}</p>
+            </div>
+            <button type="button" onClick={dismiss} aria-label={T.HINT_DISMISS} className="text-ink-400 hover:text-ink-700"><X className="size-3.5" /></button>
+          </div>
+          <div className="mt-2 flex justify-end gap-2">
+            <Button variant="ghost" onClick={dismiss}>{T.HINT_DISMISS}</Button>
+            <Button variant="primary" onClick={report}>{T.HINT_REPORT}</Button>
+          </div>
+        </div>
+      )}
       <FeedbackForm open={open} onClose={() => setOpen(false)} onSent={(item) => setSent(item.id)} />
-    </>
+    </div>
   )
 }

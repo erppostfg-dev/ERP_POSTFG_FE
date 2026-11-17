@@ -10,6 +10,8 @@ export const PO_STATUS = {
   COMPLETED: 'completed',
   REJECTED: 'rejected',
   FAILED: 'failed',
+  /** Submitted for approval (Approvals page). */
+  PENDING_APPROVAL: 'pending_approval',
 } as const
 
 /**
@@ -92,14 +94,19 @@ export const LIST_SORT = { CHANNEL: 'channel' } as const
 export const DISPLAY_TIME_ZONE = 'Asia/Kolkata'
 
 /** po_uploads.source -> the label the design uses. */
-export const SOURCE_LABELS: Record<string, 'API' | 'Webhook' | 'Email' | 'Manual'> = {
+export const SOURCE_LABELS: Record<string, 'API' | 'Webhook' | 'Email' | 'Manual' | 'Bulk order'> = {
   api: 'API',
   email: 'Email',
   manual: 'Manual',
+  /** 2026-11-12: a Bulk Orders portal order our team turned into a sale order (no Verify step). */
+  bulk: 'Bulk order',
 }
 
 /** po_issues.status */
 export const ISSUE_STATUS = { OPEN: 'open' } as const
+
+/** An accepted Address Mismatch needs a remark (backend REMARK_REQUIRED_ISSUE_TYPES, 2026-11-06). */
+export const ADDRESS_REMARK = 'Write a remark: why ship from another warehouse than the PO is billed to'
 
 /** po_issues.issue_type -> what the reviewer reads. */
 export const ISSUE_LABELS: Record<string, string> = {
@@ -113,6 +120,8 @@ export const ISSUE_LABELS: Record<string, string> = {
   TOTAL_MISMATCH: 'Total mismatch',
   PO_EXPIRED: 'PO expired',
   OTHER: 'Other',
+  // billed to one of our warehouses (its GSTIN), location mapped to another (2026-11-06)
+  ADDRESS_MISMATCH: 'Address Mismatch',
 }
 
 /** po_issues.field_name of header issues -> the review panel field they belong to. */
@@ -151,6 +160,8 @@ export const FILE_VIEWER = { MAX_ROWS: 2000, MAX_COLS: 100, DETAILS: 'Details', 
 
 /** In-app file viewer texts. */
 export const FILE_VIEWER_TEXT = {
+  IMAGE_FULL: 'Click to zoom in (move the mouse to look around)',
+  IMAGE_FIT: 'Click to zoom out',
   LOADING: 'Loading the file…',
   FAILED: 'Could not read this file here. Download it to view it.',
   EMPTY: 'This sheet is empty.',
@@ -182,6 +193,11 @@ export const PDF_VIEWER = { ZOOM_STEPS: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 
 
 /** The full-screen "View" opens PDFs at 50% of fit-to-width, so the whole page shows at once (user, 2026-10-21). */
 export const FULL_SCREEN_PDF_ZOOM = 0.5
+/** A bulk order document in its window (2026-11-13): a whole A4 page shows at once. */
+export const DOCUMENT_PDF_ZOOM = 0.75
+/** An image click zooms it this much in place (2026-11-13: full size was far too big); the window leaves after this many ms. */
+export const IMAGE_ZOOM = 1.8
+export const DIALOG_OUT_MS = 180
 
 /** Search in the viewer: waits this long after the last key before searching. */
 export const FIND_DEBOUNCE_MS = 250
@@ -192,6 +208,8 @@ export const REVIEW_TEXT = {
   VIEW_ONLY: 'View only: ask an admin for editor access to submit or reject POs.',
   SUBMIT: 'Submit for approval',
   REJECT: 'Reject PO',
+  /** Under a line's Qty / MRP / Rate box: the PO's own value, click = find it on the PO + copy (2026-11-05). */
+  ON_PO: 'on PO',
   /** Combos / gift kits / M_Tools go to Uniware with their _S code when our master has it (2026-10-30). */
   PUNCHED_AS: (code: string) => `Punched as ${code}`,
   PUNCHED_AS_TIP: 'Combos, gift kits and M_Tools are punched in Uniware with their _S code (sale order CSV + PO Overview)',
@@ -218,6 +236,50 @@ export const PRICE_ISSUES = { PRICE_MISMATCH: 'price', MRP_MISMATCH: 'mrp' } as 
 /* ---- Approvals page: PO reviews waiting for an approver (2026-10-15) ---- */
 
 export const APPROVALS_ENDPOINT = '/approvals/po-reviews'
+
+/** Margin changes, two-layer approval (2026-11-06): Operations Manager (layer 1), then Admin (layer 2). */
+export const MARGIN_ENDPOINT = '/approvals/margin-changes'
+export const APPROVALS_VIEW = { PO: 'po', MARGIN: 'margin' } as const
+export type ApprovalsView = (typeof APPROVALS_VIEW)[keyof typeof APPROVALS_VIEW]
+export const MARGIN_TABS: { key: 'open' | 'applied' | 'rejected'; label: string }[] = [
+  { key: 'open', label: 'Waiting' }, { key: 'applied', label: 'Applied' }, { key: 'rejected', label: 'Rejected' },
+]
+/**
+ * Status in plain words (user 2026-11-12: no "layer 1 / layer 2" on screen). A new channel SKU has one approval
+ * ("Waiting for approval", also an old add still at pending_l2); a change has two steps (Operations Manager, then Admin).
+ */
+export const marginStatusLabel = (status: string, approvalsNeeded: number): string => {
+  if (status === 'applied') return approvalsNeeded === 1 ? 'Added' : 'Applied'
+  if (status === 'rejected') return 'Rejected'
+  if (approvalsNeeded === 1) return 'Waiting for approval'
+  return status === 'pending_l2' ? 'Waiting for Admin (step 2 of 2)' : 'Waiting for Operations Manager (step 1 of 2)'
+}
+export const MARGIN_TEXT = {
+  VIEW_PO: 'PO reviews',
+  VIEW_MARGIN: 'Margin changes',
+  SUB: 'A new channel SKU needs one approval (Operations Manager or Admin): it is added at once. A margin % / rate change on an existing SKU needs two: Operations Manager first, then Admin; nothing changes in the master until both approve.',
+  EMPTY: 'Nothing here.',
+  KIND: { edit: 'Margin / rate change', add: 'New channel SKU' } as Record<string, string>,
+  SOURCE: { masters: 'Masters page', price_check: 'Price check (PO approval)' } as Record<string, string>,
+  APPROVE_L1: 'Approve (step 1 of 2)',
+  APPROVE_L2: 'Final approval: apply to master',
+  APPROVE_ADD: 'Approve and add',
+  /** History lines of a card. */
+  APPROVED_BY: 'Approved by',
+  STEP1_BY: 'Step 1 (Operations Manager) approved by',
+  STEP2_BY: 'Final approval (Admin) by',
+  /** Waiting tab summary, counted from the cards shown. */
+  WAITING_SUMMARY: (adds: number, step1: number, step2: number) =>
+    `${adds} new SKU${adds === 1 ? '' : 's'} waiting for approval · ${step1} change${step1 === 1 ? '' : 's'} waiting for Operations Manager · ${step2} waiting for Admin`,
+  NEEDS: { 1: '1 approval', 2: '2 approvals' } as Record<number, string>,
+  REJECT: 'Reject',
+  REMARK: 'Remark (required to reject)',
+  REMARK_NEEDED: 'Write why it is rejected',
+  APPROVED_L1: (id: string) => `Request #${id} approved (step 1 of 2): now waiting for an Admin's final approval.`,
+  APPLIED: (id: string) => `Request #${id} finally approved and applied to the master.`,
+  ADDED: (id: string) => `Request #${id} approved: the channel SKU is added to the master.`,
+  REJECTED: (id: string) => `Request #${id} rejected.`,
+} as const
 
 /** po_review_submissions.status shown as the page's tabs. */
 export const APPROVAL_STATUS = { PENDING: 'pending', APPROVED: 'approved', REJECTED: 'rejected' } as const
@@ -299,6 +361,10 @@ export const UNIWARE_ENDPOINT = {
   ONE: (uploadId: string) => `${PO_REVIEW_ENDPOINT}/${encodeURIComponent(uploadId)}/uniware-csv`,
   MANY: `${PO_REVIEW_ENDPOINT}/uniware-csv`,
   MARK: `${PO_REVIEW_ENDPOINT}/uniware-uploaded`,
+  /** Create in Uniware (2026-11-09, POST_FG UNIWARE_CREATE): queue the ticked POs / the latest request of each. */
+  CREATE: `${PO_REVIEW_ENDPOINT}/uniware-create`,
+  CREATE_STATES: `${PO_REVIEW_ENDPOINT}/uniware-create/states`,
+  CREATE_PREVIEW: `${PO_REVIEW_ENDPOINT}/uniware-create/preview`,
 } as const
 
 /** Days waiting (since processed, not yet in Uniware): from WARN yellow, from CRIT red, before that grey (user, 2026-10-19). */
@@ -324,12 +390,53 @@ export const UNIWARE_TEXT = {
   SORT_HINT: 'Sort: ↓ waiting longest first (in Uniware last) · ↑ the reverse · click again to clear',
   DOWNLOADED_BY: 'Downloaded by',
   UPLOADED_BY: 'Marked uploaded by',
+  /** No person: the Uniware sync found the sale order in Uniware and marked it (2026-11-09). */
+  FOUND_BY_SYNC: 'Found in Uniware by the sync',
   BULK_DOWNLOAD: (n: number) => `Download sale order CSV (${n})`,
   BULK_MARK: (n: number) => `Mark uploaded (${n})`,
   DOWNLOADED: (n: number) => (n === 1 ? 'Sale order CSV downloaded. Upload it into Uniware, then click "Mark uploaded".' : `One CSV with ${n} sale orders downloaded. Upload it into Uniware, then mark them uploaded.`),
   MARKED: (n: number) => `${n} PO${n === 1 ? '' : 's'} marked uploaded into Uniware: now in PO Overview.`,
   UNDONE: (n: number) => `Upload mark removed from ${n} PO${n === 1 ? '' : 's'}: back to waiting, out of PO Overview.`,
   SUMMARY: (pending: number, downloaded: number) => `${pending} not downloaded · ${downloaded} downloaded, not in Uniware`,
+} as const
+
+/* ---- Create in Uniware (2026-11-09): the sale order is created through the Uniware API, no CSV download / upload ---- */
+/** POST_FG UNIWARE_CREATE_STATUS. */
+export const UNIWARE_CREATE_STATUS = { QUEUED: 'queued', CREATING: 'creating', CREATED: 'created', EXISTS: 'exists', FAILED: 'failed' } as const
+export type UniwareCreateStatus = (typeof UNIWARE_CREATE_STATUS)[keyof typeof UNIWARE_CREATE_STATUS]
+export const UNIWARE_CREATE_TEXT = {
+  BUTTON: (n: number) => `Create in Uniware (${n})`,
+  BUTTON_HINT: 'Creates the sale orders in Uniware through its API: no CSV download / upload. Only verified POs not in Uniware yet.',
+  CONFIRM_TITLE: (n: number) => `Create ${n} sale order${n === 1 ? '' : 's'} in Uniware?`,
+  CONFIRM_BODY: 'These are REAL sale orders in Uniware. Each one is checked first: one Uniware already has is not sent again. Nothing in Uniware is ever changed or cancelled from here.',
+  CONFIRM: 'Create in Uniware',
+  CANCEL: 'Cancel',
+  QUEUED: (n: number, refused: string[]) => `${n} PO${n === 1 ? '' : 's'} being created in Uniware.${refused.length ? ` Not sent: ${refused.join('; ')}` : ''}`,
+  CREATING: 'Creating in Uniware…',
+  FAILED: 'Create failed',
+  FAILED_HINT: (error: string | null, attempts: number) => `${error ?? 'Uniware did not create it'} (${attempts} tr${attempts === 1 ? 'y' : 'ies'}). Fix it and create again, or download the CSV.`,
+  /** Max POs in one click (POST_FG UNIWARE_CREATE.MAX_IDS). */
+  MAX: 50,
+  TOO_MANY: (max: number) => `Tick at most ${max} POs to create in Uniware at once.`,
+  /** How often the screen checks while some are being created. */
+  POLL_MS: 4000,
+} as const
+
+/** Preview of Create in Uniware (2026-11-09): what would be sent, nothing sent or saved. */
+export const UNIWARE_PREVIEW_TEXT = {
+  BUTTON: (n: number) => `Preview in Uniware (${n})`,
+  BUTTON_HINT: 'Shows exactly what "Create in Uniware" would send for the ticked POs, or why one would not be sent. Nothing is sent and nothing is saved.',
+  TITLE: (n: number, ready: number) => `Preview: ${ready} of ${n} PO${n === 1 ? '' : 's'} would be sent to Uniware`,
+  NOTHING_SENT: 'Nothing has been sent to Uniware and nothing was saved. "Create in Uniware" sends exactly this.',
+  CREATE_OFF: 'Create in Uniware is switched off on this server: this is a preview only. Nothing has been sent and nothing was saved.',
+  NO_PHONE: 'No phone number is set for Uniware orders (UNIWARE_ORDER_PHONE): the real create needs one, so it stays off until it is set.',
+  WOULD_SEND: 'Would be sent',
+  WOULD_NOT: 'Would NOT be sent',
+  CHANNEL: 'Uniware channel', CUSTOMER: 'Customer code', FACILITY: 'Warehouse (facility)', PO_DATE: 'PO date',
+  UNITS: 'Units', TOTAL: 'Order value', GSTIN: 'Customer GSTIN', DISPLAY: 'Display order code', ADDRESS: 'Ship-to / bill-to address',
+  SKU: 'Item SKU', PRICE: 'Price / unit', VALUE: 'Value',
+  SHOW_JSON: 'Show the exact request JSON',
+  CLOSE: 'Close the preview',
 } as const
 
 /* ---- Line items download on the Processed tab (2026-10-26): every line of the ticked POs as CSV or Excel ---- */
@@ -369,4 +476,24 @@ export const RECHECK_TEXT = {
     closed || passed
       ? `Re-checked: ${closed} problem${closed === 1 ? '' : 's'} fixed in the master closed, ${passed} PO${passed === 1 ? '' : 's'} passed to Processed${partly ? `, ${partly} still need a review for something else` : ''}.`
       : 'Re-checked: nothing new fixed in the master yet.',
+} as const
+
+/** Failed + Rejected, many at once (2026-11-04). */
+export const BULK_ENDED_TEXT = {
+  MAX: 50,
+  RETRY: (n: number) => `Try again (${n})`,
+  RETRY_HINT: 'Each PO goes on from the step it failed at, one after another in the background. A PO that failed at the OCR is read by the OCR again (OCR cost, at most 3 tries). A PO that came again meanwhile is not made twice.',
+  DISMISS: (n: number) => `Dismiss (${n})`,
+  DISMISS_HINT: 'Off the Failed list, with who / when / why; nothing is deleted.',
+  REOPEN: (n: number) => `Reopen (${n})`,
+  REOPEN_HINT: 'Back to In Review, each with one issue to accept (like Reopen on one PO); then fixed and approved again.',
+  REREAD: (n: number) => `Read again, no OCR (${n})`,
+  REREAD_ONE: 'Read again (no OCR)',
+  REREAD_HINT: 'Rebuilt from the OCR output we already stored, with today’s reader (after a reader fix), then checked again: no OCR cost. A PO without a stored OCR output needs Try again.',
+  REREAD_QUEUED: (po: string) => `PO ${po} is being read again from its stored OCR output; it moves to Processed or stays here with its new issues.`,
+  REMARK: 'Why (required)',
+  GO: 'Go',
+  CANCEL: 'Cancel',
+  TOO_MANY: (max: number) => `At most ${max} at once: tick fewer.`,
+  RESULT: (done: number, skipped: number, what: string) => `${done} ${what}${skipped ? `, ${skipped} not: ` : ''}`,
 } as const

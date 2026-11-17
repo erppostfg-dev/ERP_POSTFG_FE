@@ -244,7 +244,7 @@ function Plans({ onPlan }: { onPlan: (id: string) => void }) {
       {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {q.isPending ? <div className="flex items-center gap-2 py-10 text-[13px] text-ink-400"><Loader2 className="size-4 animate-spin" />Loading plans…</div>
         : !rows.length ? <p className="py-10 text-center text-[13px] text-ink-400">{INBOUND_TEXT.EMPTY}</p>
-          : <DataGrid cols={PLAN_COLS} rows={s.filtered} rowKey={(r) => r.planId} onRowClick={(r) => onPlan(r.planId)} pageSize={25}
+          : <DataGrid pageSizeKey="amazon-plans" cols={PLAN_COLS} rows={s.filtered} rowKey={(r) => r.planId} onRowClick={(r) => onPlan(r.planId)} pageSize={25}
             trailing={[
               { label: 'Shipments by status', render: (r) => <PlanBar byStatus={r.byStatus} total={r.shipmentCount} />, sortValue: (r) => (r.shipmentCount ? (r.byStatus.CLOSED ?? 0) / r.shipmentCount : -1) },
               { label: 'Flags', render: (r) => (
@@ -287,7 +287,7 @@ function Shipments({ onShipment }: { onShipment: (id: string) => void }) {
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {q.isPending ? <div className="flex items-center gap-2 py-10 text-[13px] text-ink-400"><Loader2 className="size-4 animate-spin" />Loading shipments…</div>
-        : <DataGrid cols={SHIP_COLS} rows={s.filtered} rowKey={(r) => r.externalId} onRowClick={(r) => onShipment(r.externalId)} pageSize={25}
+        : <DataGrid pageSizeKey="amazon-shipments" cols={SHIP_COLS} rows={s.filtered} rowKey={(r) => r.externalId} onRowClick={(r) => onShipment(r.externalId)} pageSize={25}
           rowClass={(r) => (r.stuck || r.attention ? '[&>td:first-child]:shadow-[inset_3px_0_0_var(--color-crit)]' : '')}
           trailing={[
             { label: 'Path', render: (r) => <StatusPath status={r.status} />, sortValue: (r) => SHIPMENT_STEPS.indexOf(r.status as (typeof SHIPMENT_STEPS)[number]) },

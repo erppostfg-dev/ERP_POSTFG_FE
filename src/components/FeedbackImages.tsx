@@ -53,7 +53,7 @@ export function ImagePicker({ files, onChange, max, onNote }: { files: File[]; o
   )
 }
 
-/** An image of the API (path under the API base), loaded with the session cookie. */
+/** An image of the API (path under the API base, e.g. feedbackImagePath(); a full http(s) URL as is), loaded with the session cookie. */
 export function AuthImage({ path, alt, className, onClick }: { path: string; alt: string; className?: string; onClick?: () => void }) {
   const [url, setUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)

@@ -48,12 +48,16 @@ export interface PullItem {
   fetchedAt: string
   takenAt: string | null
   upload: { id: string; status: string; poNumber: string | null } | null
+  /** Myntra STRs: robot runs tried and the email it came from. */
+  runs?: number | null
+  email?: { subject: string | null; receivedAt: string | null } | null
 }
 
 export const pullsKey = ['channel-pulls'] as const
 
 export const listChannelPulls = (signal?: AbortSignal) => api<ChannelPull[]>(CHANNEL_PULLS_ENDPOINT, { signal })
-export const listPullItems = (key: string, signal?: AbortSignal) => api<PullItem[]>(`${CHANNEL_PULLS_ENDPOINT}/${encodeURIComponent(key)}/items`, { signal })
+export const listPullItems = (key: string, signal?: AbortSignal, status?: 'failed' | 'stored') =>
+  api<PullItem[]>(`${CHANNEL_PULLS_ENDPOINT}/${encodeURIComponent(key)}/items${status ? `?status=${status}` : ''}`, { signal })
 export const getRobotRun = (key: string, signal?: AbortSignal) => api<RobotRun | null>(`${CHANNEL_PULLS_ENDPOINT}/${encodeURIComponent(key)}/robot`, { signal })
 export const runRobot = (key: string) => api<ChannelPull>(`${CHANNEL_PULLS_ENDPOINT}/${encodeURIComponent(key)}/robot`, { method: 'POST' })
 export const processPull = (key: string) => api<{ started: 'started' | 'queued'; pull: ChannelPull }>(`${CHANNEL_PULLS_ENDPOINT}/${encodeURIComponent(key)}/process`, { method: 'POST' })

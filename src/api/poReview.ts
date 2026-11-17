@@ -1,6 +1,6 @@
 import { api, apiUrl, ApiError } from './client'
 import { ERROR_CODE } from '../constants/auth'
-import { LINE_ITEMS, PO_REVIEW_ENDPOINT, PO_REVIEW_MAX_PAGE_SIZE, PO_REVIEW_MAX_PAGES } from '../constants/poReview'
+import { LINE_ITEMS, PO_REVIEW_ENDPOINT, PO_REVIEW_MAX_PAGE_SIZE, PO_REVIEW_MAX_PAGES, UNIWARE_ENDPOINT, type UniwareCreateStatus } from '../constants/poReview'
 import type { PriceChoice } from '../constants/priceDifferences'
 
 /* GET /po-review: one row per PO upload (API contract "PO review"). */
@@ -93,6 +93,8 @@ export type PoReviewLine = {
   poMrp: Num
   poUnitPrice: Num
   poLineValue: Num
+  /** The line's values as READ from the PO (2026-11-05): what click-to-find looks for (poUnitPrice is with tax). */
+  printed: { unitCost: Num; landingRate: Num; lineTotal: Num }
   pepCode: string
   /** The code the sale order is punched with: the _S code of a combo when our master has it, else pepCode. */
   punchCode: string
@@ -231,6 +233,32 @@ export function rejectPo(uploadId: string, remark: string) {
   return api<{ status: string; rejectedIssues: string[] }>(`${one(uploadId)}/reject`, { method: 'POST', body: JSON.stringify({ remark }) })
 }
 
+/* Create in Uniware (2026-11-09): POST /po-review/uniware-create queues the ticked POs; the states call gives the latest
+   request of each + whether the button is switched on (UNIWARE_CREATE_ENABLED on the server). */
+export interface UniwareCreateState {
+  uploadId: string; saleOrderCode: string; status: UniwareCreateStatus; attempts: number; error: string | null
+  items: number | null; orderValue: number | null; requestedAt: string; finishedAt: string | null
+}
+export function createInUniware(uploadIds: string[]) {
+  return api<{ queued: string[]; refused: { uploadId: string; reason: string }[] }>(UNIWARE_ENDPOINT.CREATE, { method: 'POST', body: JSON.stringify({ uploadIds }) })
+}
+export interface UniwarePreviewItem {
+  uploadId: string; poNumber: string | null; saleOrderCode: string | null; wouldSend: boolean; problems: string[]; phoneSet: boolean
+  summary: {
+    channel: string; customerCode: string; facility: string; displayOrderCode: string; poDate: string | null; units: number; value: number; gstin: string | null
+    address: { name: string; line1: string; city: string; state: string; pincode: string | null }
+    lines: { sku: string; units: number; price: number; value: number }[]
+  } | null
+  request: Record<string, unknown> | null
+}
+/* POST /po-review/uniware-create/preview: what Create would send per PO; nothing sent or saved (works with Create off). */
+export function previewUniwareCreate(uploadIds: string[]) {
+  return api<{ createEnabled: boolean; items: UniwarePreviewItem[] }>(UNIWARE_ENDPOINT.CREATE_PREVIEW, { method: 'POST', body: JSON.stringify({ uploadIds }) })
+}
+export function uniwareCreateStates(uploadIds: string[]) {
+  return api<{ enabled: boolean; items: UniwareCreateState[] }>(UNIWARE_ENDPOINT.CREATE_STATES, { method: 'POST', body: JSON.stringify({ uploadIds }) })
+}
+
 /* POST /po-review/uniware-uploaded: mark POs uploaded into Uniware (or undo); they then show in PO Overview. */
 export function markUniwareUploaded(uploadIds: string[], undo = false) {
   return api<{ changed: string[] }>(`${PO_REVIEW_ENDPOINT}/uniware-uploaded`, { method: 'POST', body: JSON.stringify({ uploadIds, undo }) })
@@ -316,3 +344,15 @@ export type ReviewLineItemRow = {
 export function getReviewLineItems(uploadIds: string[]) {
   return api<ReviewLineItemRow[]>(LINE_ITEMS.REVIEW_ENDPOINT, { method: 'POST', body: JSON.stringify({ uploadIds }) })
 }
+
+/* Failed + Rejected, many at once (2026-11-04): Try again / Dismiss failed POs, Reopen rejected POs (1-50 per call). */
+export type BulkEndedResult = { uploadId: string; result: 'queued' | 'done' | 'skipped'; reason: string }
+export const bulkRetryFailed = (uploadIds: string[]) =>
+  api<BulkEndedResult[]>(`${PO_REVIEW_ENDPOINT}/bulk-retry`, { method: 'POST', body: JSON.stringify({ uploadIds }) })
+export const bulkDismissFailed = (uploadIds: string[], remark: string) =>
+  api<BulkEndedResult[]>(`${PO_REVIEW_ENDPOINT}/bulk-dismiss`, { method: 'POST', body: JSON.stringify({ uploadIds, remark }) })
+export const bulkReopenRejected = (uploadIds: string[], remark: string) =>
+  api<BulkEndedResult[]>(`${PO_REVIEW_ENDPOINT}/bulk-reopen`, { method: 'POST', body: JSON.stringify({ uploadIds, remark }) })
+/** Read again, no OCR (2026-11-04): POs in review / failed rebuilt from their stored OCR output with today's reader. */
+export const bulkRereadUploads = (uploadIds: string[]) =>
+  api<BulkEndedResult[]>(`${PO_REVIEW_ENDPOINT}/bulk-reread`, { method: 'POST', body: JSON.stringify({ uploadIds }) })

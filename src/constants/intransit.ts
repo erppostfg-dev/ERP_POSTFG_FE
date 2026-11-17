@@ -8,11 +8,69 @@ export const INTRANSIT_ENDPOINT = '/intransit'
 /** How often a queued / running build or fetch is re-read. */
 export const INTRANSIT_POLL_MS = 3000
 
-export const RUN_STATUS = { QUEUED: 'queued', RUNNING: 'running', SUCCEEDED: 'succeeded', FAILED: 'failed' } as const
+/** stopped: by a person (Stop), or a build nobody answered the new-SKU question for (POST_FG, 2026-11-02). */
+export const RUN_STATUS = { QUEUED: 'queued', RUNNING: 'running', SUCCEEDED: 'succeeded', FAILED: 'failed', STOPPED: 'stopped' } as const
 export type RunStatus = (typeof RUN_STATUS)[keyof typeof RUN_STATUS]
 
-export const RUN_STATUS_LABEL: Record<RunStatus, string> = { queued: 'Queued', running: 'Running', succeeded: 'Done', failed: 'Failed' }
-export const RUN_STATUS_TONE: Record<RunStatus, 'info' | 'warn' | 'ok' | 'crit'> = { queued: 'info', running: 'warn', succeeded: 'ok', failed: 'crit' }
+export const RUN_STATUS_LABEL: Record<RunStatus, string> = { queued: 'Queued', running: 'Running', succeeded: 'Done', failed: 'Failed', stopped: 'Stopped' }
+export const RUN_STATUS_TONE: Record<RunStatus, 'info' | 'warn' | 'ok' | 'crit' | 'neutral'> = { queued: 'info', running: 'warn', succeeded: 'ok', failed: 'crit', stopped: 'neutral' }
+
+/** A build's steps (options.step) besides 'fetching <source>' (POST_FG INTRANSIT_STEP). */
+export const BUILD_STEP = {
+  BUILDING: 'building', AWAITING_ANSWERS: 'awaiting-answers', AWAITING_UPLOAD: 'awaiting-upload', INPUTS_BOOK: 'saving the input files', SAVING: 'saving to S3',
+} as const
+
+/** Stop a build or fetch (POST_FG POST /intransit/runs/:id/stop, 2026-11-02). */
+export const STOP_TEXT = {
+  BUTTON: 'Stop',
+  BUILD_BUTTON: 'Stop build',
+  BUSY: 'Stopping…',
+  CONFIRM_FETCH: (what: string) => `Stop the ${what} fetch? You can then upload its file by hand. A build waiting for it stops too.`,
+  CONFIRM_BUILD: 'Stop this build? Nothing of it is saved; build again when ready.',
+  ASKED: 'Stop asked: it stops within a few seconds (unless it is already saving its files).',
+  BY: (name: string | null) => `Stopped by ${name ?? 'someone'}`,
+} as const
+
+/** The input files workbook of a build (POST_FG INPUTS_BOOK_FILE): every daily input, a dated tab each; the mail links to it. */
+export const INPUTS_BOOK = {
+  FILE: 'Inputs.xlsx',
+  BUTTON: 'Input files',
+  TITLE: 'Every input file of this build in one workbook, a dated tab each',
+  /** The mail's link: /planning/intransit-stock?run=<id>&get=inputs */
+  PARAM_RUN: 'run',
+  PARAM_GET: 'get',
+  GET_VALUE: 'inputs',
+  DOWNLOADING: (id: string) => `Downloading the input files of build #${id}…`,
+  GONE: (id: string, why: string) => `The input files of build #${id} could not be downloaded: ${why}`,
+} as const
+
+/** SKU / mapping issues a build stopped to ask about (POST_FG sku-fill.ts / POST /intransit/runs/:id/issues, 2026-11-02). */
+export const NEW_SKU_TEXT = {
+  STEP: (n: number) => `Waiting for your answer on ${n} SKU / mapping issue${n === 1 ? '' : 's'}`,
+  TITLE: (n: number) => `${n} SKU / mapping issue${n === 1 ? '' : 's'} to decide`,
+  SUB: (mins: number) => `Fix each one, or Ignore it for this build (it is counted as before and asked again next time). Fixes are saved to the masters. The build carries on once all are answered; with no answer it stops in ${mins} min.`,
+  VIEW_ONLY: 'An editor of In-transit Stock answers these.',
+  SUBMIT: 'Save answers and continue',
+  SAVING: 'Saving…',
+  ALL_IGNORE: 'Ignore all for now',
+  SAVED: (fixed: number, ignored: number) => `Saved: ${fixed} fixed, ${ignored} ignored for this build. The build carries on.`,
+  KIND: { sku: 'SKU', code: 'Marketplace code', combo: 'Combo not in Split1', 'final-sku': 'Final SKU code missing', location: 'Location not found' } as Record<string, string>,
+  ACTION: {
+    consider: 'Consider', 'not-consider': "Don't consider", ignore: 'Ignore', 'add-split1': 'Add to Split1', map: 'Map to base', 'set-location': 'Set location',
+  } as Record<string, string>,
+  PICK_LOCATION: 'Pick a city…',
+  AUTO: 'filled by the build (20% of MRP when no COGS)',
+} as const
+
+/** A fetch of a build failed: upload its files by hand or go on with the earlier copies (POST_FG awaiting-upload, 2026-11-02). */
+export const UPLOAD_PAUSE_TEXT = {
+  STEP: (source: string) => `Waiting: upload the ${source} files by hand`,
+  TITLE: (source: string) => `The ${source} fetch did not bring every file`,
+  SUB: (mins: number) => `Upload them by hand below: the build carries on by itself once they are in. Or continue with the earlier copies. With nothing done it stops in ${mins} min.`,
+  CONTINUE: 'Continue with the earlier copies',
+  CONTINUING: 'Continuing…',
+  IN: 'uploaded',
+} as const
 
 export const SOURCES = ['amazon', 'uniware', 'flipkart', 'myntra'] as const
 export type Source = (typeof SOURCES)[number]

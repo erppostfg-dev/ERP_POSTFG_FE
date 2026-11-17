@@ -15,6 +15,20 @@ export const FEEDBACK_COMMENT_MAX = 2000
 export const FEEDBACK_DESCRIPTION_ROWS = 5
 /** The list refreshes by itself this often while the page is open. */
 export const FEEDBACK_REFRESH_MS = 60_000
+/** The top-bar bell asks for new notifications this often (and when the tab comes back into focus). */
+export const FEEDBACK_BELL_REFRESH_MS = 30_000
+
+/** The bell (2026-11-06): what each notification says. */
+export const FEEDBACK_BELL_TEXT = {
+  TITLE: 'Notifications',
+  EMPTY: 'Nothing yet. You are told here when an item is assigned to you, you are added to one, or someone replies.',
+  READ_ALL: 'Mark all read',
+  ASSIGNED: (who: string) => `${who} assigned you`,
+  ADDED: (who: string) => `${who} added you`,
+  COMMENT: (who: string) => `${who} replied`,
+  OPEN_ALL: 'Open Feedback',
+  UNREAD: (n: number) => `${n} unread`,
+} as const
 
 export type FeedbackType = 'problem' | 'improvement' | 'question'
 export type FeedbackSeverity = 'blocking' | 'annoying' | 'small'
@@ -51,6 +65,12 @@ export const FEEDBACK_TEXT = {
   PAGE_TITLE: 'Feedback',
   PAGE_SUB: 'Problems, improvements and questions from the team · everyone sees every item',
   REPORT: 'Report a problem',
+  HINT_TITLE: 'Facing a problem?',
+  HINT_BODY: 'Something not working, wrong data, or an idea? Report it here: the page you are on and the last error go along by themselves.',
+  HINT_ERROR_TITLE: 'Something went wrong?',
+  HINT_ERROR_BODY: 'If that error stopped your work, report it here: the error and its request id are added for you.',
+  HINT_REPORT: 'Report now',
+  HINT_DISMISS: 'Got it',
   NEW: 'New feedback',
   FORM_TITLE: 'Tell us what happened',
   FORM_SUB: 'The page you are on and the last error on screen are added for you.',
@@ -99,3 +119,11 @@ export const FEEDBACK_TEXT = {
   ASSIGN_HINT: 'The person who will work on it. They can change the item too.',
   NO_IMAGES: 'No images',
 } as const
+
+/**
+ * The "Report a problem" hint (2026-11-05): the button pulses softly all the time; the pop-up shows ONCE A DAY per browser
+ * (stays until closed), and again after a server error (at most every 10 min, goes after 15 s).
+ * Dev only (user): on the laptop and in builds with VITE_FEEDBACK_HINT=true (the dev deploy); never on prod.
+ */
+export const FEEDBACK_HINT = {
+  ENABLED: import.meta.env.DEV || import.meta.env.VITE_FEEDBACK_HINT === 'true', STORAGE_KEY: 'pf-feedback-hint-day2', SHOW_MS: 15_000, ERROR_GAP_MS: 10 * 60_000, FIRST_DELAY_MS: 2_000 } as const

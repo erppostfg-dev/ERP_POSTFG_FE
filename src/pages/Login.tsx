@@ -4,13 +4,14 @@ import { useAuth } from '../auth/AuthContext'
 import { FullPageMessage } from '../auth/RequireAuth'
 import { AUTH_ENDPOINTS, LOGIN_ERROR_FALLBACK, LOGIN_ERROR_MESSAGES } from '../constants/auth'
 import { HOME_PATH } from '../constants/pages'
+import { takeNext } from '../auth/nextPage'
 
 export default function Login() {
   const auth = useAuth()
   const [params] = useSearchParams()
 
   if (auth.status === 'loading') return <FullPageMessage text="Loading…" />
-  if (auth.status === 'signedIn') return <Navigate to={HOME_PATH} replace />
+  if (auth.status === 'signedIn') return <Navigate to={takeNext() ?? HOME_PATH} replace />
 
   const code = params.get('error') ?? auth.error
   const error = code ? LOGIN_ERROR_MESSAGES[code] ?? LOGIN_ERROR_FALLBACK : null

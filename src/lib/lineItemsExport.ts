@@ -49,7 +49,7 @@ export const downloadLineItemsExcel = (rows: LineItemRow[]) =>
 // ---- In Review (2026-11-03): each line as read + its issues; the two Issues columns at the end, red in Excel ---------
 
 /** "SKU not mapped: channel SKU code X is not in master_channel_skus | Price mismatch: ..." */
-export const issuesText = (xs: ReviewIssueText[]) => xs.map((i) => `${ISSUE_LABELS[i.type] ?? i.type}${i.details ? `: ${i.details}` : ''}`).join(' | ')
+const issuesText = (xs: ReviewIssueText[]) => xs.map((i) => `${ISSUE_LABELS[i.type] ?? i.type}${i.details ? `: ${i.details}` : ''}`).join(' | ')
 
 const RCOLS: [string, (r: ReviewLineItemRow) => string | number | null | undefined][] = [
   ['PO Number', (r) => r.poNumber], ['PO Date', (r) => r.poDate], ['Channel', (r) => r.channel], ['Received At', (r) => (r.receivedAt ? istDateTime(r.receivedAt) : '')],

@@ -1,16 +1,22 @@
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, CloudDownload, Eye, FolderOpen, KeyRound, Loader2, Play, Trash2, Upload, UploadCloud } from 'lucide-react'
+import { Check, ChevronDown, CloudDownload, Eye, FolderOpen, KeyRound, Loader2, Play, Square, Trash2, Upload, UploadCloud } from 'lucide-react'
 import { Button, Card } from '../../../components/ui'
-import { deleteInput, getRun, listRuns, saveRobotLogin, startConnector, startReport, type DailyItem, type DayPlan, type IntransitRun, type MasterItem } from '../../../api/intransit'
-import { INTRANSIT_POLL_MS, isMyntraLoginError, PEPIMS_CONNECTOR, PEPIMS_TEXT, ROBOT_LOGIN_TEXT as RL, SOURCE_INFO, SOURCES, type Source } from '../../../constants/intransit'
+import {
+  answerRunIssues, continueRun, deleteInput, getRun, listRuns, saveRobotLogin, startConnector, startReport, stopRun, type BuildPause, type DailyItem, type DayPlan,
+  type IntransitRun, type IssueAction, type MasterItem, type NewSku,
+} from '../../../api/intransit'
+import {
+  BUILD_STEP, INTRANSIT_POLL_MS, isMyntraLoginError, NEW_SKU_TEXT as NS, PEPIMS_CONNECTOR, PEPIMS_TEXT, ROBOT_LOGIN_TEXT as RL, SOURCE_INFO, SOURCES, STOP_TEXT,
+  UPLOAD_PAUSE_TEXT as UP, type Source,
+} from '../../../constants/intransit'
 import { dropEntries, filesFromEntries, filesFromInput, matchFolder, type FolderFile, type FolderMatch } from '../../../lib/folderFiles'
 import { portalLogin, RobotLoginError } from '../../../lib/robotLogin'
 import FolderReview, { type Batch } from './FolderReview'
 import ReportPanel from './ReportPanel'
 import RunLog from './RunLog'
-import { clock, dayLabel, errText, FileGlyph, isActive, isCsv, shortDay, whenOn, type FileState, type OnNotice, type OpenCsv, useUploader } from './shared'
+import { clock, dayLabel, errText, FileGlyph, isActive, isCsv, shortDay, took, whenOn, type FileState, type OnNotice, type OpenCsv, useUploader } from './shared'
 
 /*
  * The Daily run (user, 2026-10-19): the day's to-do list, on one rail.
@@ -76,7 +82,7 @@ export default function DailyRun({ plan, canEdit, onNotice, openCsv, onManageMas
       <Card className="px-4 py-2 sm:px-5">
         <StepMasters plan={plan} canEdit={canEdit} up={up} onManage={onManageMasters} openCsv={openCsv} />
         <StepFiles plan={plan} canEdit={canEdit} up={up} openCsv={openCsv} onNotice={onNotice} onFolder={openFolder} sourceRunning={sourceRunning} onChanged={refresh} />
-        <StepBuild plan={plan} canEdit={canEdit} running={reportRunning} onNotice={onNotice} onChanged={refresh} last />
+        <StepBuild plan={plan} canEdit={canEdit} up={up} running={reportRunning} onNotice={onNotice} onChanged={refresh} last />
       </Card>
 
       {plan.latestReport ? (
@@ -347,6 +353,13 @@ function SourceRow({ source, files, plan, canEdit, running, fileRow, onNotice, o
     setBusy(true)
     try { await startConnector(source, { date: plan.date, only: step?.only }); onChanged() } catch (err) { onNotice('warn', errText(err)) } finally { setBusy(false) }
   }
+  const [stopping, setStopping] = useState(false)
+  // Stop a fetch that takes too long, then upload its file by hand (user, 2026-11-02)
+  const stop = async () => {
+    if (!running || !window.confirm(STOP_TEXT.CONFIRM_FETCH(SOURCE_INFO[source].label))) return
+    setStopping(true)
+    try { await stopRun(running.id); onNotice('ok', STOP_TEXT.ASKED); onChanged() } catch (err) { onNotice('warn', errText(err)) } finally { setStopping(false) }
+  }
   const allOfDay = files.every((d) => d.on === 'date')
   const reason = !info?.configured ? 'not set up' : !info.fetchable.length ? 'current state only, so only for today' : null
   // Myntra's bot check blocks the server's own logins: the person hands over their Chrome's login (2026-11-02)
@@ -372,7 +385,7 @@ function SourceRow({ source, files, plan, canEdit, running, fileRow, onNotice, o
         <span className="text-[12px] font-medium text-ink-600">{SOURCE_INFO[source].label}</span>
         {last && !running && (
           <span className={`text-[11.5px] ${last.status === 'failed' ? 'text-crit' : 'text-ink-400'}`}>
-            last fetch {last.status === 'failed' ? 'failed' : 'done'}{last.finishedAt ? ` ${clock(last.finishedAt)}` : ''}
+            last fetch {last.status === 'failed' ? 'failed' : last.status === 'stopped' ? 'stopped' : 'done'}{last.finishedAt ? ` ${clock(last.finishedAt)}` : ''}
           </span>
         )}
         {last && !showLog && (
@@ -380,7 +393,14 @@ function SourceRow({ source, files, plan, canEdit, running, fileRow, onNotice, o
         )}
         <span className="flex-1" />
         {running ? (
-          <span className="flex items-center gap-1.5 text-[12px] text-primary"><Loader2 className="size-3.5 animate-spin" />{live.data?.logTail?.at(-1)?.trim() || 'Fetching…'}</span>
+          <>
+            <span className="flex min-w-0 items-center gap-1.5 truncate text-[12px] text-primary" title={live.data?.logTail?.at(-1)?.trim()}>
+              <Loader2 className="size-3.5 shrink-0 animate-spin" />{running.startedAt ? `${took(live.data ?? running)} · ` : ''}{live.data?.logTail?.at(-1)?.trim() || 'Fetching…'}
+            </span>
+            {canEdit && (
+              <Button icon={<Square className="size-3.5" />} disabled={stopping} onClick={() => void stop()}>{stopping ? STOP_TEXT.BUSY : STOP_TEXT.BUTTON}</Button>
+            )}
+          </>
         ) : reason ? (
           <span className="text-[11.5px] text-ink-400">{reason}</span>
         ) : canEdit && (
@@ -401,20 +421,25 @@ function SourceRow({ source, files, plan, canEdit, running, fileRow, onNotice, o
         <RunLog runId={last.id} live={!!running} title={`${SOURCE_INFO[source].label} fetch #${last.id}`}
           onClose={() => setLogOpen(false)} onFail={(err) => onNotice('warn', errText(err))} />
       )}
-      {/* a portal file fetched by a robot can still be uploaded by hand */}
-      <ul>{files.map((d) => fileRow(d, d.group === 'upload'))}</ul>
+      {/* every fetched file can still be uploaded by hand: a robot / API that fails or takes too long (2026-11-02) */}
+      <ul>{files.map((d) => fileRow(d, true))}</ul>
     </div>
   )
 }
 
 // ---- 3 Build ----------------------------------------------------------------------------------------------------
 
-const STEP_LABEL = (step: string) => (step === `fetching ${PEPIMS_CONNECTOR}` ? PEPIMS_TEXT.STEP
+const STEP_LABEL = (step: string, newSkus = 0, uploadSource = '') => (step === `fetching ${PEPIMS_CONNECTOR}` ? PEPIMS_TEXT.STEP
   : step.startsWith('fetching ') ? `Fetching from ${SOURCE_INFO[step.slice(9) as Source]?.label ?? step.slice(9)}`
-  : step === 'building' ? 'Building the report' : 'Starting')
+  : step === BUILD_STEP.BUILDING ? 'Building the report'
+  : step === BUILD_STEP.AWAITING_ANSWERS ? NS.STEP(newSkus)
+  : step === BUILD_STEP.AWAITING_UPLOAD ? UP.STEP(uploadSource)
+  : step === BUILD_STEP.INPUTS_BOOK ? 'Saving the input files workbook'
+  : step === BUILD_STEP.SAVING ? 'Saving the report'
+  : 'Starting')
 
-function StepBuild({ plan, canEdit, running, onNotice, onChanged, last }: {
-  plan: DayPlan; canEdit: boolean; running?: IntransitRun; onNotice: OnNotice; onChanged: () => void; last?: boolean
+function StepBuild({ plan, canEdit, up, running, onNotice, onChanged, last }: {
+  plan: DayPlan; canEdit: boolean; up: Uploader; running?: IntransitRun; onNotice: OnNotice; onChanged: () => void; last?: boolean
 }) {
   const [fetchFirst, setFetchFirst] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -440,16 +465,35 @@ function StepBuild({ plan, canEdit, running, onNotice, onChanged, last }: {
     ...(fromPepims.length ? [`${fromPepims.map((n) => n.replace(/\.csv$/i, '')).join(' and ')} read from PEPIMS`] : []),
     ...(earlierUsed.length ? [`earlier copies of ${earlierUsed.map((e) => `${e.name.replace(/\.csv$/i, '')} (${shortDay(e.date)})`).join(', ')}`] : []),
   ]
-  const opts = (running?.options ?? {}) as { step?: string; progress?: string | null }
+  const opts = (running?.options ?? {}) as { step?: string; progress?: string | null; pause?: BuildPause | null }
+  const pause = opts.pause ?? null
+  const asking = opts.step === BUILD_STEP.AWAITING_ANSWERS && pause?.kind === 'issues' && pause.items.length > 0
+  const waitingUpload = opts.step === BUILD_STEP.AWAITING_UPLOAD && pause?.kind === 'upload'
+  const sourceLabel = pause?.kind === 'upload' ? SOURCE_INFO[pause.source as Source]?.label ?? pause.source : ''
+  const [stopping, setStopping] = useState(false)
+  const stop = async () => {
+    if (!running || !window.confirm(STOP_TEXT.CONFIRM_BUILD)) return
+    setStopping(true)
+    try { await stopRun(running.id); onNotice('ok', STOP_TEXT.ASKED); onChanged() } catch (err) { onNotice('warn', errText(err)) } finally { setStopping(false) }
+  }
 
   return (
     <Step n={3} title="Build" last={last} open onToggle={undefined}
       state={running && forThisDay ? 'running' : built ? 'done' : blockers.length ? 'attention' : 'todo'}
-      status={running && forThisDay ? STEP_LABEL(opts.step ?? '') : built ? `Built ${whenOn(plan.latestReport!.finishedAt as string, plan.date)}` : `Report for ${dayLabel(plan.date)}`}>
+      status={running && forThisDay ? STEP_LABEL(opts.step ?? '', pause?.kind === 'issues' ? pause.items.length : 0, sourceLabel) : built ? `Built ${whenOn(plan.latestReport!.finishedAt as string, plan.date)}` : `Report for ${dayLabel(plan.date)}`}>
       {running && forThisDay ? (
         <div className="space-y-2" aria-live="polite">
-          <div className="h-1 overflow-hidden rounded-full bg-alt"><div className="pf-indeterminate h-full w-1/3 rounded-full bg-primary" /></div>
-          <p className="truncate font-mono text-[11.5px] text-ink-600">{opts.progress || 'Waiting to start…'}</p>
+          {!asking && !waitingUpload && <div className="h-1 overflow-hidden rounded-full bg-alt"><div className="pf-indeterminate h-full w-1/3 rounded-full bg-primary" /></div>}
+          <div className="flex items-center gap-3">
+            <p className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ink-600">{opts.progress || 'Waiting to start…'}</p>
+            {canEdit && opts.step !== BUILD_STEP.SAVING && (
+              <Button icon={<Square className="size-3.5" />} disabled={stopping} onClick={() => void stop()}>{stopping ? STOP_TEXT.BUSY : STOP_TEXT.BUILD_BUTTON}</Button>
+            )}
+          </div>
+          {asking && running && pause?.kind === 'issues' && <Issues run={running} pause={pause} canEdit={canEdit} onNotice={onNotice} onChanged={onChanged} />}
+          {waitingUpload && running && pause?.kind === 'upload' && (
+            <UploadPause run={running} pause={pause} label={sourceLabel} plan={plan} canEdit={canEdit} up={up} onNotice={onNotice} onChanged={onChanged} />
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -485,5 +529,169 @@ function StepBuild({ plan, canEdit, running, onNotice, onChanged, last }: {
         </div>
       )}
     </Step>
+  )
+}
+
+// ---- what a paused build waits for -------------------------------------------------------------------------------
+
+const keyOf = (n: NewSku) => (n.kind === 'code' || n.kind === 'location' ? `${n.kind}:${n.channel ?? ''}:${n.code ?? ''}` : `${n.kind}:${n.sku}`).toLowerCase()
+const money = (v: number | null) => (v === null ? '—' : `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`)
+const minsLeft = (answerBy?: string) => (answerBy ? Math.max(0, Math.round((Date.parse(answerBy) - Date.now()) / 60000)) : 0)
+
+/** The answers an issue can take (besides Ignore): a combo with no parts from Uniware only maps, and so on. */
+const actionsOf = (n: NewSku): IssueAction[] => {
+  if (n.kind === 'sku' || n.kind === 'code') return ['consider', 'not-consider', 'ignore']
+  if (n.kind === 'combo') return [...(n.components?.length ? ['add-split1' as const] : []), ...(n.base ? ['map' as const] : []), 'ignore']
+  if (n.kind === 'final-sku') return ['map', 'ignore']
+  return ['set-location', 'ignore']
+}
+/** What a row starts at: Consider for SKUs / codes (what the report did before), the fix for the others. */
+const firstAction = (n: NewSku): IssueAction => (n.kind === 'location' ? 'ignore' : actionsOf(n)[0])
+
+/**
+ * The SKU / mapping issues a build found (user, 2026-11-02): each fixed (saved to the masters) or ignored for this
+ * build (counted as before, asked again next time); then the build carries on.
+ */
+function Issues({ run, pause, canEdit, onNotice, onChanged }: {
+  run: IntransitRun; pause: Extract<BuildPause, { kind: 'issues' }>; canEdit: boolean; onNotice: OnNotice; onChanged: () => void
+}) {
+  const items = pause.items
+  const [action, setAction] = useState<Record<string, IssueAction>>(() => Object.fromEntries(items.map((n) => [keyOf(n), firstAction(n)])))
+  const [location, setLocation] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const missingLocation = items.filter((n) => action[keyOf(n)] === 'set-location' && !location[keyOf(n)]).length
+  const submit = async () => {
+    setSaving(true)
+    try {
+      const r = await answerRunIssues(run.id, items.map((n) => ({
+        kind: n.kind, sku: n.sku, channel: n.channel, code: n.code, action: action[keyOf(n)], ...(action[keyOf(n)] === 'set-location' ? { location: location[keyOf(n)] } : {}),
+      })))
+      onNotice('ok', NS.SAVED(r.fixed, r.ignored))
+      onChanged()
+    } catch (err) {
+      onNotice('warn', errText(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+  const what = (n: NewSku) => {
+    if (n.kind === 'code') return `${n.channel} → ${n.sku}`
+    if (n.kind === 'location') return n.channel ?? ''
+    if (n.kind === 'combo' && n.components?.length) return n.components.map((c) => `${c.sku} ×${c.qty}`).join(', ')
+    if (n.base) return `base ${n.base.sku}`
+    return ''
+  }
+  return (
+    <div className="rounded-[var(--radius)] border border-warn/40 bg-warn-soft/40 p-3">
+      <h3 className="text-[13px] font-semibold text-ink-900">{NS.TITLE(items.length)}</h3>
+      <p className="mt-0.5 text-[12px] text-ink-600">{canEdit ? NS.SUB(minsLeft(pause.answerBy)) : NS.VIEW_ONLY}</p>
+      <div className="mt-2 max-h-96 overflow-auto rounded-[var(--radius)] border border-line bg-surface">
+        <table className="w-full text-[12px]">
+          <thead className="sticky top-0 bg-alt text-left text-ink-600">
+            <tr>
+              <th className="px-2 py-1.5 font-medium">Issue</th>
+              <th className="px-2 py-1.5 font-medium">Name / details</th>
+              <th className="px-2 py-1.5 text-right font-medium">MRP</th>
+              <th className="px-2 py-1.5 text-right font-medium" title={NS.AUTO}>COGS</th>
+              <th className="px-2 py-1.5 text-right font-medium">Units</th>
+              <th className="px-2 py-1.5 font-medium">Answer</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {items.map((n) => {
+              const k = keyOf(n)
+              const a = action[k]
+              return (
+                <tr key={k} className={a === 'ignore' ? 'text-ink-400' : 'text-ink-900'}>
+                  <td className="px-2 py-1.5">
+                    <div className="font-mono">{n.kind === 'code' || n.kind === 'location' ? n.code : n.sku}</div>
+                    <div className="text-[11px] text-ink-400">{NS.KIND[n.kind]}{n.channelTypes ? ` · ${n.channelTypes}` : ''}</div>
+                  </td>
+                  <td className="max-w-[280px] px-2 py-1.5">
+                    <div className="truncate" title={n.name}>{n.name || '—'}</div>
+                    <div className="truncate text-[11px] text-ink-400" title={`${what(n)} · ${n.reasons.join('; ')}`}>{[what(n), n.reasons.join('; ')].filter(Boolean).join(' · ')}</div>
+                  </td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{n.kind === 'sku' || n.kind === 'code' ? money(n.mrp) : ''}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{n.kind === 'sku' || n.kind === 'code' ? money(n.cogs) : ''}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{n.units.toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <div className="inline-flex overflow-hidden rounded-md border border-line" role="group" aria-label={`Answer for ${n.code ?? n.sku}`}>
+                        {actionsOf(n).map((x, i) => (
+                          <button key={x} disabled={!canEdit || saving} onClick={() => setAction((s) => ({ ...s, [k]: x }))} aria-pressed={a === x}
+                            className={`${i ? 'border-l border-line ' : ''}px-2 py-1 text-[11.5px] ${a === x ? (x === 'ignore' ? 'bg-ink-600 text-white' : x === 'not-consider' ? 'bg-crit text-white' : 'bg-ok text-white') : 'bg-surface text-ink-600 hover:bg-alt'}`}>
+                            {NS.ACTION[x]}
+                          </button>
+                        ))}
+                      </div>
+                      {a === 'set-location' && (
+                        <select value={location[k] ?? ''} disabled={!canEdit || saving} onChange={(e) => setLocation((s) => ({ ...s, [k]: e.target.value }))}
+                          className="rounded-md border border-line bg-surface px-1.5 py-1 text-[11.5px]">
+                          <option value="">{NS.PICK_LOCATION}</option>
+                          {pause.locations.map((l) => <option key={l} value={l}>{l}</option>)}
+                        </select>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      {canEdit && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button variant="primary" disabled={saving || missingLocation > 0} onClick={() => void submit()}>{saving ? NS.SAVING : NS.SUBMIT}</Button>
+          <Button variant="ghost" disabled={saving} onClick={() => setAction(Object.fromEntries(items.map((n) => [keyOf(n), 'ignore' as IssueAction])))}>{NS.ALL_IGNORE}</Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * A fetch of the build failed or left files out (user, 2026-11-02): upload them here (the build carries on by itself
+ * once they are in), or continue with the earlier copies.
+ */
+function UploadPause({ run, pause, label, plan, canEdit, up, onNotice, onChanged }: {
+  run: IntransitRun; pause: Extract<BuildPause, { kind: 'upload' }>; label: string; plan: DayPlan; canEdit: boolean; up: Uploader; onNotice: OnNotice; onChanged: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const row = useRowPicker((name, file) => void up.uploadOne(name, file).then(onChanged))
+  const go = async () => {
+    setBusy(true)
+    try { await continueRun(run.id); onChanged() } catch (err) { onNotice('warn', errText(err)) } finally { setBusy(false) }
+  }
+  return (
+    <div className="rounded-[var(--radius)] border border-warn/40 bg-warn-soft/40 p-3">
+      {row.input}
+      <h3 className="text-[13px] font-semibold text-ink-900">{UP.TITLE(label)}</h3>
+      {pause.error && <p className="mt-0.5 text-[12px] text-crit">{pause.error}</p>}
+      <p className="mt-0.5 text-[12px] text-ink-600">{UP.SUB(minsLeft(pause.answerBy))}</p>
+      <ul className="mt-2 divide-y divide-line rounded-[var(--radius)] border border-line bg-surface">
+        {pause.files.map((name) => {
+          const d = plan.daily.items.find((x) => x.name === name)
+          const inNow = d?.on === 'date'
+          const busyRow = up.progress[name] !== undefined
+          return (
+            <li key={name} className="flex items-center gap-2.5 px-3 py-1.5">
+              <FileGlyph state={busyRow ? 'busy' : up.errors[name]?.length ? 'problem' : inNow ? 'ok' : 'missing'} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] text-ink-900">{name.replace(/\.csv$/i, '')}</span>
+                {up.errors[name]?.length ? <span className="block text-[11.5px] text-crit">{up.errors[name].join('; ')}</span>
+                  : busyRow ? <span className="block text-[11.5px] text-info">Uploading {Math.round(up.progress[name] * 100)}%</span>
+                  : inNow ? <span className="block text-[11.5px] text-ok">{UP.IN}</span> : null}
+              </span>
+              {canEdit && !inNow && <Button icon={<Upload className="size-3.5" />} disabled={busyRow} onClick={() => row.pick(name)}>Upload</Button>}
+            </li>
+          )
+        })}
+      </ul>
+      {canEdit && (
+        <div className="mt-2">
+          <Button disabled={busy} onClick={() => void go()}>{busy ? UP.CONTINUING : UP.CONTINUE}</Button>
+        </div>
+      )}
+    </div>
   )
 }

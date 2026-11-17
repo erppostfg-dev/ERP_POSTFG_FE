@@ -57,8 +57,26 @@ export const commentFeedback = (id: string, text: string) => api<FeedbackDetail>
 export const addFeedbackMember = (id: string, userId: number) => api<FeedbackDetail>(`${one(id)}/members`, { method: 'POST', body: JSON.stringify({ userId }) })
 export const removeFeedbackMember = (id: string, userId: number) => api<FeedbackDetail>(`${one(id)}/members/${userId}`, { method: 'DELETE' })
 export const removeFeedbackImage = (id: string, imageId: string) => api<FeedbackDetail>(`${one(id)}/images/${encodeURIComponent(imageId)}/remove`, { method: 'POST' })
-/** The image itself (the browser sends the session cookie: same site via the API base). */
-export const feedbackImageUrl = (id: string, imageId: string) => apiUrl(`${one(id)}/images/${encodeURIComponent(imageId)}`)
+/**
+ * The image's path under the API base, for AuthImage (which adds the base itself). Not apiUrl() here: with a relative
+ * base (/api/v1 on the deploys) the base was added twice (/api/v1/api/v1/feedback/...), so every screenshot 404'd
+ * there and showed "—" (2026-11-06); on the laptop the base is http://... and AuthImage left it alone.
+ */
+export const feedbackImagePath = (id: string, imageId: string) => `${one(id)}/images/${encodeURIComponent(imageId)}`
+
+/* Notifications (2026-11-06): the top-bar bell. Assigned to me, added me, a comment on an item I follow. */
+export type FeedbackNotifyKind = 'assigned' | 'added' | 'comment'
+export interface FeedbackNotification {
+  id: string; kind: FeedbackNotifyKind; itemId: string; itemTitle: string; by: FeedbackPerson
+  /** The comment (kind comment); '' otherwise. */
+  text: string; read: boolean; createdAt: string
+}
+export interface FeedbackNotifications { unread: number; items: FeedbackNotification[] }
+export const feedbackNotificationsKey = ['feedback', 'notifications'] as const
+export const feedbackNotifications = (signal?: AbortSignal) => api<FeedbackNotifications>(`${FEEDBACK_ENDPOINT}/notifications`, { signal })
+/** { itemId } = all about that item (opened it), { ids } = those, {} = all. Mine only; answers the bell. */
+export const readFeedbackNotifications = (which: { itemId: string } | { ids: string[] } | Record<string, never>) =>
+  api<FeedbackNotifications>(`${FEEDBACK_ENDPOINT}/notifications/read`, { method: 'POST', body: JSON.stringify(which) })
 
 /* Multipart (images). Not api(): the browser sets the multipart Content-Type itself. */
 async function sendForm<T>(path: string, form: FormData): Promise<T> {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChannelOptions } from '../../lib/channels'
-import { AlertTriangle, FileUp, Webhook, Zap, Mail } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Eye, FileUp, Webhook, Zap, Mail } from 'lucide-react'
 import { Badge, PageTitle, SubTabs } from '../../components/ui'
 import { DataGrid, DownloadMenu, FilterChips, FilterPanel, ColumnSort, SectionToolbar, exportRows, exportRowsExcel, useSection, type DownloadItem, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
@@ -9,9 +9,10 @@ import { DATE_SORT_KEY, SORT_FILTER_KEY, orderRows } from '../../lib/listOrder'
 import { istDateTime } from '../../lib/time'
 import { InReview } from './POReview'
 import { FileCell, SourceCell } from './SourceCells'
+import { UniwareCreatePreview } from './UniwareCreatePreview'
 import { UniwareCell, ageTone, daysWaiting, downloadCombinedCsv, downloadOneCsv, stateOf, type Handoff } from './UniwareHandoff'
-import { getLineItems, markUniwareUploaded } from '../../api/poReview'
-import { LINE_ITEMS, LINE_ITEMS_TEXT, UNIWARE_STATE, UNIWARE_STATE_LABEL, UNIWARE_TEXT } from '../../constants/poReview'
+import { createInUniware, getLineItems, markUniwareUploaded, previewUniwareCreate, uniwareCreateStates, type UniwareCreateState, type UniwarePreviewItem } from '../../api/poReview'
+import { LINE_ITEMS, LINE_ITEMS_TEXT, UNIWARE_CREATE_STATUS, UNIWARE_CREATE_TEXT, UNIWARE_PREVIEW_TEXT, UNIWARE_STATE, UNIWARE_STATE_LABEL, UNIWARE_TEXT } from '../../constants/poReview'
 import { downloadLineItemsCsv, downloadLineItemsExcel } from '../../lib/lineItemsExport'
 import { useAuth } from '../../auth/AuthContext'
 import { ACCESS } from '../../constants/auth'
@@ -36,11 +37,18 @@ import { PriceDifferences } from './PriceDifferences'
 import { PRICE_DIFF_TEXT } from '../../constants/priceDifferences'
 import { RejectedFailed } from './RejectedFailed'
 import { ENDED_TEXT } from '../../constants/poReview'
+import { useQuery } from '@tanstack/react-query'
+import { BulkOrdersTab } from './BulkOrdersTab'
+import { listTeamBulkOrders } from '../../api/bulkOrders'
+import { BULK_TEXT, BULK_TYPES } from '../../constants/bulkOrders'
 
 // PO issues (2026-10-29): moved here from Users & Roles, for everyone who can open this page
 // Price differences (2026-10-30): lines kept at our price, to tell the channel
 // Rejected & Failed (2026-11-02): the POs that ended without a sale order, with who / why
-const TABS = ['processed', 'review', 'manual', 'issues', 'prices', 'ended'] as const
+// Bulk Orders (2026-11-11): Marketing / Institutional orders from the Bulk Orders portal, read only for now
+const TABS = ['processed', 'review', 'bulk', 'manual', 'issues', 'prices', 'ended'] as const
+/** How often the Bulk Orders tab count (approved, waiting for us) is read again while the page is open (ms). */
+const BULK_COUNT_MS = 2 * 60_000
 type Tab = (typeof TABS)[number]
 const SRC_ICON = { API: Zap, Webhook: Webhook, Email: Mail, Manual: FileUp } as const
 
@@ -53,12 +61,21 @@ export default function POProcessing() {
   const [liveTick, setLiveTick] = useState(0)
   const live = useLiveReview(REVIEW_LIVE.PO_REVIEW_BASE, useCallback(() => setLiveTick((n) => n + 1), []))
   const canEditRoot = useAuth().accessFor(PATHS.PO_REVIEW) === ACCESS.EDITOR
+  // the Bulk Orders count on the tab even before it is opened: one small request (1 row + the waiting counts)
+  const [bulkCount, setBulkCount] = useState<number | undefined>()
+  const bulkWaiting = useQuery({
+    queryKey: ['bulk', 'team-count'],
+    queryFn: () => listTeamBulkOrders({ pageSize: 1 }).then((r) => BULK_TYPES.reduce((n, t) => n + (r.meta.waiting[t] ?? 0), 0)),
+    refetchInterval: BULK_COUNT_MS,
+  })
+  const bulkShown = bulkCount ?? bulkWaiting.data
   return (
     <div className="space-y-5">
       <PageTitle title="PO Processing & Review" sub="Ingest from channel APIs, webhooks and email · resolve parser errors · upload what can't be automated" right={<LiveDot mode={live} />} />
       <SubTabs value={tab} onChange={setTab} tabs={[
         { key: 'processed', label: 'Processed', count: processedCount },
         { key: 'review', label: 'In Review', count: reviewCount, danger: !!reviewCount },
+        { key: 'bulk', label: BULK_TEXT.TEAM_TAB, count: bulkShown },
         { key: 'manual', label: 'Manual Upload' },
         { key: 'issues', label: PO_ISSUES_TEXT.TAB },
         { key: 'prices', label: PRICE_DIFF_TEXT.TAB },
@@ -66,6 +83,7 @@ export default function POProcessing() {
       ]} />
       {tab === 'processed' && <Processed onCount={setProcessedCount} liveTick={liveTick} />}
       {tab === 'review' && <InReview srcIcon={SRC_ICON} onCount={setReviewCount} liveTick={liveTick} />}
+      {tab === 'bulk' && <BulkOrdersTab onCount={setBulkCount} canEdit={canEditRoot} />}
       {tab === 'manual' && <ManualUpload canEdit={canEditRoot} liveTick={liveTick} />}
       {tab === 'issues' && <PoIssues />}
       {tab === 'prices' && <PriceDifferences canEdit={canEditRoot} />}
@@ -231,6 +249,57 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   const waiting = rows.filter((r) => stateOf(r.handoff) === UNIWARE_STATE.DOWNLOADED).length
   // Bulk: the ticked POs as ONE combined CSV, or marked uploaded (only the downloaded, not-yet-uploaded ones).
   const markable = picked.filter((r) => stateOf(r.handoff) === UNIWARE_STATE.DOWNLOADED)
+  // Create in Uniware (2026-11-09): the latest request of every PO not in Uniware yet; checked again while some are working.
+  const [creates, setCreates] = useState<{ enabled: boolean; byId: Map<string, UniwareCreateState> }>({ enabled: false, byId: new Map() })
+  const [confirmCreate, setConfirmCreate] = useState(false)
+  const notInUniware = useMemo(() => rows.filter((r) => stateOf(r.handoff) !== UNIWARE_STATE.UPLOADED).map((r) => r.id).slice(0, 500).join(','), [rows])
+  const loadCreates = useCallback(async () => {
+    try {
+      const r = await uniwareCreateStates(notInUniware ? notInUniware.split(',') : [])
+      setCreates({ enabled: r.enabled, byId: new Map(r.items.map((i) => [i.uploadId, i])) })
+    } catch {
+      // the button stays as it was; the list itself shows its own errors
+    }
+  }, [notInUniware])
+  useEffect(() => { void loadCreates() }, [loadCreates])
+  const working = [...creates.byId.values()].some((i) => i.status === UNIWARE_CREATE_STATUS.QUEUED || i.status === UNIWARE_CREATE_STATUS.CREATING)
+  useEffect(() => {
+    if (!working) return
+    const t = setInterval(() => { void loadCreates() }, UNIWARE_CREATE_TEXT.POLL_MS)
+    return () => clearInterval(t)
+  }, [working, loadCreates])
+  const isWorking = (r: ProcessedRow) => {
+    const c = creates.byId.get(r.id)
+    return !!c && (c.status === UNIWARE_CREATE_STATUS.QUEUED || c.status === UNIWARE_CREATE_STATUS.CREATING)
+  }
+  const creatable = picked.filter((r) => stateOf(r.handoff) !== UNIWARE_STATE.UPLOADED && !toVerify(r) && !isWorking(r))
+  // Preview (2026-11-09): any ticked PO not in Uniware yet; the answer says per PO what would be sent or why not
+  const [preview, setPreview] = useState<{ createEnabled: boolean; items: UniwarePreviewItem[] } | null>(null)
+  const previewable = picked.filter((r) => stateOf(r.handoff) !== UNIWARE_STATE.UPLOADED)
+  const runPreview = async () => {
+    setBulkBusy(true)
+    try {
+      setPreview(await previewUniwareCreate(previewable.map((x) => x.id)))
+    } catch (e) {
+      fail(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+  const runCreate = async () => {
+    setConfirmCreate(false)
+    setBulkBusy(true)
+    try {
+      const r = await createInUniware(creatable.map((x) => x.id))
+      const name = (id: string) => rows.find((x) => x.id === id)?.poNumber ?? id
+      done(UNIWARE_CREATE_TEXT.QUEUED(r.queued.length, r.refused.map((x) => `${name(x.uploadId)}: ${x.reason}`)))
+      await loadCreates()
+    } catch (e) {
+      fail(e instanceof ApiError ? e.message : String(e))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
   const bulk = async (what: 'csv' | 'mark') => {
     setBulkBusy(true)
     try {
@@ -295,6 +364,20 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
             {picked.length > 0 && <button onClick={() => void bulk('csv')} disabled={bulkBusy || unverifiedPicked > 0} title={unverifiedPicked ? VERIFY_TEXT.BLOCKED(unverifiedPicked) : undefined} className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
               <DownloadIcon className="size-4" />{UNIWARE_TEXT.BULK_DOWNLOAD(picked.length)}
             </button>}
+            {previewable.length > 0 && (
+              <button onClick={() => void runPreview()} disabled={bulkBusy || previewable.length > UNIWARE_CREATE_TEXT.MAX}
+                title={previewable.length > UNIWARE_CREATE_TEXT.MAX ? UNIWARE_CREATE_TEXT.TOO_MANY(UNIWARE_CREATE_TEXT.MAX) : UNIWARE_PREVIEW_TEXT.BUTTON_HINT}
+                className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line px-3 text-[13px] font-semibold text-ink-900 hover:bg-alt disabled:opacity-60">
+                <Eye className="size-4" />{UNIWARE_PREVIEW_TEXT.BUTTON(previewable.length)}
+              </button>
+            )}
+            {creates.enabled && creatable.length > 0 && (
+              <button onClick={() => setConfirmCreate(true)} disabled={bulkBusy || creatable.length > UNIWARE_CREATE_TEXT.MAX}
+                title={creatable.length > UNIWARE_CREATE_TEXT.MAX ? UNIWARE_CREATE_TEXT.TOO_MANY(UNIWARE_CREATE_TEXT.MAX) : UNIWARE_CREATE_TEXT.BUTTON_HINT}
+                className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-primary px-3 text-[13px] font-semibold text-primary hover:bg-primary/10 disabled:opacity-60">
+                <UploadIcon className="size-4" />{UNIWARE_CREATE_TEXT.BUTTON(creatable.length)}
+              </button>
+            )}
             {markable.length > 0 && (
               <button onClick={() => void bulk('mark')} disabled={bulkBusy} className="pf-press inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] bg-ok px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
                 <UploadIcon className="size-4" />{UNIWARE_TEXT.BULK_MARK(markable.length)}
@@ -319,6 +402,17 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       )}
       {canEdit && unverifiedPicked > 0 && (
         <div className="pf-tab-in flex items-center gap-2 rounded-[var(--radius)] bg-warn-soft px-3 py-2 text-[12.5px] text-warn"><AlertTriangle className="size-4" />{VERIFY_TEXT.BLOCKED(unverifiedPicked)}</div>
+      )}
+      {preview && <UniwareCreatePreview items={preview.items} createEnabled={preview.createEnabled} onClose={() => setPreview(null)} />}
+      {confirmCreate && creatable.length > 0 && (
+        <div className="pf-tab-in space-y-2 rounded-[var(--radius)] border border-warn/50 bg-warn-soft px-3 py-2.5 text-[12.5px] text-ink-900">
+          <div className="font-semibold">{UNIWARE_CREATE_TEXT.CONFIRM_TITLE(creatable.length)}</div>
+          <div className="text-ink-600">{UNIWARE_CREATE_TEXT.CONFIRM_BODY}</div>
+          <div className="flex gap-2">
+            <button onClick={() => void runCreate()} disabled={bulkBusy} className="pf-press inline-flex h-8 items-center gap-1.5 rounded-[var(--radius)] bg-primary px-3 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50"><UploadIcon className="size-4" />{UNIWARE_CREATE_TEXT.CONFIRM}</button>
+            <button onClick={() => setConfirmCreate(false)} className="rounded-[var(--radius)] px-3 text-[12.5px] text-ink-600 hover:bg-alt">{UNIWARE_CREATE_TEXT.CANCEL}</button>
+          </div>
+        </div>
       )}
       {verifying && <div className="pf-tab-in rounded-[var(--radius)] bg-alt px-3 py-2 text-[12.5px] text-ink-600">{verifying}</div>}
       {upload && !verifying && (
@@ -374,7 +468,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
               sortValue: (r: ProcessedRow) => (r.verify?.state === VERIFY_STATE.TO_VERIFY ? 1 : 0),
             }] : []),
             {
-              label: UNIWARE_TEXT.COLUMN, render: (r) => <UniwareCell h={r.handoff} canEdit={canEdit} onDone={done} onError={fail} />,
+              label: UNIWARE_TEXT.COLUMN, render: (r) => <UniwareCell h={r.handoff} canEdit={canEdit} onDone={done} onError={fail} create={creates.byId.get(r.id)} />,
               // ↓ = waiting longest first (not downloaded before downloaded on the same day), POs already in Uniware last.
               sortValue: (r) => (stateOf(r.handoff) === UNIWARE_STATE.UPLOADED ? -1 : r.waitingDays * 2 + (stateOf(r.handoff) === UNIWARE_STATE.PENDING ? 1 : 0)),
               sortHint: UNIWARE_TEXT.SORT_HINT,
@@ -386,35 +480,32 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
   )
 }
 
-/** Verified (green, who / when on hover), To verify + a Verify button, or In Uniware (marked before the check existed). */
+/** One clickable chip per state, all the same height (2026-11-10): Verified (green, who / when on hover), Optional (grey,
+ * channel switch OFF), To verify (amber); click = open the check. In Uniware (marked before the check existed) = plain badge. */
+const CHIP = 'pf-press inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold leading-none transition-[filter,box-shadow] duration-150 hover:brightness-95 hover:shadow-[0_0_0_1px_currentColor]'
 function CheckCell({ row, canEdit, onOpen }: { row: ProcessedRow; canEdit: boolean; onOpen: () => void }) {
   const v = row.verify
   if (!v) return <span className="text-ink-400">—</span>
+  if (v.state === VERIFY_STATE.NOT_NEEDED) return <Badge tone="neutral">{VERIFY_TEXT.NOT_NEEDED}</Badge>
+  const action = canEdit ? VERIFY_TEXT.VERIFY : VERIFY_TEXT.VIEW
   if (v.state === VERIFY_STATE.VERIFIED) {
     return (
-      <span className="inline-flex items-center gap-2">
-        <span title={VERIFY_TEXT.BY(v.by, istDateTime(v.at))}><Badge tone="ok"><ShieldCheck className="size-3" />{VERIFY_TEXT.VERIFIED}</Badge></span>
-        <button type="button" onClick={onOpen} className="text-[11.5px] text-ink-400 underline-offset-2 hover:text-ink-900 hover:underline">{VERIFY_TEXT.VIEW}</button>
-      </span>
+      <button type="button" onClick={onOpen} title={`${VERIFY_TEXT.BY(v.by, istDateTime(v.at))} · ${VERIFY_TEXT.CLICK_VIEW}`} className={`${CHIP} bg-ok-soft text-ok`}>
+        <ShieldCheck className="size-3" />{VERIFY_TEXT.VERIFIED}
+      </button>
     )
   }
-  if (v.state === VERIFY_STATE.NOT_NEEDED) return <Badge tone="neutral">{VERIFY_TEXT.NOT_NEEDED}</Badge>
   // Channel switched OFF (Users & Roles -> Settings): not locked; verifying is optional.
   if (v.state === VERIFY_STATE.NOT_REQUIRED) {
     return (
-      <span className="inline-flex items-center gap-2" title={VERIFY_TEXT.OPTIONAL_HINT}>
-        <Badge tone="neutral">{VERIFY_TEXT.OPTIONAL}</Badge>
-        <button type="button" onClick={onOpen} className="text-[11.5px] text-ink-400 underline-offset-2 hover:text-primary hover:underline">{canEdit ? VERIFY_TEXT.VERIFY : VERIFY_TEXT.VIEW}</button>
-      </span>
+      <button type="button" onClick={onOpen} title={`${VERIFY_TEXT.OPTIONAL_HINT} · ${VERIFY_TEXT.CLICK_TO(action)}`} className={`${CHIP} bg-slate-100 text-slate-600`}>
+        {VERIFY_TEXT.OPTIONAL}
+      </button>
     )
   }
   return (
-    <span className="inline-flex items-center gap-2">
-      <Badge tone="warn">{VERIFY_TEXT.TO_VERIFY}</Badge>
-      <button type="button" onClick={onOpen}
-        className="pf-press inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-[12px] font-semibold text-white transition-opacity duration-150 hover:opacity-90">
-        <ShieldCheck className="size-3.5" />{canEdit ? VERIFY_TEXT.VERIFY : VERIFY_TEXT.VIEW}
-      </button>
-    </span>
+    <button type="button" onClick={onOpen} title={VERIFY_TEXT.CLICK_TO(action)} className={`${CHIP} bg-warn-soft text-warn`}>
+      <AlertTriangle className="size-3" />{VERIFY_TEXT.TO_VERIFY}<ArrowRight className="size-3" />
+    </button>
   )
 }

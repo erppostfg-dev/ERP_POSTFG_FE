@@ -10,10 +10,17 @@ export const PO_OVERVIEW_ENDPOINT = {
   EDIT_OPTIONS: '/po-overview/edit-options',
   EVENTS: '/po-overview/events',
   CHANGES: '/po-overview/changes',
+  /** Uniware sale order status (2026-11-06): GET last run, POST Sync now. */
+  UNIWARE_SYNC: '/po-overview/uniware-sync',
 } as const
 
 /** Rows per request (the backend's default; PEPIMS loads 200 at a time). */
 export const PO_OVERVIEW_PAGE_SIZE = 200
+/**
+ * Rows per page on both tables (2026-11-16, user): the person types 1..MAX (MAX = the most one request may return,
+ * backend PO_OVERVIEW_LIST.MAX_PAGE_SIZE); a request loads max(PO_OVERVIEW_PAGE_SIZE, their number) rows so a page is full.
+ */
+export const PO_OVERVIEW_ROWS = { DEFAULT: 50, MAX: 500 } as const
 
 /** Wait this long after typing before searching. */
 export const SEARCH_DELAY_MS = 350
@@ -38,6 +45,42 @@ export const FACILITY_SCOPE_NOTE = {
   SHOW_MINE: 'Show only mine',
 } as const
 
+/**
+ * The status popup (2026-11-06, user: "same status as PEPIMS, a pop up with all the statuses"): PEPIMS's ⓘ at the row's
+ * end opens "Final Status - PO: …" with the three stages and the final status. An empty stage counts as Confirmed (as
+ * PEPIMS and our backend's STATUS_WHEN_EMPTY); a combination with no row in the final status master = NO_MAPPING.
+ */
+export const STATUS_POPUP = {
+  COLUMN: 'Status',
+  TITLE: (po: string) => `Final Status - PO: ${po}`,
+  OPEN: 'See all statuses',
+  WHEN_EMPTY: 'Confirmed',
+  EMPTY_NOTE: 'not set, counts as Confirmed',
+  NO_MAPPING: 'No mapping available!',
+  FINAL: 'Final Status',
+  STAGES: [
+    { key: 'statusPlanning', label: 'Status (Planning)' },
+    { key: 'statusWarehouse', label: 'Status (Warehouse)' },
+    { key: 'statusLogistics', label: 'Status (Logistics)' },
+  ],
+  CLOSE: 'Close',
+} as const
+
+/** The Uniware sale order sync (2026-11-06): every 30 min on the server, read-only on Uniware. */
+export const UNIWARE_SYNC_TEXT = {
+  BUTTON: 'Sync from Uniware',
+  RUNNING: 'Syncing…',
+  NEVER: 'Uniware: not synced yet',
+  AGO: (min: number) => `Uniware · synced ${min === 0 ? 'just now' : `${min} min ago`}`,
+  STARTED: 'Reading the sale orders from Uniware: rows update as it goes.',
+  FAILED: (why: string) => `Uniware sync: ${why}`,
+  HINT: 'Reads the sale order of each PO from Uniware (read-only): Warehouse status forward, RTS / dispatch dates and invoice when empty.',
+  /** The button is shared by the whole team: once per 30 min (2026-11-09). */
+  WAIT: (min: number) => `Next sync in ${min} min`,
+  WAIT_HINT: (by: string | null, at: string) => `Synced from this button${by ? ` by ${by}` : ''} at ${at}. The button works once every 30 minutes for the whole team; the server also syncs every 30 minutes by itself.`,
+} as const
+export const UNIWARE_SYNC_REFRESH_MS = 30_000
+
 /** Group header labels of the grid. */
 export const COLUMN_GROUP_LABEL = { KEY: 'PO', SHIPMENT: 'Shipment' } as const
 
@@ -54,7 +97,7 @@ export const LIVE_FLASH_MS = 2_500
 /** SSE event names (POST_FG constants LIVE). */
 export const LIVE_EVENT = { SHIPMENT: 'shipment', PING: 'ping' } as const
 /** Action of a new shipment (lists reload instead of a row swap). */
-export const CREATED_ACTION = 'created'
+const CREATED_ACTION = 'created'
 /** Actions that add a shipment to PO Overview or take it out (uploaded into Uniware / mark removed): lists reload. */
 export const LIST_ACTIONS: readonly string[] = [CREATED_ACTION, 'uniware_uploaded', 'uniware_upload_undone']
 

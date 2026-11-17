@@ -7,8 +7,17 @@ export interface LastError { status: number; code: string; message: string; requ
 
 let last: LastError | null = null
 
+const listeners = new Set<(e: LastError) => void>()
+
 export const rememberError = (e: Omit<LastError, 'at'>): void => {
   last = { ...e, at: new Date().toISOString() }
+  for (const fn of listeners) fn(last)
+}
+
+/** Called on every error remembered (the "Report a problem" hint after a server error); returns the unsubscribe. */
+export const onError = (fn: (e: LastError) => void): (() => void) => {
+  listeners.add(fn)
+  return () => { listeners.delete(fn) }
 }
 
 export const lastError = (): LastError | null => last

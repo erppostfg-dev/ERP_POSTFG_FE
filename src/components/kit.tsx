@@ -9,6 +9,7 @@ import { fmtDate, statusTone, type ColKind } from '../lib/ops'
 import { NOT_IN_DB } from '../constants/masters'
 import { copyText } from '../lib/clipboard'
 import { COPIED_MS, COPYABLE_COLUMNS, GRID_HINT, GRID_PAGE_SIZE } from '../constants/ui'
+import { readPageSize, savePageSize } from '../lib/pageSize'
 import { downloadExcel } from '../lib/excelExport'
 import { DATE_SORT_KEY, dateSortOf, isOrderKey, type DateSortDir } from '../lib/listOrder'
 
@@ -414,12 +415,16 @@ const cellText = (kind: ColKind, v: unknown): string => {
 
 export function DataGrid<T>({
   cols, rows, rowKey, sticky = 1, onRowClick, rowMenu, pageSize = 15, trailing, rowClass, groups, editable, rowEditable, onRowHistory, stickyWidths, stickyFit, maxHeight, onScrolledChange,
-  selected, onSelectedChange, headFilter, pageSizeKey,
+  selected, onSelectedChange, headFilter, pageSizeKey, maxPageSize = GRID_PAGE_SIZE.MAX, onPageSizeChange,
 }: {
   /** A control shown after a column's name in its header (e.g. ColumnSort); null = none (2026-10-29). */
   headFilter?: (key: keyof T) => ReactNode
-  /** The person picks the rows per page (footer box, any number 1..GRID_PAGE_SIZE.MAX), kept in this browser under this key. */
-  pageSizeKey?: string
+  /** Every table: the person picks the rows per page (footer box, any number 1..maxPageSize), kept in this browser under this key. */
+  pageSizeKey: string
+  /** The most rows per page this table allows (default GRID_PAGE_SIZE.MAX; a server list: what one request may return). */
+  maxPageSize?: number
+  /** Told the rows per page whenever the person changes it (a server list then loads that many per request). */
+  onPageSizeChange?: (n: number) => void
   cols: [string, keyof T, ColKind][]; rows: T[]; rowKey: (r: T) => string; sticky?: number
   onRowClick?: (r: T) => void; rowMenu?: (r: T) => { label: string; onClick: () => void }[]; pageSize?: number
   /** Extra columns at the end; with `sortValue` the header gets ↑/↓ and a click sorts every row by it (2026-10-19). */
@@ -460,20 +465,18 @@ export function DataGrid<T>({
   const headBox = useRef<HTMLInputElement>(null)
   useEffect(() => { if (headBox.current) headBox.current.indeterminate = ticked > 0 && ticked < allKeys.length }, [ticked, allKeys.length])
   const [page, setPage] = useState(0)
-  const storeKey = pageSizeKey ? GRID_PAGE_SIZE.STORE_KEY + pageSizeKey : null
-  const [size, setSize] = useState(() => {
-    if (!storeKey) return pageSize
-    try { const v = Number(localStorage.getItem(storeKey)); return Number.isInteger(v) && v >= 1 ? Math.min(v, GRID_PAGE_SIZE.MAX) : pageSize } catch { return pageSize }
-  })
+  const storeKey = GRID_PAGE_SIZE.STORE_KEY + pageSizeKey
+  const [size, setSize] = useState(() => readPageSize(pageSizeKey, pageSize, maxPageSize))
   const [sizeDraft, setSizeDraft] = useState(String(size))
   const applySize = (raw: string) => {
     const v = Math.trunc(Number(raw))
     if (!Number.isFinite(v) || v < 1) { setSizeDraft(String(size)); return }
-    const next = Math.min(v, GRID_PAGE_SIZE.MAX)
+    const next = Math.min(v, maxPageSize)
     setSize(next)
     setSizeDraft(String(next))
     setPage(0)
-    if (storeKey) try { localStorage.setItem(storeKey, String(next)) } catch { /* kept for this visit only */ }
+    savePageSize(pageSizeKey, next)
+    onPageSizeChange?.(next)
   }
   // Every table (user, 2026-10-15): a single click copies that cell's text (as shown), a double-click opens the row.
   const [copied, setCopied] = useState<string | null>(null)
@@ -651,16 +654,15 @@ export function DataGrid<T>({
         <span>
           <span className="mr-3 hidden text-ink-400 md:inline">{onRowClick ? GRID_HINT.OPEN_AND_COPY : GRID_HINT.COPY}</span>
           <span className="tnum">{rows.length ? page * size + 1 : 0}–{Math.min(rows.length, (page + 1) * size)}</span> of <span className="tnum">{rows.length}</span> records
-          {storeKey && (
-            <label className="ml-3 inline-flex items-center gap-1.5">
+          <label className="ml-3 inline-flex items-center gap-1.5">
               {GRID_PAGE_SIZE.LABEL}
-              <input type="number" min={1} max={GRID_PAGE_SIZE.MAX} list={`${storeKey}-sizes`} value={sizeDraft}
+              <input type="number" min={1} max={maxPageSize} list={`${storeKey}-sizes`} value={sizeDraft}
                 onChange={(e) => setSizeDraft(e.target.value)} onBlur={(e) => applySize(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') applySize(e.currentTarget.value) }}
                 className="tnum h-7 w-[72px] rounded-md border border-line bg-surface px-2 text-[12px] text-ink-900" />
-              <datalist id={`${storeKey}-sizes`}>{GRID_PAGE_SIZE.SUGGEST.map((n) => <option key={n} value={n} />)}</datalist>
+              <datalist id={`${storeKey}-sizes`}>{GRID_PAGE_SIZE.SUGGEST.filter((n) => n <= maxPageSize).map((n) => <option key={n} value={n} />)}</datalist>
+              <span className="text-ink-400">({GRID_PAGE_SIZE.LIMIT(maxPageSize)})</span>
             </label>
-          )}
         </span>
         <div className="flex items-center gap-1">
           <button disabled={page === 0} onClick={() => setPage(page - 1)} className="rounded-md p-1.5 hover:bg-alt disabled:opacity-30"><ChevronLeft className="size-4" /></button>
@@ -701,7 +703,7 @@ export function DateInput({ value, onChange, className = '' }: { value: string; 
  * a sort mark after the column name (blue arrow while it sorts) opens Newest first / Oldest first / Clear. The menu
  * floats over the page (a portal: header cells cut off what is inside them).
  */
-export function HeaderSort({ title, value, onChange }: { title: string; value: DateSortDir | ''; onChange: (v: DateSortDir | '') => void }) {
+function HeaderSort({ title, value, onChange }: { title: string; value: DateSortDir | ''; onChange: (v: DateSortDir | '') => void }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const btn = useRef<HTMLButtonElement>(null)

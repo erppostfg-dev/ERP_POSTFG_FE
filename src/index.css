@@ -173,6 +173,18 @@ input, textarea, select {
 }
 
 /* In-transit build progress (2026-10-19): a short bar sliding along the track while the length of the work is unknown. */
+/* A window over the page (document viewer, 2026-11-13): grows in from 96 % + fades; leaves the same way. */
+@keyframes pf-dialog-in { from { opacity: 0; transform: translateY(8px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes pf-dialog-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px) scale(0.96); } }
+.pf-dialog-in { animation: pf-dialog-in 240ms cubic-bezier(0.22, 1, 0.36, 1); }
+.pf-dialog-out { animation: pf-dialog-out 180ms ease-in forwards; }
+/* An image zoomed in place (FileViewer ImageView): smooth scale, the point under the mouse stays put. */
+.pf-zoom { transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), transform-origin 120ms linear; }
+@media (prefers-reduced-motion: reduce) {
+  .pf-dialog-in, .pf-dialog-out { animation-duration: 1ms; }
+  .pf-zoom { transition: none; }
+}
+
 @keyframes pf-indeterminate { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 .pf-indeterminate { animation: pf-indeterminate 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
@@ -185,3 +197,24 @@ input, textarea, select {
 .pf-panel-in { animation: pf-panel-in 220ms cubic-bezier(0.22, 1, 0.36, 1); }
 .pf-panel-out { animation: pf-panel-out 220ms ease-in forwards; }
 @media (prefers-reduced-motion: reduce) { .pf-panel-in, .pf-panel-out { animation: none; } }
+
+/* "Report a problem" hint (2026-11-05): the top-bar button pulses while its "Facing a problem?" pop-up shows. */
+@keyframes pf-attn { 0% { box-shadow: 0 0 0 0 rgb(79 70 229 / 0.55); } 70% { box-shadow: 0 0 0 9px rgb(79 70 229 / 0); } 100% { box-shadow: 0 0 0 0 rgb(79 70 229 / 0); } }
+.pf-attn { animation: pf-attn 1.6s ease-out infinite; border-color: var(--color-primary); color: var(--color-primary); }
+@keyframes pf-attn-soft { 0%, 100% { box-shadow: 0 0 0 0 rgb(79 70 229 / 0.35); } 50% { box-shadow: 0 0 0 4px rgb(79 70 229 / 0.12); } }
+.pf-attn-soft { animation: pf-attn-soft 2.4s ease-in-out infinite; border-color: rgb(79 70 229 / 0.45); color: var(--color-primary); }
+@media (prefers-reduced-motion: reduce) { .pf-attn, .pf-attn-soft { animation: none; } }
+
+/* The bell panel (2026-11-10): drops in from the bell and fades; closes the same way. */
+@keyframes pf-bell-in { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes pf-bell-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-6px) scale(0.97); } }
+.pf-bell-in { transform-origin: top right; animation: pf-bell-in 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+.pf-bell-out { transform-origin: top right; animation: pf-bell-out 160ms ease-in forwards; }
+/* A block that grows open / shrinks closed (Send notice form, Reply box): height + fade, no jump. */
+@keyframes pf-reveal-in { from { grid-template-rows: 0fr; opacity: 0; } to { grid-template-rows: 1fr; opacity: 1; } }
+@keyframes pf-reveal-out { from { grid-template-rows: 1fr; opacity: 1; } to { grid-template-rows: 0fr; opacity: 0; } }
+.pf-reveal, .pf-reveal-out { display: grid; grid-template-rows: 1fr; }
+.pf-reveal > *, .pf-reveal-out > * { min-height: 0; overflow: hidden; }
+.pf-reveal { animation: pf-reveal-in 260ms cubic-bezier(0.22, 1, 0.36, 1); }
+.pf-reveal-out { animation: pf-reveal-out 180ms ease-in forwards; }
+@media (prefers-reduced-motion: reduce) { .pf-bell-in, .pf-bell-out, .pf-reveal, .pf-reveal-out { animation: none; } }

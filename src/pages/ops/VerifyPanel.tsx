@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Check, CornerUpLeft, Loader2, Search, ShieldCheck, X } from 'lucide-react'
 import { Badge } from '../../components/ui'
 import { FileViewer } from '../../components/FileViewer'
-import type { ExternalFind } from '../../components/FindBox'
+import { FindValue } from '../../components/FindValue'
 import { ApiError } from '../../api/client'
 import { getPoFile } from '../../api/poReview'
 import { getVerifyDetail, sendBackPo, verifyPo, type VerifyDetail } from '../../api/poVerify'
 import {
   VERIFY_HEADER_FIELDS, VERIFY_LINE_FIELDS, VERIFY_OUR_LINE_FIELDS, VERIFY_REMARK_MAX, VERIFY_STATE, VERIFY_TEXT, type FieldKind,
 } from '../../constants/poVerify'
-import { termsFor } from '../../lib/valueTerms'
+import { useFindOnPo } from '../../lib/useFindOnPo'
 import { istDateTime } from '../../lib/time'
 
 /*
@@ -23,9 +23,6 @@ import { istDateTime } from '../../lib/time'
 
 const money = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`)
 const num = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v.toLocaleString('en-IN'))
-
-/** What a value's search found: a count, null = the file cannot be searched, 'pending' = still looking. */
-type Found = number | null | 'pending'
 
 export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
   uploadId: string
@@ -44,23 +41,7 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
   const load = useCallback((signal: AbortSignal) => getPoFile(uploadId, signal), [uploadId])
 
   // Click-to-find: the value asked for, which cell asked, and what each search found (kept, so red stays red).
-  const [find, setFind] = useState<ExternalFind | undefined>()
-  const [active, setActive] = useState<string | null>(null)
-  const [found, setFound] = useState<Map<string, Found>>(new Map())
-  const activeRef = useRef<string | null>(null)
-  const seq = useRef(0)
-  const ask = (key: string, value: unknown, kind: FieldKind) => {
-    const terms = termsFor(value, kind)
-    if (!terms.length) return
-    activeRef.current = key
-    setActive(key)
-    setFound((m) => new Map(m).set(key, 'pending'))
-    setFind({ terms, seq: ++seq.current })
-  }
-  const onFindResult = useCallback((n: number | null) => {
-    const key = activeRef.current
-    if (key) setFound((m) => new Map(m).set(key, n))
-  }, [])
+  const { find, onFindResult, ask, copy, active, found, copied, activeFound } = useFindOnPo()
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -106,21 +87,9 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
   }
 
   /** One clickable processed.json value: blue while asked, green dot when found, red when not on the PO. */
-  const Val = ({ id, value, kind, mono = false }: { id: string; value: unknown; kind: FieldKind; mono?: boolean }) => {
-    const text = value === null || value === undefined ? '' : String(value)
-    if (!text) return <span className="text-ink-400">—</span>
-    const f = found.get(id)
-    const isActive = active === id
-    const tone = f === 0 ? 'bg-crit-soft text-crit ring-1 ring-crit/40' : isActive ? 'bg-primary text-white' : typeof f === 'number' ? 'bg-ok-soft text-ink-900' : 'hover:bg-primary-soft hover:text-primary'
-    const tip = f === 'pending' ? VERIFY_TEXT.SEARCHING : f === 0 ? VERIFY_TEXT.NOT_FOUND : f === null ? VERIFY_TEXT.CANNOT_SEARCH : typeof f === 'number' ? VERIFY_TEXT.FOUND(f) : VERIFY_TEXT.CLICK_HINT
-    return (
-      <button type="button" onClick={() => ask(id, value, kind)} title={`${text}\n${tip}`}
-        className={`max-w-full truncate rounded px-1 py-0.5 text-left transition-colors duration-150 ${mono ? 'font-mono' : ''} ${tone}`}>
-        {text}
-        {f === 0 && <span className="ml-1 text-[10px] font-semibold">✕</span>}
-      </button>
-    )
-  }
+  const Val = ({ id, value, kind, mono = false }: { id: string; value: unknown; kind: FieldKind; mono?: boolean }) => (
+    <FindValue text={value === null || value === undefined ? '' : String(value)} found={found.get(id)} active={active === id} copied={copied === id} onFind={() => ask(id, value, kind)} onCopy={() => copy(id, String(value))} mono={mono} />
+  )
 
   const th = 'sticky top-0 z-10 border-b border-primary/20 bg-primary-soft px-2 py-1.5 text-left text-[11px] font-semibold text-primary whitespace-nowrap'
   const td = 'border-b border-line/70 px-1.5 py-1 align-top'
@@ -129,7 +98,6 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
     <button type="button" onClick={() => setTab(key)}
       className={`rounded-md px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${tab === key ? 'bg-primary text-white' : 'text-ink-600 hover:bg-alt hover:text-ink-900'}`}>{label}</button>
   )
-  const activeFound = active ? found.get(active) : undefined
 
   return createPortal(
     <div className="pf-backdrop-in fixed inset-0 z-[60] flex bg-ink-900/50 p-3 backdrop-blur-[1px] sm:p-5" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
