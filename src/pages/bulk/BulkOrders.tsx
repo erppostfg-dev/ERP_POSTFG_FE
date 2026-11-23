@@ -130,7 +130,7 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
                     <td className="px-3 py-2.5"><div className="font-mono font-semibold text-ink-900">{o.poNumber}</div><div className="text-[11px] text-ink-600">{when(o.createdAt)}</div></td>
                     <td className="px-3 py-2.5"><div className="font-medium text-ink-900">{o.orderedBy}</div><div className="text-[11px] text-ink-600">{BULK_TYPE_LABEL[o.type]}</div></td>
                     <td className="px-3 py-2.5"><div className="font-medium tnum">{o.totalUnits} {BULK_TEXT.TOTAL_UNITS}</div><div className="text-[11px] text-ink-600">{o.lineCount} SKU{o.lineCount === 1 ? '' : 's'}</div></td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">{day(o.neededBy)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">{o.neededBy ? day(o.neededBy) : "–"}</td>
                     <td className="px-3 py-2.5"><div className="max-w-[220px] truncate">{o.location.label ?? o.location.address.line}</div><div className="text-[11px] text-ink-600">{o.location.address.city} {o.location.address.pincode}</div></td>
                     <td className="px-3 py-2.5 text-right tnum">{bulkHidesMoney(o.type) ? <span className="text-ink-600">{BULK_TEXT.FREE_ORDER}</span> : rupees(o.totalValue)}</td>
                     <td className="px-3 py-2.5"><Badge tone={BULK_STATUS_TONE[o.status] ?? 'neutral'}>{BULK_STATUS_LABEL[o.status] ?? o.status}</Badge></td>

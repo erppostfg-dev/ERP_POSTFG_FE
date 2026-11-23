@@ -5,7 +5,8 @@ import { Plus, Search, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import { createBulkOrder, listBulkLocations, listBulkOrders, updateBulkOrder, searchBulkSkus, type BulkOrderFull, type BulkOrderInput, type BulkSku } from '../../api/bulkOrders'
 import { Modal } from '../../components/ui'
-import { BULK_INSTITUTION_RE, bulkHidesMoney, isMarketingLike, BULK_LINE_TOTAL_MIN, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
+import { BULK_INSTITUTION_RE, bulkHidesMoney, isMarketingLike, BULK_LINE_TOTAL_MIN, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, BULK_FAST_TRACK, BULK_PURPOSE_TYPES, type BulkType } from '../../constants/bulkOrders'
+import { formProblems } from '../../lib/bulkForm'
 import { approvalWhy, lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
 
 /*
@@ -22,12 +23,18 @@ const emptyLine = (): Line => ({ key: nextKey++, sku: null, qty: '1', discount: 
 
 const input = 'w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-primary'
 
-function Field({ label, children, wide = false, hint }: { label: string; children: React.ReactNode; wide?: boolean; hint?: string }) {
+/** v2 1d: field names for the Review step's list of problems. */
+const FIELD_LABEL = {
+  orderedBy: BULK_TEXT.ORDERED_BY, receiverName: BULK_TEXT.RECEIVER_NAME, receiverPhone: BULK_TEXT.RECEIVER_PHONE,
+  neededBy: BULK_TEXT.NEEDED_BY, priority: BULK_TEXT.PRIORITY, fastTrackRemarks: BULK_TEXT.FAST_TRACK_REMARKS,
+}
+
+function Field({ label, children, wide = false, hint, error }: { label: string; children: React.ReactNode; wide?: boolean; hint?: string; error?: string }) {
   return (
     <label className={`flex flex-col gap-1 ${wide ? 'md:col-span-2' : ''}`}>
       <span className="text-[12px] font-medium text-ink-600">{label}</span>
       {children}
-      {hint && <span className="text-[11px] text-ink-400">{hint}</span>}
+      {error ? <span className="text-[11px] text-crit">{error}</span> : hint && <span className="text-[11px] text-ink-400">{hint}</span>}
     </label>
   )
 }
@@ -117,9 +124,15 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const [lines, setLines] = useState<Line[]>(() => initial
     ? initial.lines.map((l) => ({ key: nextKey++, sku: { pepCode: l.pepCode, name: l.name, mrp: l.mrp, ean: null }, qty: String(l.qty), discount: String(l.discountPct) }))
     : [emptyLine()])
-  const [form, setForm] = useState<Record<'orderedBy' | 'neededBy' | 'receiverName' | 'receiverPhone' | 'mode' | 'priority' | 'note', string>>(initial
-    ? { orderedBy: initial.orderedBy, neededBy: initial.neededBy.slice(0, 10), receiverName: initial.receiverName, receiverPhone: initial.receiverPhone, mode: initial.mode ?? 'Courier', priority: initial.priority, note: initial.note ?? '' }
-    : { orderedBy: '', neededBy: '', receiverName: '', receiverPhone: '', mode: 'Courier', priority: BULK_PRIORITIES[0], note: '' })
+  const [form, setForm] = useState<Record<'orderedBy' | 'neededBy' | 'receiverName' | 'receiverPhone' | 'mode' | 'priority' | 'note' | 'fastTrackRemarks' | 'purpose', string>>(initial
+    ? {
+      orderedBy: initial.orderedBy, neededBy: initial.neededBy?.slice(0, 10) ?? '', receiverName: initial.receiverName, receiverPhone: initial.receiverPhone,
+      mode: initial.mode ?? BULK_MODES[1], priority: initial.priority, note: initial.note ?? '', fastTrackRemarks: initial.fastTrackRemarks ?? '', purpose: initial.purpose ?? '',
+    }
+    : { orderedBy: '', neededBy: '', receiverName: '', receiverPhone: '', mode: BULK_MODES[1], priority: BULK_PRIORITIES[0], note: '', fastTrackRemarks: '', purpose: '' })
+  // v2 1d: a field's error shows once it was left (blur), and every error on the Review step
+  const [touched, setTouched] = useState<Set<string>>(new Set())
+  const leave = (k: string) => () => setTouched((t) => (t.has(k) ? t : new Set(t).add(k)))
   const [where, setWhere] = useState<string>(initial?.location.id ?? 'new') // 'new' or a saved location id
   const [address, setAddress] = useState(initial && !initial.location.id ? { ...initial.location.address } : { line: '', city: '', state: '', pincode: '' })
   const [saveAs, setSaveAs] = useState('')
@@ -156,7 +169,16 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const emailBad = !!inst.email.trim() && !EMAIL_RE.test(inst.email.trim())
   const billingOk = inst.same || (!!inst.billing.line.trim() && !!inst.billing.city.trim() && !!inst.billing.state.trim() && /^[1-9]\d{5}$/.test(inst.billing.pincode.trim()))
   const instOk = !isInst || (!!inst.name.trim() && !gstinBad && !emailBad && billingOk)
-  const deliveryOk = !!form.orderedBy.trim() && !!form.neededBy && form.neededBy >= todayIst() && !!form.receiverName.trim() && !!phone && addressOk && instOk
+  const problems = formProblems(form, todayIst())
+  const pinBad = where === 'new' && !/^[1-9]\d{5}$/.test(address.pincode.trim())
+  const err = (k: keyof typeof problems) => (touched.has(k) || step === 3 ? problems[k] : undefined)
+  const deliveryOk = Object.keys(problems).length === 0 && addressOk && instOk
+  /** Every remaining problem, for the Review step (labels + why). */
+  const allProblems = [
+    ...(Object.entries(problems) as [keyof typeof FIELD_LABEL, string][]).map(([k, why]) => BULK_TEXT.ERR_FIELD(FIELD_LABEL[k], why)),
+    ...(addressOk ? [] : [BULK_TEXT.ERR_FIELD(BULK_TEXT.LOCATION, pinBad ? BULK_TEXT.ERR_PIN : BULK_TEXT.ERR_REQUIRED)]),
+    ...(instOk ? [] : [BULK_TEXT.ERR_FIELD(BULK_TEXT.INSTITUTION_TITLE, BULK_TEXT.ERR_REQUIRED)]),
+  ]
 
   const save = useMutation({
     mutationFn: (body: BulkOrderInput) => (initial ? updateBulkOrder(initial.id, body) : createBulkOrder(body)),
@@ -180,9 +202,11 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       ...(where === 'new'
         ? { address: { line: address.line.trim(), city: address.city.trim(), state: address.state.trim(), pincode: address.pincode.trim() }, ...(saveAs.trim() ? { saveLocationAs: saveAs.trim() } : {}) }
         : { locationId: where }),
-      neededBy: form.neededBy,
+      ...(form.neededBy ? { neededBy: form.neededBy } : {}),
       ...(isMarketingLike(type) ? { mode: form.mode } : {}),
       priority: form.priority,
+      ...(form.priority === BULK_FAST_TRACK ? { fastTrackRemarks: form.fastTrackRemarks.trim() } : {}),
+      ...(BULK_PURPOSE_TYPES.includes(type) && form.purpose.trim() ? { purpose: form.purpose.trim() } : {}),
       ...(form.note.trim() ? { note: form.note.trim() } : {}),
       lines: parsed.map((l) => (noMoney ? { pepCode: l.sku!.pepCode, qty: l.q } : { pepCode: l.sku!.pepCode, qty: l.q, discountPct: l.d })),
       ...(isInst ? {
@@ -203,9 +227,10 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       {step > 1 ? <button onClick={() => setStep(step - 1)} className="rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold">{BULK_TEXT.BACK}</button>
         : <button onClick={onClose} className="rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold">{BULK_TEXT.CANCEL}</button>}
       {step < 3 ? (
-        <button onClick={() => setStep(step + 1)} disabled={step === 1 ? !itemsOk : !deliveryOk} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{BULK_TEXT.NEXT}</button>
+        // v2 1d: from the delivery step the Review step opens even with errors (it lists them); Submit waits for none
+        <button onClick={() => setStep(step + 1)} disabled={step === 1 && !itemsOk} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{BULK_TEXT.NEXT}</button>
       ) : (
-        <button onClick={submit} disabled={save.isPending} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{save.isPending ? BULK_TEXT.SUBMITTING : initial ? BULK_TEXT.SAVE_CHANGES : BULK_TEXT.SUBMIT}</button>
+        <button onClick={submit} disabled={save.isPending || !itemsOk || !deliveryOk} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{save.isPending ? BULK_TEXT.SUBMITTING : initial ? BULK_TEXT.SAVE_CHANGES : BULK_TEXT.SUBMIT}</button>
       )}
     </>
   )
@@ -275,10 +300,14 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
           <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.DELIVERY_TITLE}</h3>
           <p className="mb-3 text-[12px] text-ink-600">{BULK_TEXT.DELIVERY_SUB}</p>
           <div className="grid gap-3 md:grid-cols-2">
-            <Field label={BULK_TEXT.ORDERED_BY} hint={BULK_TEXT.ORDERED_BY_HINT[type]}><input className={input} value={form.orderedBy} onChange={(e) => set({ orderedBy: e.target.value })} /></Field>
-            <Field label={BULK_TEXT.NEEDED_BY}><input type="date" min={todayIst()} className={input} value={form.neededBy} onChange={(e) => set({ neededBy: e.target.value })} /></Field>
-            <Field label={BULK_TEXT.RECEIVER_NAME}><input className={input} value={form.receiverName} onChange={(e) => set({ receiverName: e.target.value })} /></Field>
-            <Field label={BULK_TEXT.RECEIVER_PHONE}><input className={`${input} ${form.receiverPhone && !phone ? 'border-crit' : ''}`} placeholder="+91 98765 43210" value={form.receiverPhone} onChange={(e) => set({ receiverPhone: e.target.value })} /></Field>
+            <Field label={BULK_TEXT.ORDERED_BY} hint={BULK_TEXT.ORDERED_BY_HINT[type]} error={err('orderedBy')}><input className={`${input} ${err('orderedBy') ? 'border-crit' : ''}`} value={form.orderedBy} onBlur={leave('orderedBy')} onChange={(e) => set({ orderedBy: e.target.value })} /></Field>
+            <Field label={BULK_TEXT.PRIORITY}><Choice value={form.priority} options={BULK_PRIORITIES} onChange={(v) => set({ priority: v })} /></Field>
+            {form.priority === BULK_FAST_TRACK && (
+              <Field label={BULK_TEXT.FAST_TRACK_REMARKS} wide error={err('fastTrackRemarks')}><textarea rows={2} className={`${input} ${err('fastTrackRemarks') ? 'border-crit' : ''}`} value={form.fastTrackRemarks} onBlur={leave('fastTrackRemarks')} onChange={(e) => set({ fastTrackRemarks: e.target.value })} /></Field>
+            )}
+            <Field label={form.priority === BULK_FAST_TRACK ? BULK_TEXT.NEEDED_BY : BULK_TEXT.NEEDED_BY_OPTIONAL} error={err('neededBy')}><input type="date" min={todayIst()} className={`${input} ${err('neededBy') ? 'border-crit' : ''}`} value={form.neededBy} onBlur={leave('neededBy')} onChange={(e) => set({ neededBy: e.target.value })} /></Field>
+            <Field label={BULK_TEXT.RECEIVER_NAME} error={err('receiverName')}><input className={`${input} ${err('receiverName') ? 'border-crit' : ''}`} value={form.receiverName} onBlur={leave('receiverName')} onChange={(e) => set({ receiverName: e.target.value })} /></Field>
+            <Field label={BULK_TEXT.RECEIVER_PHONE} error={err('receiverPhone')}><input className={`${input} ${err('receiverPhone') ? 'border-crit' : ''}`} placeholder="+91 98765 43210" value={form.receiverPhone} onBlur={leave('receiverPhone')} onChange={(e) => set({ receiverPhone: e.target.value })} /></Field>
             <Field label={BULK_TEXT.LOCATION} wide>
               <select className={input} value={where} onChange={(e) => setWhere(e.target.value)}>
                 <option value="new">{BULK_TEXT.NEW_ADDRESS}</option>
@@ -290,15 +319,15 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
                 <Field label={BULK_TEXT.ADDRESS_LINE} wide><input className={input} value={address.line} onChange={(e) => setAddress({ ...address, line: e.target.value })} /></Field>
                 <Field label={BULK_TEXT.CITY}><input className={input} value={address.city} onChange={(e) => setAddress({ ...address, city: e.target.value })} /></Field>
                 <Field label={BULK_TEXT.STATE}><input className={input} value={address.state} onChange={(e) => setAddress({ ...address, state: e.target.value })} /></Field>
-                <Field label={BULK_TEXT.PINCODE}><input inputMode="numeric" maxLength={6} className={`${input} ${address.pincode && !/^[1-9]\d{5}$/.test(address.pincode) ? 'border-crit' : ''}`} value={address.pincode} onChange={(e) => setAddress({ ...address, pincode: e.target.value.trim() })} /></Field>
+                <Field label={BULK_TEXT.PINCODE} error={address.pincode && pinBad ? BULK_TEXT.ERR_PIN : undefined}><input inputMode="numeric" maxLength={6} className={`${input} ${address.pincode && !/^[1-9]\d{5}$/.test(address.pincode) ? 'border-crit' : ''}`} value={address.pincode} onChange={(e) => setAddress({ ...address, pincode: e.target.value.trim() })} /></Field>
                 <Field label={BULK_TEXT.SAVE_AS} hint={BULK_TEXT.SAVE_AS_HINT}><input className={input} value={saveAs} onChange={(e) => setSaveAs(e.target.value)} /></Field>
               </>
             ) : saved && (
               <p className="rounded-md bg-alt px-3 py-2 text-[12px] text-ink-600 md:col-span-2">{saved.address.line}, {saved.address.city}, {saved.address.state} {saved.address.pincode}</p>
             )}
             {isMarketingLike(type) && <Field label={BULK_TEXT.MODE}><Choice value={form.mode} options={BULK_MODES} onChange={(v) => set({ mode: v })} /></Field>}
-            <Field label={BULK_TEXT.PRIORITY}><Choice value={form.priority} options={BULK_PRIORITIES} onChange={(v) => set({ priority: v })} /></Field>
-            <Field label={BULK_TEXT.NOTE} wide><textarea rows={2} className={input} value={form.note} onChange={(e) => set({ note: e.target.value })} /></Field>
+            {BULK_PURPOSE_TYPES.includes(type) && <Field label={BULK_TEXT.PURPOSE} hint={BULK_TEXT.PURPOSE_HINT}><input className={input} value={form.purpose} onChange={(e) => set({ purpose: e.target.value })} /></Field>}
+            <Field label={BULK_TEXT.NOTE} hint={BULK_TEXT.NOTE_HINT} wide><textarea rows={2} className={input} value={form.note} onChange={(e) => set({ note: e.target.value })} /></Field>
           </div>
           {isInst && (
             <div className="mt-5 border-t border-line pt-4">
@@ -329,6 +358,12 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
         <div>
           <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.REVIEW_TITLE}</h3>
           <p className="mb-2 text-[12px] text-ink-600">{BULK_TEXT.REVIEW_SUB}</p>
+          {allProblems.length > 0 && (
+            <div className="mb-3 rounded-md bg-crit-soft px-3 py-2 text-[12.5px] text-crit">
+              <div className="font-semibold">{BULK_TEXT.REVIEW_FIX}</div>
+              <ul className="ml-4 list-disc">{allProblems.map((p) => <li key={p}>{p}</li>)}</ul>
+            </div>
+          )}
           {rules.data && (() => {
             const why = approvalWhy(rules.data[type], totals.units, isMarketingLike(type) ? form.mode : null)
             return <p className={`mb-3 rounded-md px-3 py-2 text-[12.5px] ${why.length ? 'bg-warn-soft text-ink-900' : 'bg-ok-soft text-ink-900'}`}>{why.length ? BULK_TEXT.NEEDS_APPROVAL(why.join(', ')) : BULK_TEXT.NO_APPROVAL}</p>
@@ -337,7 +372,9 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
             <div className="rounded-md border border-line p-3">
               <div className="font-semibold">{form.orderedBy}</div>
               <div className="text-ink-600">{BULK_TYPE_LABEL[type]} · {form.priority}{isMarketingLike(type) ? ` · ${form.mode}` : ''}</div>
-              <div className="mt-2 text-ink-600">{BULK_TEXT.NEEDED_BY}: <span className="text-ink-900">{form.neededBy}</span></div>
+              <div className="mt-2 text-ink-600">{BULK_TEXT.NEEDED_BY}: <span className="text-ink-900">{form.neededBy || '–'}</span></div>
+              {form.priority === BULK_FAST_TRACK && form.fastTrackRemarks.trim() && <div className="text-ink-600">“{form.fastTrackRemarks.trim()}”</div>}
+              {BULK_PURPOSE_TYPES.includes(type) && form.purpose.trim() && <div className="text-ink-600">{BULK_TEXT.PURPOSE}: <span className="text-ink-900">{form.purpose.trim()}</span></div>}
             </div>
             <div className="rounded-md border border-line p-3">
               <div className="font-semibold">{form.receiverName} · {phone}</div>

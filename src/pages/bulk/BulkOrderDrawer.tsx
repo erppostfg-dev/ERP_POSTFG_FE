@@ -265,7 +265,9 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
             </section>
             <section>
               <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{BULK_TEXT.DRAWER_DELIVERY}</h3>
-              {row(BULK_TEXT.NEEDED_BY, day(d.neededBy))}
+              {row(BULK_TEXT.NEEDED_BY, d.neededBy ? day(d.neededBy) : "–")}
+              {d.fastTrackRemarks && row(BULK_TEXT.FAST_TRACK_REMARKS, d.fastTrackRemarks)}
+              {d.purpose && row(BULK_TEXT.PURPOSE, d.purpose)}
               {row(BULK_TEXT.RECEIVER_NAME, d.receiverName)}
               {row(BULK_TEXT.RECEIVER_PHONE, d.receiverPhone)}
               {d.location.label && row(BULK_TEXT.LOCATION, d.location.label)}

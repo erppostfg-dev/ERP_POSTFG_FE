@@ -25,10 +25,16 @@ export interface BulkOrder {
   receiverName: string
   receiverPhone: string
   location: { id: string | null; label: string | null; address: BulkAddress }
-  neededBy: string
+  /** v2 1d: null = no date (optional for Normal). */
+  neededBy: string | null
   mode: string | null
   priority: string
+  /** Special instructions. */
   note: string | null
+  /** v2 1d: Fast-track only. */
+  fastTrackRemarks: string | null
+  /** v2 1d: Marketing only. */
+  purpose: string | null
   lineCount: number
   totalUnits: number
   totalMrp: number
@@ -117,10 +123,12 @@ export interface BulkOrderInput {
   locationId?: string
   address?: BulkAddress
   saveLocationAs?: string
-  neededBy: string
+  neededBy?: string
   mode?: string
   priority: string
   note?: string
+  fastTrackRemarks?: string
+  purpose?: string
   lines: { pepCode: string; qty: number; discountPct?: number }[]
   /** Institutional only (required: name + billing address or billingSameAsDelivery). */
   institutionName?: string

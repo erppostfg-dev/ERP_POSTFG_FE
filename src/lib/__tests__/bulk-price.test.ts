@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BULK_FIXED_PRICE, BULK_PROCESS_TYPES, bulkHidesMoney, isMarketingLike, MARKETING_UNIT_PRICE } from '../../constants/bulkOrders'
+import { formProblems } from '../bulkForm'
 import { approvalWhy, lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, unitPrice, validDiscount } from '../bulkPrice'
 
 /* Bulk Orders price maths = the backend's (POST_FG test/api/bulk-orders.test.ts uses the same numbers). */
@@ -35,5 +36,12 @@ describe('bulk order prices', () => {
       .toEqual([[], ['101 units (over 100)'], ['Porter delivery'], ['150 units (over 100)', 'Porter delivery']])
     expect(approvalWhy({ overUnits: null, modes: [] }, 5000, null)).toEqual([])
     expect(approvalWhy(undefined, 5000, 'Porter')).toEqual([])
+  })
+  it('v2 1d form checks (same as the backend): Fast-track needs remarks + a date, Normal no date; phone 10 digits; never a past date', () => {
+    const ok = { orderedBy: 'Brand team', receiverName: 'Ravi', receiverPhone: '+91 98765-43210', neededBy: '', priority: 'Normal', fastTrackRemarks: '' }
+    expect(formProblems(ok, '2026-11-23')).toEqual({})
+    expect(Object.keys(formProblems({ ...ok, priority: 'Fast-track' }, '2026-11-23')).sort()).toEqual(['fastTrackRemarks', 'neededBy'])
+    expect(formProblems({ ...ok, priority: 'Fast-track', neededBy: '2026-11-24', fastTrackRemarks: 'Event Friday' }, '2026-11-23')).toEqual({})
+    expect(Object.keys(formProblems({ ...ok, neededBy: '2026-11-22', receiverPhone: '12345', orderedBy: ' ' }, '2026-11-23')).sort()).toEqual(['neededBy', 'orderedBy', 'receiverPhone'])
   })
 })

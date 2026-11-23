@@ -117,8 +117,12 @@ export const BULK_STEPS = ['Submitted', 'Approved', 'Processing', 'Ready to Disp
 export const BULK_STEP_OF: Record<string, number> = { pending_approval: 0, submitted: 1, approved: 1, processing: 2 }
 
 /** The design's markers (figma-make-bulk-orders): mode for Marketing only. */
-export const BULK_MODES = ['Porter', 'Courier', 'Self pickup'] as const
-export const BULK_PRIORITIES = ['Standard', 'Fast-track'] as const
+/** v2 1d (2026-11-23): Porter / Regular, Normal / Fast-track (backend BULK_DELIVERY_MODES / BULK_PRIORITIES). */
+export const BULK_MODES = ['Porter', 'Regular'] as const
+export const BULK_PRIORITIES = ['Normal', 'Fast-track'] as const
+export const BULK_FAST_TRACK = 'Fast-track'
+/** v2 1d: Purpose is asked on Marketing orders only (not Head office / Institutional). */
+export const BULK_PURPOSE_TYPES: string[] = ['marketing']
 
 export const BULK_LIMIT = {
   PAGE_SIZE: 50,
@@ -192,7 +196,20 @@ export const BULK_TEXT = {
   SAVE_AS_HINT: 'e.g. Andheri store. Saved addresses can be picked in later orders.',
   MODE: 'Order mode',
   PRIORITY: 'Priority',
-  NOTE: 'Note for the approver (optional)',
+  NOTE: 'Special instructions (optional)',
+  NOTE_HINT: 'Shown to our team when they place the order',
+  NEEDED_BY_OPTIONAL: 'Needed by (optional for Normal)',
+  FAST_TRACK_REMARKS: 'Why is it urgent?',
+  PURPOSE: 'Purpose (optional)',
+  PURPOSE_HINT: 'e.g. influencer seeding, an event name',
+  ERR_REQUIRED: 'Required',
+  ERR_PHONE: 'A 10-digit phone number (+91, 0, spaces are fine)',
+  ERR_PIN: 'A 6-digit pincode',
+  ERR_DATE_PAST: 'Today or later',
+  ERR_NEEDED_BY_FAST: 'Required for Fast-track',
+  ERR_REMARKS: 'Required for Fast-track: say why it is urgent',
+  REVIEW_FIX: 'Fix these before you submit:',
+  ERR_FIELD: (label: string, why: string) => `${label}: ${why}`,
   REVIEW_TITLE: 'Review & submit',
   REVIEW_SUB: 'Check the order before you submit it.',
   /** v2 1c: what happens on Submit (from the approval rules of the type). */
