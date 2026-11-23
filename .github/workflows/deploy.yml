@@ -91,9 +91,13 @@ jobs:
       - name: Build
         run: npm run build
 
-      # The Bulk Orders portal: a second app of this repo, served at <domain>/bulk-orders/
-      # (dist-bulk/, base /bulk-orders/, the same VITE_API_BASE_URL).
+      # The Bulk Orders portal: a second app of this repo (dist-bulk/, base /), served at the root of
+      # its own domain (CloudFront maps it to the bucket folder bulk-orders/). It calls the API on the
+      # POST_FG address, so it is built with the Environment's VITE_BULK_API_BASE_URL (full URL, e.g.
+      # https://erp.mcaffeine.com/postfg/api/v1); without it, the same VITE_API_BASE_URL as POST_FG.
       - name: Build (Bulk Orders portal)
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_BULK_API_BASE_URL || vars.VITE_API_BASE_URL }}
         run: npm run build:bulk
 
       - name: AWS credentials (OIDC)
@@ -128,8 +132,8 @@ jobs:
             --content-type "text/html; charset=utf-8" \
             --cache-control "no-cache"
 
-      # The Bulk Orders portal: same bucket under bulk-orders/, same order (assets first,
-      # index.html last).
+      # The Bulk Orders portal: same bucket under bulk-orders/ (its domain's root), same order
+      # (assets first, index.html last).
       - name: Upload Bulk Orders portal to S3
         run: |
           aws s3 sync dist-bulk/assets "s3://$S3_BUCKET/bulk-orders/assets" \
