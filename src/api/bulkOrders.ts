@@ -74,7 +74,7 @@ export interface BulkDocument {
   by: { id: number; name: string | null }; at: string; replacedAt: string | null
 }
 
-export interface BulkSetting { type: BulkType; paymentCheck: boolean; updatedBy: { id: number; name: string | null } | null; updatedAt: string | null }
+export interface BulkSetting { type: BulkType; paymentCheck: boolean; approvalOverUnits: number | null; updatedBy: { id: number; name: string | null } | null; updatedAt: string | null }
 
 export interface BulkOrderLine {
   lineNo: number; pepCode: string; name: string | null; mrp: number; qty: number; discountPct: number
@@ -90,6 +90,8 @@ export interface BulkOrderEvent {
   changes: {
     lines?: { lineNo: number; pepCode: string; qty?: [number, number]; discountPct?: [number, number]; mrp?: [number, number]; removed?: boolean }[]
     fields?: string[]
+    /** v2 1c: created / edited: the reasons approval is needed ([] = none); an edit's order status move is in `status`. */
+    approval?: string[]
     /** document_added */
     kind?: string; fileName?: string; replaced?: string[]
     /** payment: [old, new] */
@@ -137,8 +139,10 @@ const qs = (o: Record<string, string | number | undefined>) => {
   return s ? `?${s}` : ''
 }
 
+/** v2 1c: the approval rules of a type (list meta): more units than overUnits (null = never) or one of the modes. */
+export interface BulkApprovalRule { overUnits: number | null; modes: string[] }
 export const listBulkOrders = (q: BulkListQuery) =>
-  apiWithMeta<BulkOrder[], { total: number; page: number; pageSize: number }>(
+  apiWithMeta<BulkOrder[], { total: number; page: number; pageSize: number; approvalRules: Partial<Record<BulkType, BulkApprovalRule>> }>(
     `${BULK_ENDPOINT.ORDERS}${qs({ type: q.type, status: q.status, q: q.q, page: q.page, pageSize: q.pageSize ?? BULK_LIMIT.PAGE_SIZE })}`,
   )
 
@@ -199,8 +203,8 @@ export const bulkDocumentUrl = (id: string, docId: string, team = false) => apiU
 export const setBulkPayment = (id: string, action: string, note?: string, team = false) =>
   api<BulkOrderFull>(team ? BULK_ENDPOINT.TEAM_PAYMENT(id) : BULK_ENDPOINT.PAYMENT(id), { method: 'POST', body: JSON.stringify(note ? { action, note } : { action }) })
 export const listBulkSettings = () => api<BulkSetting[]>(BULK_ENDPOINT.SETTINGS)
-export const updateBulkSetting = (type: BulkType, paymentCheck: boolean) =>
-  api<BulkSetting[]>(BULK_ENDPOINT.SETTING(type), { method: 'PUT', body: JSON.stringify({ paymentCheck }) })
+export const updateBulkSetting = (type: BulkType, change: { paymentCheck?: boolean; approvalOverUnits?: number | null }) =>
+  api<BulkSetting[]>(BULK_ENDPOINT.SETTING(type), { method: 'PUT', body: JSON.stringify(change) })
 
 export const searchBulkSkus = (q: string, signal?: AbortSignal) => api<BulkSku[]>(`${BULK_ENDPOINT.SKUS}${qs({ q })}`, { signal })
 

@@ -46,10 +46,16 @@ export const BULK_PAGE = {
   APPROVE: '/bulk-orders/approve',
 } as const
 
-export const BULK_STATUS = { PENDING: 'pending_approval', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled', PROCESSING: 'processing' } as const
+/** v2 1c (2026-11-23): SUBMITTED = no approval needed, with our team; READY = list filter approved + submitted (team tab). */
+export const BULK_STATUS = { PENDING: 'pending_approval', SUBMITTED: 'submitted', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled', PROCESSING: 'processing' } as const
+export const BULK_LIST_READY = 'ready'
+/** Statuses the requester may still edit / cancel (backend BULK_EDITABLE_STATUSES). */
+export const BULK_EDITABLE: string[] = [BULK_STATUS.PENDING, BULK_STATUS.SUBMITTED]
+/** Statuses our team may turn into a sale order (backend BULK_PROCESSABLE_STATUSES). */
+export const BULK_PROCESSABLE: string[] = [BULK_STATUS.APPROVED, BULK_STATUS.SUBMITTED]
 export type BulkStatus = (typeof BULK_STATUS)[keyof typeof BULK_STATUS]
-export const BULK_STATUS_LABEL: Record<string, string> = { pending_approval: 'Pending approval', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', processing: 'Processing' }
-export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = { pending_approval: 'warn', approved: 'ok', rejected: 'crit', cancelled: 'neutral', processing: 'info' }
+export const BULK_STATUS_LABEL: Record<string, string> = { pending_approval: 'Pending approval', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', processing: 'Processing' }
+export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = { pending_approval: 'warn', submitted: 'ok', approved: 'ok', rejected: 'crit', cancelled: 'neutral', processing: 'info' }
 /** Institutional requester checks (same as the backend BULK_INSTITUTION). */
 export const BULK_INSTITUTION_RE = {
   GSTIN: /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/,
@@ -108,7 +114,7 @@ export const BULK_DOC_MAX_BYTES = 10 * 1024 * 1024
  */
 export const BULK_STEPS = ['Submitted', 'Approved', 'Processing', 'Ready to Dispatch', 'Dispatched', 'Delivered'] as const
 /** How far an order status is on BULK_STEPS (index of the last step done). */
-export const BULK_STEP_OF: Record<string, number> = { pending_approval: 0, approved: 1, processing: 2 }
+export const BULK_STEP_OF: Record<string, number> = { pending_approval: 0, submitted: 1, approved: 1, processing: 2 }
 
 /** The design's markers (figma-make-bulk-orders): mode for Marketing only. */
 export const BULK_MODES = ['Porter', 'Courier', 'Self pickup'] as const
@@ -152,6 +158,11 @@ export const BULK_TEXT = {
   STAT_TOTAL: 'All orders',
   STAT_PENDING: 'Pending approval',
   STAT_APPROVED: 'Approved',
+  STAT_SUBMITTED: 'Submitted (no approval)',
+  /** v2 1c timeline: why the order needs approval / moved. */
+  EVENT_APPROVAL: (why: string) => `Needs approval: ${why}`,
+  EVENT_NO_APPROVAL: 'No approval needed',
+  EVENT_STATUS: (from: string, to: string) => `${from} → ${to}`,
   STAT_REJECTED: 'Rejected',
   LOAD_MORE: 'Load more',
   SHOWING: (n: number, total: number) => `${n} of ${total}`,
@@ -183,7 +194,14 @@ export const BULK_TEXT = {
   PRIORITY: 'Priority',
   NOTE: 'Note for the approver (optional)',
   REVIEW_TITLE: 'Review & submit',
-  REVIEW_SUB: 'The order goes to an approver. The approver may change quantities or discounts before approving.',
+  REVIEW_SUB: 'Check the order before you submit it.',
+  /** v2 1c: what happens on Submit (from the approval rules of the type). */
+  NEEDS_APPROVAL: (why: string) => `Needs approval: ${why}. The approver may change quantities or discounts before approving.`,
+  NO_APPROVAL: 'No approval needed: the order goes straight to our team.',
+  WHY_UNITS: (units: number, over: number) => `${units} units (over ${over})`,
+  WHY_MODE: (mode: string) => `${mode} delivery`,
+  STEP_NO_APPROVAL: 'No approval needed',
+  TEAM_READY: 'To process',
   BACK: 'Back',
   NEXT: 'Next',
   SUBMIT: 'Submit for approval',
@@ -293,6 +311,10 @@ export const BULK_TEXT = {
   // POST_FG Users & Roles -> Settings -> Bulk Orders (central admin)
   SETTINGS_SUB: 'Bulk Orders portal, per order type. A change applies to orders created after it.',
   PAYMENT_CHECK: 'Proof of payment check',
+  APPROVAL_OVER: 'Approval needed above',
+  APPROVAL_OVER_UNITS: 'units',
+  APPROVAL_NEVER: 'Never by size',
+  APPROVAL_HINT: 'An order with MORE units than this needs approval; Porter delivery always does (Marketing, Head office). Empty = never by size. Applies to orders created or edited after the change.',
   PAYMENT_CHECK_HINT: 'ON: new orders get a payment status (awaiting proof); people with "Bulk Orders: verify payments" (admin, developer, or a role it is on for) verify the proof. Never blocks the order.',
   CHANGED_BY: (name: string, at: string) => `Changed by ${name} · ${at}`,
   STATUS_TIMELINE: 'Status timeline',

@@ -6,7 +6,7 @@ import { approveBulkOrder, cancelBulkOrder, getBulkOrder, rejectBulkOrder, setBu
 import { Badge, Drawer } from '../../components/ui'
 import {
   BULK_DOC_KIND_LABEL, BULK_DOC_MAX_BYTES, BULK_EVENT_LABEL, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE,
-  BULK_FIXED_PRICE, bulkHidesMoney, BULK_PROCESS_TYPES, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_STEP_OF, BULK_STEPS, BULK_TEXT, BULK_TYPE_LABEL, type BulkPaymentAction,
+  BULK_EDITABLE, BULK_FIXED_PRICE, bulkHidesMoney, BULK_PROCESS_TYPES, BULK_PROCESSABLE, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_STEP_OF, BULK_STEPS, BULK_TEXT, BULK_TYPE_LABEL, type BulkPaymentAction,
 } from '../../constants/bulkOrders'
 import { BulkProcessPanel } from '../ops/BulkProcessPanel'
 import { BulkDocumentViewer } from './BulkDocumentViewer'
@@ -47,6 +47,8 @@ function StatusTimeline({ d }: { d: BulkOrderFull }) {
     )
   }
   const at = BULK_STEP_OF[d.status] ?? 0
+  // v2 1c: an order that needed no approval shows that step as "No approval needed"
+  const steps = BULK_STEPS.map((s, i) => (i === 1 && !d.decidedBy && at >= 1 ? BULK_TEXT.STEP_NO_APPROVAL : s))
   const info: (string | null)[] = [
     `${d.createdBy.name ?? ''} · ${when(d.createdAt)}`,
     d.decidedBy && d.decidedAt ? `${d.decidedBy.name ?? ''} · ${when(d.decidedAt)}` : null,
@@ -55,7 +57,7 @@ function StatusTimeline({ d }: { d: BulkOrderFull }) {
   return (
     <div>
       <ol className="flex">
-        {BULK_STEPS.map((step, i) => (
+        {steps.map((step, i) => (
           <li key={step} className="relative flex flex-1 flex-col items-center text-center">
             {i > 0 && <span className={`absolute right-1/2 top-3 h-0.5 w-full -translate-y-1/2 ${i <= at ? 'bg-ok' : 'bg-line'}`} />}
             <span className={`relative z-10 flex size-6 items-center justify-center rounded-full border-2 ${i <= at ? 'border-ok bg-ok text-white' : i === at + 1 ? 'border-warn bg-surface' : 'border-line bg-surface'}`}>
@@ -106,6 +108,8 @@ function Timeline({ events, noMoney = false }: { events: BulkOrderEvent[]; noMon
               ].filter(Boolean).join(', ')}
             </div>
           ))}
+          {e.action === 'edited' && e.changes?.status && <div className="text-[12px] text-ink-600">{BULK_TEXT.EVENT_STATUS(BULK_STATUS_LABEL[e.changes.status[0]] ?? e.changes.status[0], BULK_STATUS_LABEL[e.changes.status[1]] ?? e.changes.status[1])}</div>}
+          {e.changes?.approval && (e.action === 'created' || (e.action === 'edited' && e.changes.status)) && <div className="text-[12px] text-ink-600">{e.changes.approval.length ? BULK_TEXT.EVENT_APPROVAL(e.changes.approval.join(', ')) : BULK_TEXT.EVENT_NO_APPROVAL}</div>}
           {e.changes?.fields && e.changes.fields.length > 0 && <div className="text-[12px] text-ink-600">{BULK_TEXT.EDITED_FIELDS(e.changes.fields.length)}</div>}
           {e.changes?.fileName && <div className="text-[12px] text-ink-600">{BULK_DOC_KIND_LABEL[e.changes.kind ?? ''] ?? e.changes.kind}: {e.changes.fileName}{e.changes.replaced?.length ? ` (${BULK_TEXT.REPLACED} ${e.changes.replaced.join(', ')})` : ''}</div>}
           {e.changes?.saleOrderCode && <div className="text-[12px] text-ink-600"><span className="font-mono">{e.changes.saleOrderCode}</span>{e.changes.facilityCode ? ` · ${e.changes.facilityCode} · ${e.changes.uniwareChannel ?? ''} · ${e.changes.customerCode ?? ''}` : ''}</div>}
@@ -159,7 +163,8 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
 
   const pending = d?.status === BULK_STATUS.PENDING
   const canDecide = !!d && pending && !!rights?.approve
-  const canChange = !!d && pending && !!rights?.create.includes(d.type)
+  // v2 1c: the requester changes a pending OR submitted order (before its sale order)
+  const canChange = !!d && BULK_EDITABLE.includes(d.status) && !!rights?.create.includes(d.type)
   // Marketing: the portal shows no money; prices at the type's fixed price
   const fixed = d ? BULK_FIXED_PRICE[d.type] : undefined
   const noMoney = !team && !!d && bulkHidesMoney(d.type)
@@ -278,7 +283,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
             </section>
           )}
 
-          {team && teamCanUpload && d.status === BULK_STATUS.APPROVED && BULK_PROCESS_TYPES.includes(d.type) && (
+          {team && teamCanUpload && BULK_PROCESSABLE.includes(d.status) && BULK_PROCESS_TYPES.includes(d.type) && (
             <BulkProcessPanel d={d} onDone={(r) => done(BULK_TEXT.CREATED(r.saleOrder?.code ?? ''))(r)} />
           )}
 

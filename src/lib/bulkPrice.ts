@@ -3,7 +3,7 @@
  * what the server will save. MRP x (100 - discount %) = price in paise, rounded half up.
  */
 
-import { BULK_DISCOUNT_BELOW, BULK_LINE_TOTAL_MIN } from '../constants/bulkOrders'
+import { BULK_DISCOUNT_BELOW, BULK_LINE_TOTAL_MIN, BULK_TEXT } from '../constants/bulkOrders'
 
 export const priceAfterDiscount = (mrp: number, discountPct: number): number =>
   Math.round(Number((mrp * (100 - discountPct)).toFixed(6))) / 100
@@ -32,3 +32,16 @@ export const normalPhone = (v: string): string | null => {
   else if (d.length === 11 && d.startsWith('0')) d = d.slice(1)
   return /^\d{10}$/.test(d) ? d : null
 }
+
+/**
+ * v2 1c (2026-11-23, backend approvalNeed): why an order needs approval (empty = it goes straight to our team): more
+ * units than the type's threshold (null = never by size), or a delivery mode in the rule (Porter).
+ */
+export const approvalWhy = (rule: { overUnits: number | null; modes: string[] } | undefined, units: number, mode: string | null): string[] => {
+  if (!rule) return []
+  const why: string[] = []
+  if (rule.overUnits !== null && units > rule.overUnits) why.push(BULK_TEXT.WHY_UNITS(units, rule.overUnits))
+  if (mode && rule.modes.includes(mode)) why.push(BULK_TEXT.WHY_MODE(mode))
+  return why
+}
+

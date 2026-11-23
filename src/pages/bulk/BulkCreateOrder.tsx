@@ -3,10 +3,10 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { createBulkOrder, listBulkLocations, updateBulkOrder, searchBulkSkus, type BulkOrderFull, type BulkOrderInput, type BulkSku } from '../../api/bulkOrders'
+import { createBulkOrder, listBulkLocations, listBulkOrders, updateBulkOrder, searchBulkSkus, type BulkOrderFull, type BulkOrderInput, type BulkSku } from '../../api/bulkOrders'
 import { Modal } from '../../components/ui'
 import { BULK_INSTITUTION_RE, bulkHidesMoney, isMarketingLike, BULK_LINE_TOTAL_MIN, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
-import { lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
+import { approvalWhy, lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
 
 /*
  * Create a bulk order (design: figma-make-bulk-orders CreateOrder, 3 steps). The screen works prices out as the server
@@ -133,6 +133,8 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const setI = (patch: Partial<typeof inst>) => setInst((x) => ({ ...x, ...patch }))
 
   const locations = useQuery({ queryKey: ['bulk', 'locations', type], queryFn: () => listBulkLocations(type) })
+  // v2 1c: the type's approval rules (list meta) -> the Review step says whether Submit needs approval
+  const rules = useQuery({ queryKey: ['bulk', 'approval-rules'], queryFn: () => listBulkOrders({ pageSize: 1 }).then((r) => r.meta.approvalRules) })
 
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
   const setLine = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -326,7 +328,11 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       {step === 3 && (
         <div>
           <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.REVIEW_TITLE}</h3>
-          <p className="mb-3 text-[12px] text-ink-600">{BULK_TEXT.REVIEW_SUB}</p>
+          <p className="mb-2 text-[12px] text-ink-600">{BULK_TEXT.REVIEW_SUB}</p>
+          {rules.data && (() => {
+            const why = approvalWhy(rules.data[type], totals.units, isMarketingLike(type) ? form.mode : null)
+            return <p className={`mb-3 rounded-md px-3 py-2 text-[12.5px] ${why.length ? 'bg-warn-soft text-ink-900' : 'bg-ok-soft text-ink-900'}`}>{why.length ? BULK_TEXT.NEEDS_APPROVAL(why.join(', ')) : BULK_TEXT.NO_APPROVAL}</p>
+          })()}
           <div className="grid gap-4 text-[13px] md:grid-cols-2">
             <div className="rounded-md border border-line p-3">
               <div className="font-semibold">{form.orderedBy}</div>

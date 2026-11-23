@@ -58,7 +58,8 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
   })
   // the tiles: one count per status (pageSize 1 = the total only)
   const counts = useQueries({
-    queries: ['', BULK_STATUS.PENDING, BULK_STATUS.APPROVED, BULK_STATUS.REJECTED].map((s) => ({
+    // v2 1c: + Submitted (no approval needed, with our team)
+    queries: ['', BULK_STATUS.PENDING, BULK_STATUS.APPROVED, BULK_STATUS.REJECTED, BULK_STATUS.SUBMITTED].map((s) => ({
       queryKey: ['bulk', 'orders', 'count', type, s],
       queryFn: () => listBulkOrders({ type, status: s, pageSize: 1 }).then((r) => r.meta.total),
       enabled: !approvals,
@@ -76,8 +77,9 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
           </button>
         )} />
 
-      {!approvals && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {!approvals && <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label={BULK_TEXT.STAT_TOTAL} value={counts[0].data} tone="bg-primary" />
+        <Stat label={BULK_TEXT.STAT_SUBMITTED} value={counts[4].data} tone="bg-ok" />
         <Stat label={BULK_TEXT.STAT_PENDING} value={counts[1].data} tone="bg-warn" />
         <Stat label={BULK_TEXT.STAT_APPROVED} value={counts[2].data} tone="bg-ok" />
         <Stat label={BULK_TEXT.STAT_REJECTED} value={counts[3].data} tone="bg-crit" />

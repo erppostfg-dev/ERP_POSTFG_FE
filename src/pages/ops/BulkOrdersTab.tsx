@@ -5,7 +5,7 @@ import { getTeamBulkOrder, listTeamBulkOrders, type BulkOrder } from '../../api/
 import { useAuth } from '../../auth/AuthContext'
 import { CAPABILITY } from '../../constants/reviewEdit'
 import { Badge } from '../../components/ui'
-import { BULK_PAYMENT, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, BULK_TYPES, type BulkType } from '../../constants/bulkOrders'
+import { BULK_LIST_READY, BULK_PAYMENT, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, BULK_TYPES, type BulkType } from '../../constants/bulkOrders'
 import { PATHS, URL_PARAM } from '../../constants/pages'
 import { rupees } from '../../lib/bulkPrice'
 import { oneOf, useUrlParam } from '../../lib/urlState'
@@ -24,6 +24,9 @@ import BulkOrderDrawer from '../bulk/BulkOrderDrawer'
 const PAY_CHIP = 'pay'
 
 const STATUS_CHIPS: [string, string][] = [
+  // v2 1c: approved + submitted (no approval needed) = what the team may process
+  [BULK_LIST_READY, BULK_TEXT.TEAM_READY],
+  [BULK_STATUS.SUBMITTED, BULK_STATUS_LABEL[BULK_STATUS.SUBMITTED]],
   [BULK_STATUS.APPROVED, BULK_STATUS_LABEL[BULK_STATUS.APPROVED]],
   [BULK_STATUS.PENDING, BULK_STATUS_LABEL[BULK_STATUS.PENDING]],
   [BULK_STATUS.REJECTED, BULK_STATUS_LABEL[BULK_STATUS.REJECTED]],
@@ -36,7 +39,7 @@ const when = (s: string) => new Date(s).toLocaleString('en-GB', { day: '2-digit'
 export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => void; canEdit: boolean }) {
   // Marketing / Institutional in the address (?section=), like the other tabs' views
   const [type, setType] = useUrlParam<BulkType>(PATHS.PO_REVIEW, URL_PARAM.SECTION, oneOf(BULK_TYPES), BULK_TYPES[0])
-  const [status, setStatus] = useState<string>(BULK_STATUS.APPROVED)
+  const [status, setStatus] = useState<string>(BULK_LIST_READY)
   const { can } = useAuth()
   const canVerifyPayment = can(CAPABILITY.BULK_PAYMENT_VERIFY)
   const payView = status === PAY_CHIP

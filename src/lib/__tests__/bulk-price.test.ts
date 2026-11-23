@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BULK_FIXED_PRICE, BULK_PROCESS_TYPES, bulkHidesMoney, isMarketingLike, MARKETING_UNIT_PRICE } from '../../constants/bulkOrders'
-import { lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, unitPrice, validDiscount } from '../bulkPrice'
+import { approvalWhy, lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, unitPrice, validDiscount } from '../bulkPrice'
 
 /* Bulk Orders price maths = the backend's (POST_FG test/api/bulk-orders.test.ts uses the same numbers). */
 describe('bulk order prices', () => {
@@ -28,5 +28,12 @@ describe('bulk order prices', () => {
     expect([lineTooSmall(0.5), lineTooSmall(1), lineTooSmall(0.99), lineTooSmall(0.13, MARKETING_UNIT_PRICE)]).toEqual([true, false, true, false])
     expect(lineTooSmall(lineTotal(100, 99.5, 1))).toBe(true)
     expect(lineTooSmall(lineTotal(100, 99.5, 2))).toBe(false)
+  })
+  it('v2 1c: approval needed when MORE units than the threshold, or Porter; null = never by size; same words as the backend', () => {
+    const mkt = { overUnits: 100, modes: ['Porter'] }
+    expect([approvalWhy(mkt, 100, 'Courier'), approvalWhy(mkt, 101, 'Courier'), approvalWhy(mkt, 5, 'Porter'), approvalWhy(mkt, 150, 'Porter')])
+      .toEqual([[], ['101 units (over 100)'], ['Porter delivery'], ['150 units (over 100)', 'Porter delivery']])
+    expect(approvalWhy({ overUnits: null, modes: [] }, 5000, null)).toEqual([])
+    expect(approvalWhy(undefined, 5000, 'Porter')).toEqual([])
   })
 })
