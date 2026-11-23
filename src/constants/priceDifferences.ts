@@ -16,6 +16,10 @@ export type PriceDiffStatus = (typeof PRICE_DIFF_STATUSES)[number]
 
 /** The PO total may differ by 0.02% of the value, at least Rs 10 (same as the backend's default). */
 export const TOTAL_TOLERANCE = { MIN: 10, PERCENT: 0.02 } as const
+/** Per SKU, as the backend (CHANNEL_TOLERANCES, every channel +/- Rs 1): a line's MRP / rate is red on the review screen
+ *  only beyond this; a smaller (paise) difference is allowed and only noted (2026-11-23: ND226208 showed 40 red lines
+ *  with 2 real issues). */
+export const LINE_TOLERANCE = { MRP: 1, PRICE: 1 } as const
 
 export const PRICE_CHECK_TEXT = {
   TITLE: (n: number) => `Price check · ${n} line${n === 1 ? '' : 's'} differ`,
@@ -33,6 +37,13 @@ export const PRICE_CHECK_TEXT = {
   TOTAL_EXPLAINED: (ours: string) => `kept at our price: ${ours} (goes on Price differences)`,
   TOTAL_LEFT: (left: string) => `Still off by ${left} beyond the line choices: tick Accept on the total in Other checks and write why in the remark`,
   TOTAL_REMARK: 'Write a remark: why the PO total can be accepted',
+  /** 2026-11-23 (bug ND226208): the PO had no total issue; the choices bring one up (the decided line offset small
+   *  differences on other lines). Accepted with the tick below the line items + a remark (sent as acceptTotal). */
+  TOTAL_LEFT_NEW: (left: string) => `Still off by ${left} beyond the line choices (small differences on the other lines): tick "Accept the PO total" below the line items and write why in the remark`,
+  TOTAL_ACCEPT: 'Accept the PO total difference',
+  TOTAL_ACCEPT_HINT: (left: string) => `The PO total is off by ${left} after your price choices. Accept it only if the lines are right; write why in the remark.`,
+  WITHIN_TOLERANCE: (diff: string) => `${diff} vs ours: within Rs 1, allowed`,
+  TOTAL_ACCEPT_NEEDED: 'Accept the PO total difference (below the line items) or change the choices',
 } as const
 
 /** The Approvals panel: what the reviewer decided on each mismatch. */

@@ -216,6 +216,8 @@ export type ResubmitBody = {
   location?: { detailsChannelId: string }
   lines?: LineCorrection[]
   accept?: { issueId: string; remark?: string }[]
+  /** 2026-11-23: accept a PO total difference that only the price check choices bring up (needs remark) */
+  acceptTotal?: boolean
   remark?: string
 }
 

@@ -493,7 +493,7 @@ function ApprovalBody({ a }: { a: ApprovalDetail }) {
       <Section title={`Issues resolved (${fixes?.issues.length ?? 0})`}>
         <ul className="space-y-1.5">
           {(fixes?.issues ?? []).map((i) => (
-            <li key={i.issueId} className="flex items-start gap-2 rounded-md border border-line px-3 py-2 text-[12.5px]">
+            <li key={i.issueId || `new-${i.type}`} className="flex items-start gap-2 rounded-md border border-line px-3 py-2 text-[12.5px]">
               <Check className="mt-0.5 size-3.5 shrink-0 text-ok" />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
