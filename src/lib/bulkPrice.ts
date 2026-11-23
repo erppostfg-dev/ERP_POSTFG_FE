@@ -3,18 +3,23 @@
  * what the server will save. MRP x (100 - discount %) = price in paise, rounded half up.
  */
 
+import { BULK_DISCOUNT_BELOW, BULK_LINE_TOTAL_MIN } from '../constants/bulkOrders'
+
 export const priceAfterDiscount = (mrp: number, discountPct: number): number =>
   Math.round(Number((mrp * (100 - discountPct)).toFixed(6))) / 100
 
 export const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100
 
-/** Unit price: a type's fixed price (Marketing ₹1, constants BULK_FIXED_PRICE) or MRP less discount %. */
+/** Unit price: a type's fixed price (Marketing / Head office, constants BULK_FIXED_PRICE) or MRP less discount %. */
 export const unitPrice = (mrp: number, discountPct: number, fixed?: number): number => fixed ?? priceAfterDiscount(mrp, discountPct)
 
 export const lineTotal = (mrp: number, discountPct: number, qty: number, fixed?: number): number => round2(unitPrice(mrp, discountPct, fixed) * qty)
 
-/** A discount the server accepts: 0-100, at most 2 decimals. */
-export const validDiscount = (d: number): boolean => Number.isFinite(d) && d >= 0 && d <= 100 && round2(d) === d
+/** A discount the server accepts: 0 to below 100 (v2: 100% refused), at most 2 decimals. */
+export const validDiscount = (d: number): boolean => Number.isFinite(d) && d >= 0 && d < BULK_DISCOUNT_BELOW && round2(d) === d
+
+/** A priced line (no fixed price) under ₹1 (v2, backend LINE_TOTAL_MIN): the server refuses it. */
+export const lineTooSmall = (total: number, fixed?: number): boolean => fixed === undefined && total < BULK_LINE_TOTAL_MIN
 
 const INR = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
 export const rupees = (n: number): string => INR.format(n)

@@ -58,11 +58,19 @@ export const BULK_INSTITUTION_RE = {
 /** Order types our team can process into a sale order now (backend BULK_SALE.TYPES; Marketing since 2026-11-13). */
 export const BULK_PROCESS_TYPES: BulkType[] = [BULK_TYPE.INSTITUTIONAL, BULK_TYPE.MARKETING, BULK_TYPE.HEAD_OFFICE]
 /**
- * Fixed price per unit by type (backend BULK_ORDERS.FIXED_UNIT_PRICE; user 2026-11-13, Marketing: every unit ₹1, no
- * discount, "don't show the amount to them"): the PORTAL shows no MRP / discount / price / totals for these types (only
- * SKU + qty); our team in POST_FG sees the ₹1 prices.
+ * Every unit of a Marketing / Head office order in Uniware (backend MARKETING_UNIT_PRICE; v2 2026-11-23: ₹0.01, was ₹1,
+ * a constant until Uniware confirms it).
  */
-export const BULK_FIXED_PRICE: Partial<Record<BulkType, number>> = { [BULK_TYPE.MARKETING]: 1, [BULK_TYPE.HEAD_OFFICE]: 1 }
+export const MARKETING_UNIT_PRICE = 0.01
+/**
+ * Fixed price per unit by type (backend BULK_ORDERS.FIXED_UNIT_PRICE; user 2026-11-13, "don't show the amount to them"):
+ * the PORTAL shows no MRP / discount / price / totals for these types (only SKU + qty and "Free order", v2 2026-11-23);
+ * our team in POST_FG sees the real price.
+ */
+export const BULK_FIXED_PRICE: Partial<Record<BulkType, number>> = { [BULK_TYPE.MARKETING]: MARKETING_UNIT_PRICE, [BULK_TYPE.HEAD_OFFICE]: MARKETING_UNIT_PRICE }
+/** v2 (2026-11-23, backend BULK_ORDERS.DISCOUNT_MAX / LINE_TOTAL_MIN): discount below 100%, every priced line at least ₹1. */
+export const BULK_DISCOUNT_BELOW = 100
+export const BULK_LINE_TOTAL_MIN = 1
 /** The portal hides every amount on orders of this type. */
 export const bulkHidesMoney = (type: string): boolean => BULK_FIXED_PRICE[type as BulkType] !== undefined
 
@@ -193,6 +201,10 @@ export const BULK_TEXT = {
   TOTAL_UNITS: 'units',
   TOTAL_MRP: 'At MRP',
   TOTAL_VALUE: 'Order value',
+  /** v2 (2026-11-23): shown instead of amounts on Marketing / Head office orders. */
+  FREE_ORDER: 'Free order',
+  LINE_UNDER_MIN: (min: string) => `Each line must come to at least ${min}: lower the discount or raise the qty`,
+  DISCOUNT_RULE: 'Discount below 100%',
   // list / drawer
   COL_PO: 'PO number',
   COL_BUYER: 'Ordered by / type',

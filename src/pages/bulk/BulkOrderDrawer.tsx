@@ -11,7 +11,7 @@ import {
 import { BulkProcessPanel } from '../ops/BulkProcessPanel'
 import { BulkDocumentViewer } from './BulkDocumentViewer'
 import { BulkDocumentsSection } from './BulkDocumentsSection'
-import { lineTotal, round2, rupees, unitPrice, validDiscount } from '../../lib/bulkPrice'
+import { lineTooSmall, lineTotal, round2, rupees, unitPrice, validDiscount } from '../../lib/bulkPrice'
 
 /*
  * One bulk order (step 1 + 2): status timeline on top, details, lines, History (activity log, folded). While it waits for approval: its type's people may Edit /
@@ -168,7 +168,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
     const e = edits[l.lineNo]
     const qty = e ? Number(e.qty) : l.qty
     const disc = fixed !== undefined ? 0 : e ? (e.discount === '' ? 0 : Number(e.discount)) : l.discountPct
-    const ok = Number.isInteger(qty) && qty >= 1 && validDiscount(disc)
+    const ok = Number.isInteger(qty) && qty >= 1 && validDiscount(disc) && !lineTooSmall(lineTotal(l.mrp, disc, qty, fixed), fixed)
     return { l, qty, disc, ok, gone: removed.has(l.lineNo) }
   })
   const keptRows = rows.filter((r) => !r.gone)
@@ -252,7 +252,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
               {row(BULK_TEXT.CREATED_BY, `${d.createdBy.name ?? ''} · ${when(d.createdAt)}`)}
               {row(BULK_TEXT.PRIORITY, d.priority)}
               {d.mode && row(BULK_TEXT.MODE, d.mode)}
-              {noMoney ? row(BULK_TEXT.COL_QTY, `${d.totalUnits} ${BULK_TEXT.TOTAL_UNITS}`) : <>
+              {noMoney ? <>{row(BULK_TEXT.COL_QTY, `${d.totalUnits} ${BULK_TEXT.TOTAL_UNITS}`)}{row(BULK_TEXT.TOTAL_VALUE, BULK_TEXT.FREE_ORDER)}</> : <>
                 {row(BULK_TEXT.TOTAL_MRP, rupees(d.totalMrp))}
                 {row(BULK_TEXT.TOTAL_VALUE, <strong>{rupees(d.totalValue)}</strong>)}
               </>}
@@ -304,7 +304,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
                             onChange={(e) => setEdits({ ...edits, [l.lineNo]: { qty: e.target.value, discount: edits[l.lineNo]?.discount ?? String(l.discountPct) } })} /></td>
                           {!noMoney && (fixed !== undefined
                             ? <td className="px-3 py-2 text-right tnum">0%</td>
-                            : <td className="w-24 px-2 py-1.5"><input type="number" min={0} max={100} step={0.01} className={`${input} ${validDiscount(disc) ? '' : 'border-crit'}`} value={edits[l.lineNo]?.discount ?? String(l.discountPct)}
+                            : <td className="w-24 px-2 py-1.5"><input type="number" min={0} max={99.99} step={0.01} title={BULK_TEXT.DISCOUNT_RULE} className={`${input} ${validDiscount(disc) && !lineTooSmall(lineTotal(l.mrp, disc, qty, fixed), fixed) ? '' : 'border-crit'}`} value={edits[l.lineNo]?.discount ?? String(l.discountPct)}
                               onChange={(e) => setEdits({ ...edits, [l.lineNo]: { qty: edits[l.lineNo]?.qty ?? String(l.qty), discount: e.target.value } })} /></td>)}
                         </>
                       ) : (
