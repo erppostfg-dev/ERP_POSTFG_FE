@@ -31,14 +31,18 @@ export const BULK_ENDPOINT = {
   GOOGLE: '/auth/google?app=bulk',
 } as const
 
-export const BULK_TYPE = { MARKETING: 'marketing', INSTITUTIONAL: 'institutional' } as const
+/** Head office (Bulk Orders Portal v2, 2026-11-23): works exactly like Marketing (backend MARKETING_LIKE_TYPES). */
+export const BULK_TYPE = { MARKETING: 'marketing', HEAD_OFFICE: 'head_office', INSTITUTIONAL: 'institutional' } as const
 export type BulkType = (typeof BULK_TYPE)[keyof typeof BULK_TYPE]
-export const BULK_TYPES: BulkType[] = [BULK_TYPE.MARKETING, BULK_TYPE.INSTITUTIONAL]
-export const BULK_TYPE_LABEL: Record<BulkType, string> = { marketing: 'Marketing', institutional: 'Institutional' }
+export const BULK_TYPES: BulkType[] = [BULK_TYPE.MARKETING, BULK_TYPE.HEAD_OFFICE, BULK_TYPE.INSTITUTIONAL]
+export const BULK_TYPE_LABEL: Record<BulkType, string> = { marketing: 'Marketing', head_office: 'Head office', institutional: 'Institutional' }
+/** Types that behave like Marketing: delivery mode, no amounts on the portal, no institution details (backend isMarketingLike). */
+export const isMarketingLike = (type: string): boolean => type === BULK_TYPE.MARKETING || type === BULK_TYPE.HEAD_OFFICE
 
 /** Backend page keys (POST_FG constants/auth.ts PAGES). */
 export const BULK_PAGE = {
-  TYPE: { marketing: '/bulk-orders/marketing', institutional: '/bulk-orders/institutional' } as Record<BulkType, string>,
+  /** Head office = the Marketing page (the same people, user 2026-11-23). */
+  TYPE: { marketing: '/bulk-orders/marketing', head_office: '/bulk-orders/marketing', institutional: '/bulk-orders/institutional' } as Record<BulkType, string>,
   APPROVE: '/bulk-orders/approve',
 } as const
 
@@ -52,13 +56,13 @@ export const BULK_INSTITUTION_RE = {
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
 } as const
 /** Order types our team can process into a sale order now (backend BULK_SALE.TYPES; Marketing since 2026-11-13). */
-export const BULK_PROCESS_TYPES: BulkType[] = [BULK_TYPE.INSTITUTIONAL, BULK_TYPE.MARKETING]
+export const BULK_PROCESS_TYPES: BulkType[] = [BULK_TYPE.INSTITUTIONAL, BULK_TYPE.MARKETING, BULK_TYPE.HEAD_OFFICE]
 /**
  * Fixed price per unit by type (backend BULK_ORDERS.FIXED_UNIT_PRICE; user 2026-11-13, Marketing: every unit ₹1, no
  * discount, "don't show the amount to them"): the PORTAL shows no MRP / discount / price / totals for these types (only
  * SKU + qty); our team in POST_FG sees the ₹1 prices.
  */
-export const BULK_FIXED_PRICE: Partial<Record<BulkType, number>> = { [BULK_TYPE.MARKETING]: 1 }
+export const BULK_FIXED_PRICE: Partial<Record<BulkType, number>> = { [BULK_TYPE.MARKETING]: 1, [BULK_TYPE.HEAD_OFFICE]: 1 }
 /** The portal hides every amount on orders of this type. */
 export const bulkHidesMoney = (type: string): boolean => BULK_FIXED_PRICE[type as BulkType] !== undefined
 

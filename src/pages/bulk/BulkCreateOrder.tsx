@@ -5,7 +5,7 @@ import { Plus, Search, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import { createBulkOrder, listBulkLocations, updateBulkOrder, searchBulkSkus, type BulkOrderFull, type BulkOrderInput, type BulkSku } from '../../api/bulkOrders'
 import { Modal } from '../../components/ui'
-import { BULK_INSTITUTION_RE, bulkHidesMoney, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
+import { BULK_INSTITUTION_RE, bulkHidesMoney, isMarketingLike, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
 import { lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
 
 /*
@@ -177,7 +177,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
         ? { address: { line: address.line.trim(), city: address.city.trim(), state: address.state.trim(), pincode: address.pincode.trim() }, ...(saveAs.trim() ? { saveLocationAs: saveAs.trim() } : {}) }
         : { locationId: where }),
       neededBy: form.neededBy,
-      ...(type === BULK_TYPE.MARKETING ? { mode: form.mode } : {}),
+      ...(isMarketingLike(type) ? { mode: form.mode } : {}),
       priority: form.priority,
       ...(form.note.trim() ? { note: form.note.trim() } : {}),
       lines: parsed.map((l) => (noMoney ? { pepCode: l.sku!.pepCode, qty: l.q } : { pepCode: l.sku!.pepCode, qty: l.q, discountPct: l.d })),
@@ -291,7 +291,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
             ) : saved && (
               <p className="rounded-md bg-alt px-3 py-2 text-[12px] text-ink-600 md:col-span-2">{saved.address.line}, {saved.address.city}, {saved.address.state} {saved.address.pincode}</p>
             )}
-            {type === BULK_TYPE.MARKETING && <Field label={BULK_TEXT.MODE}><Choice value={form.mode} options={BULK_MODES} onChange={(v) => set({ mode: v })} /></Field>}
+            {isMarketingLike(type) && <Field label={BULK_TEXT.MODE}><Choice value={form.mode} options={BULK_MODES} onChange={(v) => set({ mode: v })} /></Field>}
             <Field label={BULK_TEXT.PRIORITY}><Choice value={form.priority} options={BULK_PRIORITIES} onChange={(v) => set({ priority: v })} /></Field>
             <Field label={BULK_TEXT.NOTE} wide><textarea rows={2} className={input} value={form.note} onChange={(e) => set({ note: e.target.value })} /></Field>
           </div>
@@ -327,7 +327,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
           <div className="grid gap-4 text-[13px] md:grid-cols-2">
             <div className="rounded-md border border-line p-3">
               <div className="font-semibold">{form.orderedBy}</div>
-              <div className="text-ink-600">{BULK_TYPE_LABEL[type]} · {form.priority}{type === BULK_TYPE.MARKETING ? ` · ${form.mode}` : ''}</div>
+              <div className="text-ink-600">{BULK_TYPE_LABEL[type]} · {form.priority}{isMarketingLike(type) ? ` · ${form.mode}` : ''}</div>
               <div className="mt-2 text-ink-600">{BULK_TEXT.NEEDED_BY}: <span className="text-ink-900">{form.neededBy}</span></div>
             </div>
             <div className="rounded-md border border-line p-3">
