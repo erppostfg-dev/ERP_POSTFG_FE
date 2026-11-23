@@ -10,7 +10,7 @@ import { rupees } from '../../lib/bulkPrice'
  * Bulk Orders step 3b (2026-11-12, POST_FG PO Processing & Review > Bulk Orders, PO review editors): an APPROVED
  * order -> warehouse + Uniware channel + Uniware customer code (typed: the person creates the customer in Uniware first)
  * -> Create sale order (a normal saved PO: Processed tab, PO Overview; no Verify step). Payment is shown, never blocks.
- * Marketing (2026-11-13): the same panel; every unit at ₹1 (BULK_FIXED_PRICE).
+ * Marketing (2026-11-13): the same panel; every unit at MARKETING_UNIT_PRICE (BULK_FIXED_PRICE; ₹0.01 since v2).
  * Address book (2026-11-13, user: "fill it, but they have to create the sale order by checking"): every processed
  * order saves its delivery address + channel + code (both types). The SAME delivery address seen before -> channel + code
  * FILLED from the newest one, and "Create sale order" waits for the tick "I checked ...". Same GSTIN / name + pincode =

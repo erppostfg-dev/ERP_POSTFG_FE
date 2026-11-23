@@ -23,8 +23,8 @@ import { lineTooSmall, lineTotal, round2, rupees, unitPrice, validDiscount } fro
  * approvers; our team: `teamCanUpload`). Nothing here blocks approval or processing.
  * Step 3b (2026-11-12): Institution details; our team's editors (`teamCanUpload`) get "Create sale order" on an approved
  * Institutional order (BulkProcessPanel); the sale order shows under the timeline (Processing step).
- * Marketing (2026-11-13): every unit ₹1, no discount; in the PORTAL (requester + approver) no amount at all (SKU + qty only),
- * our team (POST_FG) sees the ₹1 prices and gets "Create sale order" as for Institutional.
+ * Marketing / Head office: every unit at MARKETING_UNIT_PRICE (₹0.01, v2), no discount; in the PORTAL (requester + approver) no amount at all (SKU + qty only),
+ * our team (POST_FG) sees the real prices and gets "Create sale order" as for Institutional.
  */
 
 const day = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })

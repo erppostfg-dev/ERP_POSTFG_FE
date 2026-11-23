@@ -148,7 +148,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const phone = normalPhone(form.receiverPhone)
   const addressOk = where !== 'new' || (!!address.line.trim() && !!address.city.trim() && !!address.state.trim() && /^[1-9]\d{5}$/.test(address.pincode.trim()))
   const isInst = type === BULK_TYPE.INSTITUTIONAL
-  // Marketing (2026-11-13): every unit ₹1 on the server, no discount; the portal shows SKU + qty only
+  // Marketing / Head office: every unit at MARKETING_UNIT_PRICE on the server, no discount; the portal shows SKU + qty only
   const noMoney = bulkHidesMoney(type)
   const gstinBad = !!inst.gstin.trim() && !GSTIN_RE.test(inst.gstin.trim().toUpperCase())
   const emailBad = !!inst.email.trim() && !EMAIL_RE.test(inst.email.trim())
