@@ -16,6 +16,7 @@ import { downloadReviewLineItems } from '../../lib/lineItemsExport'
 import {
   ADDRESS_REMARK, BULK_ENDED_TEXT, ENDED_TEXT, LINE_ITEMS, ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED, PRICE_ISSUES,
 } from '../../constants/poReview'
+import { gstOnPo } from '../../lib/gstOnPo'
 import { LINE_TOLERANCE, PRICE_CHECK_TEXT, PRICE_CHOICE, TOTAL_TOLERANCE, type PriceChoice } from '../../constants/priceDifferences'
 import { PriceCheck, type PriceRow } from './PriceCheck'
 import { ACCESS } from '../../constants/auth'
@@ -526,6 +527,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
     const small = gap !== 0 && !off
     const key = `l:${lineKey(l)}:${k}`
     const po = onPo(l, k)
+    const gst = k === 'rate' ? gstOnPo(l.printed, l.poUnitPrice) : null
     return (
       <>
         <input type="number" step="any" min={0} value={v} disabled={!editable(l, k)} title={lockTip(l, k)} onChange={(ev) => setEdits({ ...edits, [lineKey(l)]: { ...e, [k]: ev.target.value } })}
@@ -536,6 +538,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
             {REVIEW_TEXT.ON_PO}
             <FindValue text={String(po[0])} className="tnum" found={finder.found.get(key)} active={finder.active === key} copied={finder.copied === key}
               onFind={() => finder.ask(key, po, 'number')} onCopy={() => finder.copy(key, String(po[0]))} />
+            {gst !== null && <span className="tnum" title={REVIEW_TEXT.PLUS_GST_TIP}>{REVIEW_TEXT.PLUS_GST(gst, Number(l.poUnitPrice).toFixed(2))}</span>}
           </div>
         )}
         {ours !== undefined && ours !== null && ours !== '' && <div className={`mt-0.5 text-[11px] ${off ? 'text-crit' : 'text-ink-400'}`}>ours {ours}</div>}

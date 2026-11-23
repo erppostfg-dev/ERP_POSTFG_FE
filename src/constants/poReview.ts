@@ -210,6 +210,10 @@ export const REVIEW_TEXT = {
   REJECT: 'Reject PO',
   /** Under a line's Qty / MRP / Rate box: the PO's own value, click = find it on the PO + copy (2026-11-05). */
   ON_PO: 'on PO',
+  /** After the PO's printed price when the channel prints it BEFORE GST (Nykaa, Reliance ...; 2026-11-23): how it
+   *  becomes the with-GST price compared with ours, e.g. "on PO 247.31 + 18% GST = 291.83". */
+  PLUS_GST: (pct: number, withGst: string) => `+ ${pct}% GST = ${withGst}`,
+  PLUS_GST_TIP: 'The channel prints this price before GST; ours is with GST, so the PO price + GST is what is compared',
   /** Combos / gift kits / M_Tools go to Uniware with their _S code when our master has it (2026-10-30). */
   PUNCHED_AS: (code: string) => `Punched as ${code}`,
   PUNCHED_AS_TIP: 'Combos, gift kits and M_Tools are punched in Uniware with their _S code (sale order CSV + PO Overview)',
