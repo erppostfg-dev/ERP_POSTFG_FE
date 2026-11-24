@@ -43,8 +43,9 @@ export interface BulkOrder {
   brand: string | null
   lineCount: number
   totalUnits: number
-  totalMrp: number
-  totalValue: number
+  /** null on Marketing / Head office in the portal (free orders: no amounts, 2026-11-24); our team's API has them. */
+  totalMrp: number | null
+  totalValue: number | null
   createdBy: { id: number; name: string | null }
   createdAt: string
   /** v2 piece 4: courier tracking from Uniware (null until the shipment shows there). */
@@ -106,8 +107,10 @@ export interface BulkDocument {
 export interface BulkSetting { type: BulkType; paymentCheck: boolean; approvalOverUnits: number | null; updatedBy: { id: number; name: string | null } | null; updatedAt: string | null }
 
 export interface BulkOrderLine {
-  lineNo: number; /** v2 piece 2 */ receiverNo: number; pepCode: string; name: string | null; mrp: number; qty: number; discountPct: number
-  unitPrice: number; lineTotal: number; requestedQty: number; requestedDiscountPct: number
+  lineNo: number; /** v2 piece 2 */ receiverNo: number; pepCode: string; name: string | null
+  /** null on Marketing / Head office in the portal (free orders). */
+  mrp: number | null; qty: number; discountPct: number
+  unitPrice: number | null; lineTotal: number | null; requestedQty: number; requestedDiscountPct: number
 }
 
 /** One change of an order (created / edited / cancelled / approved / rejected); approved: line changes [old, new]. */
@@ -194,7 +197,7 @@ export interface BulkOrderInput {
   customerId?: string
 }
 
-export interface BulkListQuery { type?: BulkType | ''; status?: string; payment?: string; q?: string; page?: number; pageSize?: number; archived?: boolean }
+export interface BulkListQuery { type?: BulkType | ''; status?: string; payment?: string; q?: string; page?: number; pageSize?: number; archived?: boolean; /** our team: ready orders waiting more than N days */ waitingDays?: number }
 
 const qs = (o: Record<string, string | number | undefined>) => {
   const p = new URLSearchParams()
@@ -232,6 +235,10 @@ export const addInstCustomerAddress = (id: string, label: string, address: BulkA
 export const setInstCustomerAddressActive = (id: string, addressId: string, active: boolean) =>
   api<BulkInstCustomer>(BULK_ENDPOINT.CUSTOMER_ADDRESS(id, addressId), { method: 'PUT', body: JSON.stringify({ active }) })
 
+/** 2026-11-24: my recent orders like this one (same SKUs, a pincode in common); [] = none. Never blocks. */
+export const bulkDuplicateCheck = (type: BulkType, pepCodes: string[], pincodes: string[], excludeId?: string) =>
+  api<{ id: string; poNumber: string; status: string; createdAt: string; totalUnits: number }[]>(BULK_ENDPOINT.DUPLICATE_CHECK, { method: 'POST', body: JSON.stringify({ type, pepCodes, pincodes, ...(excludeId ? { excludeId } : {}) }) })
+
 /** v2 piece 2: one row of an uploaded receivers file (`row` = its row number in the file). */
 export interface BulkReceiverRow { row: number; receiverName: string; receiverPhone: string; line: string; city: string; state: string; pincode: string; pepCode: string; qty: number | string }
 export interface BulkReceiversChecked {
@@ -260,7 +267,7 @@ export const rejectBulkOrder = (id: string, reason: string) =>
 /** POST_FG PO Processing & Review > Bulk Orders (step 3a, PO review access, read only): both types + meta.waiting. */
 export const listTeamBulkOrders = (q: BulkListQuery) =>
   apiWithMeta<BulkOrder[], { total: number; page: number; pageSize: number; waiting: Record<BulkType, number>; paymentsToVerify: Record<BulkType, number> }>(
-    `${BULK_ENDPOINT.TEAM}${qs({ type: q.type, status: q.status, payment: q.payment, q: q.q, page: q.page, pageSize: q.pageSize ?? BULK_LIMIT.PAGE_SIZE })}`,
+    `${BULK_ENDPOINT.TEAM}${qs({ type: q.type, status: q.status, payment: q.payment, q: q.q, page: q.page, pageSize: q.pageSize ?? BULK_LIMIT.PAGE_SIZE, waitingDays: q.waitingDays })}`,
   )
 export const getTeamBulkOrder = (id: string) => api<BulkOrderFull>(BULK_ENDPOINT.TEAM_ORDER(id))
 /** Step 3b (2026-11-12): warehouses + matching saved customers; create the sale order (PO review editor). */

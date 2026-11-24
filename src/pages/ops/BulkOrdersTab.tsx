@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { ChevronRight, Search } from 'lucide-react'
+import { ChevronRight, Download, Search } from 'lucide-react'
 import { getTeamBulkOrder, listTeamBulkOrders, type BulkOrder } from '../../api/bulkOrders'
 import { useAuth } from '../../auth/AuthContext'
 import { CAPABILITY } from '../../constants/reviewEdit'
 import { Badge } from '../../components/ui'
-import { BULK_LIST_READY, BULK_PAYMENT, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, BULK_TYPES, type BulkType } from '../../constants/bulkOrders'
+import { BULK_LIMIT, BULK_LIST_READY, BULK_PAYMENT, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, BULK_TYPES, type BulkType } from '../../constants/bulkOrders'
 import { PATHS, URL_PARAM } from '../../constants/pages'
 import { rupees } from '../../lib/bulkPrice'
+import { downloadExcel } from '../../lib/excelExport'
 import { oneOf, useUrlParam } from '../../lib/urlState'
 import BulkOrderDrawer from '../bulk/BulkOrderDrawer'
 
@@ -47,14 +48,18 @@ export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => vo
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
+  // 2026-11-24: ready orders waiting more than N days ('' = off) + Excel of what the filters show
+  const [waitDays, setWaitDays] = useState('')
+  const wait = /^[1-9]\d{0,2}$/.test(waitDays) ? Number(waitDays) : undefined
+  const [exporting, setExporting] = useState(false)
   useEffect(() => {
     const t = setTimeout(() => setQ(text.trim()), 300)
     return () => clearTimeout(t)
   }, [text])
 
   const list = useInfiniteQuery({
-    queryKey: ['bulk', 'team-orders', type, status, q],
-    queryFn: ({ pageParam }) => listTeamBulkOrders(payView ? { type, payment: BULK_PAYMENT.UPLOADED, q, page: pageParam } : { type, status, q, page: pageParam }),
+    queryKey: ['bulk', 'team-orders', type, status, q, wait ?? 0],
+    queryFn: ({ pageParam }) => listTeamBulkOrders(payView ? { type, payment: BULK_PAYMENT.UPLOADED, q, page: pageParam } : { type, status, q, page: pageParam, waitingDays: wait }),
     initialPageParam: 1,
     getNextPageParam: (last) => (last.meta.page * last.meta.pageSize < last.meta.total ? last.meta.page + 1 : undefined),
   })
@@ -65,6 +70,27 @@ export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => vo
   }, [waiting, onCount])
   const rows: BulkOrder[] = list.data?.pages.flatMap((p) => p.data) ?? []
   const total = list.data?.pages[0]?.meta.total ?? 0
+  /** Every order the filters show (all pages, BULK_LIMIT.PAGE_SIZE_MAX each) as an Excel file. */
+  const exportExcel = async () => {
+    setExporting(true)
+    try {
+      const all: BulkOrder[] = []
+      for (let page = 1; page <= 50; page += 1) {
+        const r = await listTeamBulkOrders(payView ? { type, payment: BULK_PAYMENT.UPLOADED, q, page, pageSize: BULK_LIMIT.PAGE_SIZE_MAX } : { type, status, q, page, pageSize: BULK_LIMIT.PAGE_SIZE_MAX, waitingDays: wait })
+        all.push(...r.data)
+        if (page * r.meta.pageSize >= r.meta.total) break
+      }
+      const day = (s: string | null) => (s ? s.slice(0, 10) : '')
+      await downloadExcel(`bulk-orders-${type}-${new Date().toISOString().slice(0, 10)}.xlsx`, [{
+        name: BULK_TYPE_LABEL[type],
+        header: ['PO number', 'Type', 'Status', 'Brand', 'Ordered by', 'Receiver', 'Receivers', 'City', 'Units', 'Value', 'Payment', 'Requested', 'Approved', 'Needed by', 'Sale order'],
+        rows: all.map((o) => [o.poNumber, BULK_TYPE_LABEL[o.type], BULK_STATUS_LABEL[o.status] ?? o.status, o.brand ?? '', o.orderedBy, o.receiverName, o.receiverCount, o.location.address.city,
+          o.totalUnits, o.totalValue ?? '', o.payment ? BULK_PAYMENT_LABEL[o.payment.status] ?? o.payment.status : '', day(o.createdAt), day(o.decidedAt), o.neededBy ?? '', o.saleOrder?.code ?? '']),
+      }])
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -85,6 +111,14 @@ export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => vo
             {BULK_TEXT.PAYMENTS_TO_VERIFY}{toVerify > 0 && <span className="ml-1.5 rounded-full bg-warn px-1.5 text-[11px] font-semibold text-white">{toVerify}</span>}
           </button>
         </div>
+        {!payView && (
+          <label className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] ${wait ? 'border-primary bg-primary-soft font-semibold text-primary' : 'border-line text-ink-600'}`}>
+            {BULK_TEXT.WAITING_MORE_THAN}
+            <input inputMode="numeric" maxLength={3} value={waitDays} onChange={(e) => setWaitDays(e.target.value.replace(/\D/g, ''))} placeholder="N" className="w-8 bg-transparent text-center outline-none" />
+            {BULK_TEXT.WAITING_DAYS}
+          </label>
+        )}
+        <button onClick={() => void exportExcel()} disabled={exporting || !rows.length} className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[12px] font-semibold text-ink-600 hover:bg-alt disabled:opacity-50"><Download className="size-3.5" />{exporting ? BULK_TEXT.EXPORTING : BULK_TEXT.EXPORT_EXCEL}</button>
         <div className="ml-auto flex min-w-[240px] items-center gap-2 rounded-md border border-line bg-surface px-2.5 py-1.5">
           <Search className="size-4 text-ink-400" />
           <input value={text} onChange={(e) => setText(e.target.value)} placeholder={BULK_TEXT.SEARCH} className="w-full bg-transparent text-[13px] outline-none" />

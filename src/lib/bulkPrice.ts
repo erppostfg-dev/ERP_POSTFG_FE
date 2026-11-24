@@ -22,7 +22,8 @@ export const validDiscount = (d: number): boolean => Number.isFinite(d) && d >= 
 export const lineTooSmall = (total: number, fixed?: number): boolean => fixed === undefined && total < BULK_LINE_TOTAL_MIN
 
 const INR = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
-export const rupees = (n: number): string => INR.format(n)
+/** Money as ₹; null (no amount: a free Marketing / Head office order in the portal) = '–'. */
+export const rupees = (n: number | null): string => (n === null ? '–' : INR.format(n))
 
 /** "+91 98765-43210" -> "9876543210"; null when not 10 digits (as the backend). */
 export const normalPhone = (v: string): string | null => {

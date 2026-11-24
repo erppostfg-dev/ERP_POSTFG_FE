@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, Plus, Search, Trash2, Upload } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { checkBulkReceivers, createBulkOrder, listBulkLocations, listInstCustomers, listBulkOrders, updateBulkOrder, searchBulkSkus, type BulkLocation, type BulkOrderFull, type BulkOrderInput, type BulkReceiverInput, type BulkReceiverRow, type BulkReceiversChecked, type BulkSku } from '../../api/bulkOrders'
+import { bulkDuplicateCheck, checkBulkReceivers, createBulkOrder, listBulkLocations, listInstCustomers, listBulkOrders, updateBulkOrder, searchBulkSkus, type BulkLocation, type BulkOrderFull, type BulkOrderInput, type BulkReceiverInput, type BulkReceiverRow, type BulkReceiversChecked, type BulkSku } from '../../api/bulkOrders'
 import { Modal } from '../../components/ui'
 import { BULK_INSTITUTION_RE, BULK_STATUS, bulkHidesMoney, isMarketingLike, BULK_LINE_TOTAL_MIN, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, BULK_FAST_TRACK, BULK_PURPOSE_TYPES, type BulkType } from '../../constants/bulkOrders'
 import { formProblems } from '../../lib/bulkForm'
@@ -201,7 +201,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   // v2 piece 2: an order with several receivers: step 1 = each SKU once (qty of its first receiver), quantities per receiver below
   const firstOfSku = (initial?.lines ?? []).filter((l, i, all) => all.findIndex((x) => x.pepCode === l.pepCode) === i)
   const [lines, setLines] = useState<Line[]>(() => initial
-    ? firstOfSku.map((l) => ({ key: nextKey++, sku: { pepCode: l.pepCode, name: l.name, mrp: l.mrp, ean: null }, qty: String(l.qty), discount: String(l.discountPct) }))
+    ? firstOfSku.map((l) => ({ key: nextKey++, sku: { pepCode: l.pepCode, name: l.name, mrp: l.mrp ?? 0, ean: null }, qty: String(l.qty), discount: String(l.discountPct) }))
     : [emptyLine()])
   const qtyMap = (no: number) => Object.fromEntries((initial?.lines ?? []).filter((l) => (l.receiverNo ?? 1) === no).map((l) => [l.pepCode, String(l.qty)]))
   const [qty1, setQty1] = useState<Record<string, string>>(() => qtyMap(1))
@@ -435,6 +435,14 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   }
 
   const saved = locations.data?.find((l) => l.id === where)
+  // 2026-11-24: a repeat of my recent order? (Review step only; never blocks)
+  const dupCodes = skuList.map((s) => s.pepCode).sort()
+  const dupPins = [where === 'new' ? address.pincode.trim() : saved?.address.pincode ?? '', ...extra.map((r) => (r.where === 'new' ? r.address.pincode.trim() : locations.data?.find((l) => l.id === r.where)?.address.pincode ?? ''))].filter(Boolean)
+  const dups = useQuery({
+    queryKey: ['bulk', 'dup', type, dupCodes.join('|'), dupPins.join('|'), initial?.id ?? ''],
+    queryFn: () => bulkDuplicateCheck(type, dupCodes, dupPins, initial?.id),
+    enabled: step === 3 && dupCodes.length > 0,
+  })
 
   const footer = (
     <>
@@ -648,6 +656,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
               <span className="text-[11px] text-ink-400">{BULK_TEXT.EDIT_REMARK_HINT}</span>
             </label>
           )}
+          {!!dups.data?.length && <p className="mb-3 rounded-md bg-warn-soft px-3 py-2 text-[12.5px] text-ink-900">{BULK_TEXT.DUPLICATE_WARN(dups.data.map((x) => x.poNumber).join(', '))}</p>}
           {allProblems.length > 0 && (
             <div className="mb-3 rounded-md bg-crit-soft px-3 py-2 text-[12.5px] text-crit">
               <div className="font-semibold">{BULK_TEXT.REVIEW_FIX}</div>

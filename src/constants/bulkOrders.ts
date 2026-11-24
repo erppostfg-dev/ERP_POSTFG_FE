@@ -8,6 +8,8 @@ export const BULK_ENDPOINT = {
   ORDERS: '/bulk-orders',
   /** v2 piece 2: an uploaded receivers file checked (nothing saved). */
   RECEIVERS_CHECK: '/bulk-orders/receivers/check',
+  /** 2026-11-24: duplicate warning before Submit. */
+  DUPLICATE_CHECK: '/bulk-orders/duplicate-check',
   /** v2 piece 5a: Institutional customers. */
   CUSTOMERS: '/bulk-orders/customers',
   CUSTOMER: (id: string) => `/bulk-orders/customers/${encodeURIComponent(id)}`,
@@ -163,6 +165,11 @@ export const BULK_TEXT = {
   NAV_LOCATIONS: 'Saved locations',
   // v2 piece 5a: Institutional customers
   NAV_CUSTOMERS: 'Customers',
+  // 2026-11-24 quick wins
+  DUPLICATE_WARN: (list: string) => `Looks like a repeat of your recent order ${list} (same SKUs to the same pincode). Submit only if you need it again.`,
+  WAITING_MORE_THAN: 'Waiting more than',
+  WAITING_DAYS: 'days',
+  EXPORT_EXCEL: 'Excel',
   CUSTOMERS_TITLE: 'Customers',
   CUSTOMERS_SUB: 'The companies Institutional orders are placed for. Pick one in a new order: its billing details, addresses and discount fill in.',
   CUSTOMER_ADD: 'Add a customer',

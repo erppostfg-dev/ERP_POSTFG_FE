@@ -217,11 +217,11 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
     const e = edits[l.lineNo]
     const qty = e ? Number(e.qty) : l.qty
     const disc = fixed !== undefined ? 0 : e ? (e.discount === '' ? 0 : Number(e.discount)) : l.discountPct
-    const ok = Number.isInteger(qty) && qty >= 1 && validDiscount(disc) && !lineTooSmall(lineTotal(l.mrp, disc, qty, fixed), fixed)
+    const ok = Number.isInteger(qty) && qty >= 1 && validDiscount(disc) && !lineTooSmall(lineTotal(l.mrp ?? 0, disc, qty, fixed), fixed)
     return { l, qty, disc, ok, gone: removed.has(l.lineNo) }
   })
   const keptRows = rows.filter((r) => !r.gone)
-  const preview = keptRows.reduce((t, r) => (r.ok ? round2(t + lineTotal(r.l.mrp, r.disc, r.qty, fixed)) : t), 0)
+  const preview = keptRows.reduce((t, r) => (r.ok ? round2(t + lineTotal(r.l.mrp ?? 0, r.disc, r.qty, fixed)) : t), 0)
   const valid = keptRows.length > 0 && keptRows.every((r) => r.ok)
 
   const approve = useMutation({
@@ -387,7 +387,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
                             onChange={(e) => setEdits({ ...edits, [l.lineNo]: { qty: e.target.value, discount: edits[l.lineNo]?.discount ?? String(l.discountPct) } })} /></td>
                           {!noMoney && (fixed !== undefined
                             ? <td className="px-3 py-2 text-right tnum">0%</td>
-                            : <td className="w-24 px-2 py-1.5"><input type="number" min={0} max={99.99} step={0.01} title={BULK_TEXT.DISCOUNT_RULE} className={`${input} ${validDiscount(disc) && !lineTooSmall(lineTotal(l.mrp, disc, qty, fixed), fixed) ? '' : 'border-crit'}`} value={edits[l.lineNo]?.discount ?? String(l.discountPct)}
+                            : <td className="w-24 px-2 py-1.5"><input type="number" min={0} max={99.99} step={0.01} title={BULK_TEXT.DISCOUNT_RULE} className={`${input} ${validDiscount(disc) && !lineTooSmall(lineTotal(l.mrp ?? 0, disc, qty, fixed), fixed) ? '' : 'border-crit'}`} value={edits[l.lineNo]?.discount ?? String(l.discountPct)}
                               onChange={(e) => setEdits({ ...edits, [l.lineNo]: { qty: edits[l.lineNo]?.qty ?? String(l.qty), discount: e.target.value } })} /></td>)}
                         </>
                       ) : (
@@ -397,8 +397,8 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
                         </>
                       )}
                       {!noMoney && <>
-                        <td className="px-3 py-2 text-right tnum">{ok ? rupees(unitPrice(l.mrp, disc, fixed)) : '–'}</td>
-                        <td className="px-3 py-2 text-right font-semibold tnum">{ok ? rupees(lineTotal(l.mrp, disc, qty, fixed)) : '–'}</td>
+                        <td className="px-3 py-2 text-right tnum">{ok ? rupees(unitPrice(l.mrp ?? 0, disc, fixed)) : '–'}</td>
+                        <td className="px-3 py-2 text-right font-semibold tnum">{ok ? rupees(lineTotal(l.mrp ?? 0, disc, qty, fixed)) : '–'}</td>
                       </>}
                       {canDecide && (
                         <td className="px-1 text-right">
