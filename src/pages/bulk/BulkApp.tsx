@@ -9,6 +9,7 @@ import { BULK_ENDPOINT, BULK_PAGE, BULK_STATUS, BULK_TEXT, BULK_TYPE, BULK_TYPES
 import BulkOrders from './BulkOrders'
 import BulkLocations from './BulkLocations'
 import BulkCustomers from './BulkCustomers'
+import { ErrorBoundary } from '../../components/ErrorBoundary'
 import { CAPABILITY } from '../../constants/reviewEdit'
 
 /*
@@ -145,7 +146,7 @@ export default function BulkApp() {
           </div>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">
-          {page === 'locations' ? <BulkLocations rights={rights} /> : page === 'customers' ? <BulkCustomers rights={rights} /> : <BulkOrders key={page} rights={rights} mode={page} />}
+          <ErrorBoundary key={page}>{page === 'locations' ? <BulkLocations rights={rights} /> : page === 'customers' ? <BulkCustomers rights={rights} /> : <BulkOrders key={page} rights={rights} mode={page} />}</ErrorBoundary>
         </div>
       </main>
     </div>

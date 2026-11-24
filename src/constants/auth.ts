@@ -31,6 +31,11 @@ export const LOGIN_ERROR_MESSAGES: Record<string, string> = {
 export const LOGIN_ERROR_FALLBACK = 'Sign-in failed. Please try again.'
 
 export const UI_TEXT = {
+  // error screens (2026-11-24, components/ErrorBoundary.tsx)
+  CRASH_TITLE: 'Something went wrong on this page',
+  CRASH_SUB: 'The rest of the app still works. Reload the page; if it happens again, use Report a problem.',
+  CRASH_RETRY: 'Try again',
+  CRASH_RELOAD: 'Reload',
   NO_ACCESS: 'You have no access to this page. Ask an admin for access.',
   NOT_FOUND: 'This page does not exist.',
   VIEW_ONLY: 'View only',
