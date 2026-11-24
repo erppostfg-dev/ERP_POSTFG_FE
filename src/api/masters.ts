@@ -33,6 +33,8 @@ export type PepSkuItem = {
   intransitMrp: number | null
   intransitCogs: number | null
   intransitConsider: boolean
+  /** Shown in the Bulk Orders portal (2026-11-24; npm run bulk:skus / Edit). */
+  bulkOrderable: boolean
 }
 
 export function listPepSkus(signal?: AbortSignal) {
