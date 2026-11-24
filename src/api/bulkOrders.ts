@@ -22,6 +22,8 @@ export interface BulkOrder {
   type: BulkType
   status: string
   orderedBy: string
+  /** v2 piece 2: receivers of the order (the receiver fields here = receiver 1; all of them in `receivers` on one order). */
+  receiverCount: number
   receiverName: string
   receiverPhone: string
   location: { id: string | null; label: string | null; address: BulkAddress }
@@ -92,7 +94,7 @@ export interface BulkDocument {
 export interface BulkSetting { type: BulkType; paymentCheck: boolean; approvalOverUnits: number | null; updatedBy: { id: number; name: string | null } | null; updatedAt: string | null }
 
 export interface BulkOrderLine {
-  lineNo: number; pepCode: string; name: string | null; mrp: number; qty: number; discountPct: number
+  lineNo: number; /** v2 piece 2 */ receiverNo: number; pepCode: string; name: string | null; mrp: number; qty: number; discountPct: number
   unitPrice: number; lineTotal: number; requestedQty: number; requestedDiscountPct: number
 }
 
@@ -107,7 +109,9 @@ export interface BulkOrderEvent {
     fields?: string[]
     /** v2 1e: edited: each field old -> new, each line added / removed / changed. */
     fieldChanges?: { field: string; from: string | number | null; to: string | number | null }[]
-    lineChanges?: { pepCode: string; change: 'added' | 'removed' | 'changed'; qty?: [number, number]; discountPct?: [number, number] }[]
+    lineChanges?: { pepCode: string; change: 'added' | 'removed' | 'changed'; qty?: [number, number]; discountPct?: [number, number]; /** v2 piece 2 */ receiverNo?: number }[]
+    /** v2 piece 2: receivers added / removed / changed by an edit. */
+    receiverChanges?: { receiverNo: number; change: 'added' | 'removed' | 'changed'; name: string; fields?: { field: string; from: string | null; to: string | null }[] }[]
     /** v2 1c: created / edited: the reasons approval is needed ([] = none); an edit's order status move is in `status`. */
     approval?: string[]
     /** document_added */
@@ -119,7 +123,15 @@ export interface BulkOrderEvent {
   } | null
 }
 
-export type BulkOrderFull = BulkOrder & { lines: BulkOrderLine[]; events: BulkOrderEvent[]; documents: BulkDocument[]; /** v2 piece 3: when Remind is possible (null = not waiting). */ remindAt: string | null }
+/** v2 piece 2: one receiver of an order (its sale order + tracking come with piece 2b). */
+export interface BulkReceiver {
+  receiverNo: number; receiverName: string; receiverPhone: string
+  location: { id: string | null; label: string | null; address: BulkAddress }
+  totalUnits: number; status: string | null; saleOrderCode: string | null
+  tracking: BulkOrder['tracking']
+}
+
+export type BulkOrderFull = BulkOrder & { receivers: BulkReceiver[]; lines: BulkOrderLine[]; events: BulkOrderEvent[]; documents: BulkDocument[]; /** v2 piece 3: when Remind is possible (null = not waiting). */ remindAt: string | null }
 
 export interface BulkApproveInput { lines?: { lineNo: number; qty?: number; discountPct?: number }[]; removeLines?: number[]; note?: string }
 
@@ -127,11 +139,22 @@ export interface BulkSku { pepCode: string; name: string | null; mrp: number; ea
 
 export interface BulkLocation { id: string; type: BulkType; label: string; address: BulkAddress; createdAt: string }
 
+/** v2 piece 2: one receiver of a several-receivers order (Marketing / Head office). */
+export interface BulkReceiverInput {
+  receiverName: string
+  receiverPhone: string
+  locationId?: string
+  address?: BulkAddress
+  saveLocationAs?: string
+  lines: { pepCode: string; qty: number }[]
+}
+
 export interface BulkOrderInput {
   type: BulkType
   orderedBy: string
-  receiverName: string
-  receiverPhone: string
+  /** One receiver (as before): these + `lines`. Several: `receivers` instead (Marketing / Head office). */
+  receiverName?: string
+  receiverPhone?: string
   locationId?: string
   address?: BulkAddress
   saveLocationAs?: string
@@ -147,7 +170,8 @@ export interface BulkOrderInput {
   brand?: string
   /** v2 1g: true = save as a draft. */
   draft?: boolean
-  lines: { pepCode: string; qty: number; discountPct?: number }[]
+  lines?: { pepCode: string; qty: number; discountPct?: number }[]
+  receivers?: BulkReceiverInput[]
   /** Institutional only (required: name + billing address or billingSameAsDelivery). */
   institutionName?: string
   gstin?: string
@@ -173,6 +197,17 @@ export const listBulkOrders = (q: BulkListQuery) =>
   )
 
 export const getBulkOrder = (id: string) => api<BulkOrderFull>(BULK_ENDPOINT.ORDER(id))
+
+/** v2 piece 2: one row of an uploaded receivers file (`row` = its row number in the file). */
+export interface BulkReceiverRow { row: number; receiverName: string; receiverPhone: string; line: string; city: string; state: string; pincode: string; pepCode: string; qty: number | string }
+export interface BulkReceiversChecked {
+  receivers: { receiverName: string; receiverPhone: string; address: BulkAddress; lines: { pepCode: string; name: string | null; mrp: number; qty: number }[]; rows: number[] }[]
+  errors: { row: number; field: string; message: string }[]
+  rowCount: number
+}
+/** Checks the rows of an uploaded receivers file (nothing saved). */
+export const checkBulkReceivers = (type: BulkType, brand: string, rows: BulkReceiverRow[]) =>
+  api<BulkReceiversChecked>(BULK_ENDPOINT.RECEIVERS_CHECK, { method: 'POST', body: JSON.stringify({ type, brand, rows }) })
 
 export const createBulkOrder = (input: BulkOrderInput) =>
   api<BulkOrderFull>(BULK_ENDPOINT.ORDERS, { method: 'POST', body: JSON.stringify(input) })

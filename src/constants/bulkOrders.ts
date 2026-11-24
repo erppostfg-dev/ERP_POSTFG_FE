@@ -6,6 +6,8 @@
 
 export const BULK_ENDPOINT = {
   ORDERS: '/bulk-orders',
+  /** v2 piece 2: an uploaded receivers file checked (nothing saved). */
+  RECEIVERS_CHECK: '/bulk-orders/receivers/check',
   ORDER: (id: string) => `/bulk-orders/${encodeURIComponent(id)}`,
   CANCEL: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/cancel`,
   APPROVE: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/approve`,
@@ -140,6 +142,9 @@ export const BULK_LIMIT = {
    *  answer is kept (STALE_MS), and an older search still on its way is cancelled (2026-11-11). */
   SKU_DEBOUNCE_MS: 350,
   LINES_MAX: 200,
+  /** v2 piece 2 (backend BULK_ORDERS.RECEIVERS_MAX / RECEIVER_LINES_MAX). */
+  RECEIVERS_MAX: 50,
+  RECEIVER_LINES_MAX: 500,
 } as const
 
 export const BULK_TEXT = {
@@ -232,6 +237,32 @@ export const BULK_TEXT = {
   SKU_NONE: 'No active SKU with an MRP matches',
   SKU_TYPE_MORE: 'Type at least 2 characters of the SKU code, name or EAN',
   ADD_LINE: 'Add another SKU',
+  // v2 piece 2: several receivers (Marketing / Head office)
+  RECEIVERS_TITLE: 'Receivers',
+  RECEIVERS_SUB: 'One receiver, or several: each gets their own shipment (one sale order each). Quantities from step 1 are filled in for every new receiver.',
+  RECEIVER_N: (n: number) => `Receiver ${n}`,
+  ADD_RECEIVER: 'Add another receiver',
+  REMOVE_RECEIVER: 'Remove this receiver',
+  COPY_QTY_ALL: 'Copy the step 1 quantities to every receiver',
+  RECEIVER_QTY_HINT: 'Leave a SKU empty or 0 if this receiver does not get it.',
+  ERR_RECEIVER_NO_SKU: 'Give this receiver at least one SKU',
+  ERR_QTY_WHOLE: 'Whole numbers only',
+  UPLOAD_RECEIVERS: 'Upload receivers (Excel / CSV)',
+  UPLOAD_TEMPLATE: 'Download the template',
+  UPLOAD_HINT: 'One row per receiver and SKU: Receiver name, Receiver number, Address, City, State, Pincode, SKU code, Qty. The upload replaces the receivers below.',
+  UPLOAD_BRAND_FIRST: 'Pick the brand in step 1 first',
+  UPLOAD_READING: 'Checking the file…',
+  UPLOAD_MISSING: (cols: string) => `Columns not found in row 1: ${cols}`,
+  UPLOAD_DONE: (n: number, rows: number) => `${n} receiver(s) loaded from ${rows} row(s).`,
+  UPLOAD_BAD: (n: number) => `${n} row problem(s): fix them in the file and upload again, or fix the receivers below.`,
+  UPLOAD_ERRORS_FILE: 'Download the problems',
+  UPLOAD_ROW: (row: number) => (row ? `Row ${row}` : 'File'),
+  DRAWER_RECEIVERS: 'Receivers',
+  RECEIVER_TAG: (n: number) => `R${n}`,
+  RECEIVER_ADDED: (n: number, name: string) => `Receiver ${n} added: ${name}`,
+  RECEIVER_REMOVED: (n: number, name: string) => `Receiver ${n} removed: ${name}`,
+  RECEIVER_CHANGED: (n: number) => `Receiver ${n}:`,
+  RECEIVER_UNITS: (n: number) => `${n} units`,
   DELIVERY_TITLE: 'Delivery & receiving details',
   DELIVERY_SUB: 'Where and when this order is needed. Our team decides the warehouse after approval.',
   ORDERED_BY: 'Ordered by',

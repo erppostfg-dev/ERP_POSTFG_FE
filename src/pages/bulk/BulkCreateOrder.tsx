@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Trash2 } from 'lucide-react'
+import { Download, Plus, Search, Trash2, Upload } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { createBulkOrder, listBulkLocations, listBulkOrders, updateBulkOrder, searchBulkSkus, type BulkOrderFull, type BulkOrderInput, type BulkSku } from '../../api/bulkOrders'
+import { checkBulkReceivers, createBulkOrder, listBulkLocations, listBulkOrders, updateBulkOrder, searchBulkSkus, type BulkLocation, type BulkOrderFull, type BulkOrderInput, type BulkReceiverInput, type BulkReceiverRow, type BulkReceiversChecked, type BulkSku } from '../../api/bulkOrders'
 import { Modal } from '../../components/ui'
 import { BULK_INSTITUTION_RE, BULK_STATUS, bulkHidesMoney, isMarketingLike, BULK_LINE_TOTAL_MIN, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, BULK_FAST_TRACK, BULK_PURPOSE_TYPES, type BulkType } from '../../constants/bulkOrders'
 import { formProblems } from '../../lib/bulkForm'
+import { readGrid, receiverErrorsCsv, receiverQty, receiverTemplateCsv, rowsFromGrid } from '../../lib/bulkReceivers'
 import { approvalWhy, lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
 
 /*
@@ -15,6 +16,21 @@ import { approvalWhy, lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, 
  */
 
 interface Line { key: number; sku: BulkSku | null; qty: string; discount: string }
+interface Address { line: string; city: string; state: string; pincode: string }
+/** v2 piece 2: receivers 2.. of a Marketing / Head office order (receiver 1 = the form's own receiver fields). qty by SKU code. */
+interface Receiver { key: number; name: string; phone: string; where: string; address: Address; saveAs: string; qty: Record<string, string> }
+const PIN_RE = /^[1-9]\d{5}$/
+const emptyAddress = (): Address => ({ line: '', city: '', state: '', pincode: '' })
+const addressFilled = (where: string, a: Address) => where !== 'new' || (!!a.line.trim() && !!a.city.trim() && !!a.state.trim() && PIN_RE.test(a.pincode.trim()))
+const trimAddress = (a: Address): Address => ({ line: a.line.trim(), city: a.city.trim(), state: a.state.trim(), pincode: a.pincode.trim() })
+const downloadText = (name: string, text: string) => {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
 
 const { GSTIN: GSTIN_RE, EMAIL: EMAIL_RE } = BULK_INSTITUTION_RE
 const todayIst = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)
@@ -46,6 +62,65 @@ function Choice<T extends string>({ value, options, onChange }: { value: T; opti
         <button key={o} type="button" onClick={() => onChange(o)}
           className={`rounded-md border px-3 py-1.5 text-[12px] ${value === o ? 'border-primary bg-primary-soft font-semibold text-primary' : 'border-line text-ink-600 hover:bg-alt'}`}>{o}</button>
       ))}
+    </div>
+  )
+}
+
+/** v2 piece 2: a receiver's quantity per SKU of step 1 ('' / 0 = this receiver does not get it). */
+function ReceiverQty({ skus, qty, onChange }: { skus: BulkSku[]; qty: Record<string, string>; onChange: (code: string, v: string) => void }) {
+  return (
+    <div className="md:col-span-2">
+      <table className="w-full text-left text-[12.5px]">
+        <tbody>
+          {skus.map((s) => {
+            const v = qty[s.pepCode] ?? ''
+            return (
+              <tr key={s.pepCode} className="border-t border-line">
+                <td className="py-1"><span className="font-mono text-[12px] font-semibold">{s.pepCode}</span> <span className="text-ink-600">{s.name}</span></td>
+                <td className="w-28 py-1"><input type="number" min={0} step={1} value={v} onChange={(e) => onChange(s.pepCode, e.target.value)} className={`${input} ${receiverQty(v) === null ? 'border-crit' : ''}`} /></td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[11px] text-ink-400">{BULK_TEXT.RECEIVER_QTY_HINT}</p>
+    </div>
+  )
+}
+
+/** v2 piece 2: receiver 2.. card: name, number, saved location or a new address, its quantities. */
+function ReceiverCard({ n, r, skus, locations, onChange, onRemove }: {
+  n: number; r: Receiver; skus: BulkSku[]; locations: BulkLocation[] | undefined; onChange: (patch: Partial<Receiver>) => void; onRemove: () => void
+}) {
+  const phoneBad = !!r.phone.trim() && !normalPhone(r.phone)
+  const units = skus.reduce((t, s) => t + (receiverQty(r.qty[s.pepCode] ?? '') ?? 0), 0)
+  return (
+    <div className="mt-3 rounded-md border border-line p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <h4 className="text-[13px] font-semibold text-ink-900">{BULK_TEXT.RECEIVER_N(n)}</h4>
+        <span className="text-[12px] text-ink-400">{BULK_TEXT.RECEIVER_UNITS(units)}</span>
+        <button type="button" onClick={onRemove} title={BULK_TEXT.REMOVE_RECEIVER} className="ml-auto rounded p-1 text-ink-400 hover:text-crit"><Trash2 className="size-4" /></button>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label={BULK_TEXT.RECEIVER_NAME} error={r.name.trim() ? undefined : BULK_TEXT.ERR_REQUIRED}><input className={input} value={r.name} onChange={(e) => onChange({ name: e.target.value })} /></Field>
+        <Field label={BULK_TEXT.RECEIVER_PHONE} error={!r.phone.trim() ? BULK_TEXT.ERR_REQUIRED : phoneBad ? BULK_TEXT.ERR_PHONE : undefined}><input className={`${input} ${phoneBad ? 'border-crit' : ''}`} placeholder="+91 98765 43210" value={r.phone} onChange={(e) => onChange({ phone: e.target.value })} /></Field>
+        <Field label={BULK_TEXT.LOCATION} wide>
+          <select className={input} value={r.where} onChange={(e) => onChange({ where: e.target.value })}>
+            <option value="new">{BULK_TEXT.NEW_ADDRESS}</option>
+            {locations?.map((l) => <option key={l.id} value={l.id}>{l.label} · {l.address.city} {l.address.pincode}</option>)}
+          </select>
+        </Field>
+        {r.where === 'new' && (
+          <>
+            <Field label={BULK_TEXT.ADDRESS_LINE} wide><input className={input} value={r.address.line} onChange={(e) => onChange({ address: { ...r.address, line: e.target.value } })} /></Field>
+            <Field label={BULK_TEXT.CITY}><input className={input} value={r.address.city} onChange={(e) => onChange({ address: { ...r.address, city: e.target.value } })} /></Field>
+            <Field label={BULK_TEXT.STATE}><input className={input} value={r.address.state} onChange={(e) => onChange({ address: { ...r.address, state: e.target.value } })} /></Field>
+            <Field label={BULK_TEXT.PINCODE} error={r.address.pincode && !PIN_RE.test(r.address.pincode) ? BULK_TEXT.ERR_PIN : undefined}><input inputMode="numeric" maxLength={6} className={input} value={r.address.pincode} onChange={(e) => onChange({ address: { ...r.address, pincode: e.target.value.trim() } })} /></Field>
+            <Field label={BULK_TEXT.SAVE_AS} hint={BULK_TEXT.SAVE_AS_HINT}><input className={input} value={r.saveAs} onChange={(e) => onChange({ saveAs: e.target.value })} /></Field>
+          </>
+        )}
+        <ReceiverQty skus={skus} qty={r.qty} onChange={(code, v) => onChange({ qty: { ...r.qty, [code]: v } })} />
+      </div>
     </div>
   )
 }
@@ -123,9 +198,18 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const qc = useQueryClient()
   const [type, setType] = useState<BulkType>(initial?.type ?? types[0])
   const [step, setStep] = useState(1)
+  // v2 piece 2: an order with several receivers: step 1 = each SKU once (qty of its first receiver), quantities per receiver below
+  const firstOfSku = (initial?.lines ?? []).filter((l, i, all) => all.findIndex((x) => x.pepCode === l.pepCode) === i)
   const [lines, setLines] = useState<Line[]>(() => initial
-    ? initial.lines.map((l) => ({ key: nextKey++, sku: { pepCode: l.pepCode, name: l.name, mrp: l.mrp, ean: null }, qty: String(l.qty), discount: String(l.discountPct) }))
+    ? firstOfSku.map((l) => ({ key: nextKey++, sku: { pepCode: l.pepCode, name: l.name, mrp: l.mrp, ean: null }, qty: String(l.qty), discount: String(l.discountPct) }))
     : [emptyLine()])
+  const qtyMap = (no: number) => Object.fromEntries((initial?.lines ?? []).filter((l) => (l.receiverNo ?? 1) === no).map((l) => [l.pepCode, String(l.qty)]))
+  const [qty1, setQty1] = useState<Record<string, string>>(() => qtyMap(1))
+  const [extra, setExtra] = useState<Receiver[]>(() => (initial?.receivers ?? []).slice(1).map((r) => ({
+    key: nextKey++, name: r.receiverName, phone: r.receiverPhone, where: r.location.id ?? 'new',
+    address: r.location.id ? emptyAddress() : { ...r.location.address }, saveAs: '', qty: qtyMap(r.receiverNo),
+  })))
+  const [upload, setUpload] = useState<{ busy: boolean; note?: string; error?: string; checked?: BulkReceiversChecked; rows?: BulkReceiverRow[] }>({ busy: false })
   const [form, setForm] = useState<Record<'orderedBy' | 'neededBy' | 'receiverName' | 'receiverPhone' | 'mode' | 'priority' | 'note' | 'fastTrackRemarks' | 'purpose', string>>(initial
     ? {
       orderedBy: initial.orderedBy, neededBy: initial.neededBy?.slice(0, 10) ?? '', receiverName: initial.receiverName, receiverPhone: initial.receiverPhone,
@@ -176,6 +260,73 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const itemsOk = !!brand && parsed.length > 0 && parsed.every(lineOk)
   const totals = parsed.reduce((t, l) => (l.sku && lineOk(l) ? { units: t.units + l.q, mrp: round2(t.mrp + l.sku.mrp * l.q), value: round2(t.value + lineTotal(l.sku.mrp, l.d, l.q)) } : t), { units: 0, mrp: 0, value: 0 })
 
+  // v2 piece 2: several receivers (Marketing / Head office): each its own quantities; step 1 = the default for new receivers
+  const multi = extra.length > 0
+  const skuList = parsed.flatMap((l) => (l.sku ? [l.sku] : []))
+  const qtyNum = (m: Record<string, string>, code: string) => receiverQty(m[code] ?? '')
+  const unitsOf = (m: Record<string, string>) => skuList.reduce((t, s) => t + (qtyNum(m, s.pepCode) ?? 0), 0)
+  const qtyOk = (m: Record<string, string>) => skuList.every((s) => qtyNum(m, s.pepCode) !== null) && unitsOf(m) > 0
+  const allUnits = multi ? unitsOf(qty1) + extra.reduce((t, r) => t + unitsOf(r.qty), 0) : totals.units
+  const extraOk = (r: Receiver) => !!r.name.trim() && !!normalPhone(r.phone) && addressFilled(r.where, r.address) && qtyOk(r.qty)
+  const receiversOk = !multi || (qtyOk(qty1) && extra.every(extraOk))
+  const defaultQty = () => Object.fromEntries(parsed.flatMap((l) => (l.sku ? [[l.sku.pepCode, l.qty]] : [])))
+  const addReceiver = () => {
+    if (!multi) setQty1(defaultQty())
+    setExtra((xs) => [...xs, { key: nextKey++, name: '', phone: '', where: 'new', address: emptyAddress(), saveAs: '', qty: defaultQty() }])
+  }
+  const copyQtyAll = () => {
+    const d = defaultQty()
+    setQty1(d)
+    setExtra((xs) => xs.map((r) => ({ ...r, qty: { ...d } })))
+  }
+  const setReceiver = (key: number, patch: Partial<Receiver>) => setExtra((xs) => xs.map((r) => (r.key === key ? { ...r, ...patch } : r)))
+  /** An uploaded receivers file: read here, checked by the server; good receivers replace the ones on the form. */
+  const onUpload = async (file: File) => {
+    setUpload({ busy: true })
+    try {
+      const { rows, missing } = rowsFromGrid(await readGrid(file))
+      if (missing.length) return setUpload({ busy: false, error: BULK_TEXT.UPLOAD_MISSING(missing.join(', ')) })
+      const checked = await checkBulkReceivers(type, brand, rows)
+      const got = checked.receivers
+      if (got.length) {
+        // every SKU of the file on step 1 (its first qty = the default), then the receivers with their own quantities
+        const have = new Set(skuList.map((s) => s.pepCode))
+        const added: Line[] = []
+        for (const r of got) for (const l of r.lines) {
+          if (have.has(l.pepCode)) continue
+          have.add(l.pepCode)
+          added.push({ key: nextKey++, sku: { pepCode: l.pepCode, name: l.name, mrp: l.mrp, ean: null, brand }, qty: String(l.qty), discount: '0' })
+        }
+        setLines((ls) => [...ls.filter((l) => l.sku), ...added])
+        const qOf = (r: (typeof got)[number]) => Object.fromEntries(r.lines.map((l) => [l.pepCode, String(l.qty)]))
+        const [first, ...rest] = got
+        set({ receiverName: first.receiverName, receiverPhone: first.receiverPhone })
+        setWhere('new')
+        setAddress({ ...first.address })
+        setSaveAs('')
+        if (rest.length) setQty1(qOf(first))
+        else setLines((ls) => ls.map((l) => (l.sku && first.lines.some((x) => x.pepCode === l.sku!.pepCode) ? { ...l, qty: String(first.lines.find((x) => x.pepCode === l.sku!.pepCode)!.qty) } : l)))
+        setExtra(rest.map((r) => ({ key: nextKey++, name: r.receiverName, phone: r.receiverPhone, where: 'new', address: { ...r.address }, saveAs: '', qty: qOf(r) })))
+      }
+      setUpload({ busy: false, checked, rows, note: BULK_TEXT.UPLOAD_DONE(got.length, checked.rowCount) })
+    } catch (e) {
+      setUpload({ busy: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  /** The receivers part of a request: several = `receivers`; one = the order's own fields + `lines` (as before). */
+  const receiverParts = (draft: boolean): Partial<BulkOrderInput> => {
+    if (!multi) return {}
+    const linesOf = (m: Record<string, string>) => skuList.flatMap((s) => {
+      const q = qtyNum(m, s.pepCode)
+      return q ? [{ pepCode: s.pepCode, qty: q }] : []
+    })
+    const one = (name: string, ph: string, w: string, a: Address, save: string, m: Record<string, string>): BulkReceiverInput => ({
+      receiverName: name.trim(), receiverPhone: ph.trim(),
+      ...(w === 'new' ? { address: trimAddress(a), ...(save.trim() && !draft ? { saveLocationAs: save.trim() } : {}) } : { locationId: w }),
+      lines: linesOf(m),
+    })
+    return { receivers: [one(form.receiverName, form.receiverPhone, where, address, saveAs, qty1), ...extra.map((r) => one(r.name, r.phone, r.where, r.address, r.saveAs, r.qty))] }
+  }
   const phone = normalPhone(form.receiverPhone)
   const addressOk = where !== 'new' || (!!address.line.trim() && !!address.city.trim() && !!address.state.trim() && /^[1-9]\d{5}$/.test(address.pincode.trim()))
   const isInst = type === BULK_TYPE.INSTITUTIONAL
@@ -188,11 +339,13 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const problems = formProblems(form, todayIst())
   const pinBad = where === 'new' && !/^[1-9]\d{5}$/.test(address.pincode.trim())
   const err = (k: keyof typeof problems) => (touched.has(k) || step === 3 ? problems[k] : undefined)
-  const deliveryOk = Object.keys(problems).length === 0 && addressOk && instOk
+  const deliveryOk = Object.keys(problems).length === 0 && addressOk && instOk && receiversOk
   /** Every remaining problem, for the Review step (labels + why). */
   const allProblems = [
     ...(Object.entries(problems) as [keyof typeof FIELD_LABEL, string][]).map(([k, why]) => BULK_TEXT.ERR_FIELD(FIELD_LABEL[k], why)),
     ...(addressOk ? [] : [BULK_TEXT.ERR_FIELD(BULK_TEXT.LOCATION, pinBad ? BULK_TEXT.ERR_PIN : BULK_TEXT.ERR_REQUIRED)]),
+    ...(multi && !qtyOk(qty1) ? [BULK_TEXT.ERR_FIELD(BULK_TEXT.RECEIVER_N(1), BULK_TEXT.ERR_RECEIVER_NO_SKU)] : []),
+    ...extra.flatMap((r, i) => (extraOk(r) ? [] : [BULK_TEXT.ERR_FIELD(BULK_TEXT.RECEIVER_N(i + 2), !qtyOk(r.qty) ? BULK_TEXT.ERR_RECEIVER_NO_SKU : BULK_TEXT.ERR_REQUIRED)])),
     ...(instOk ? [] : [BULK_TEXT.ERR_FIELD(BULK_TEXT.INSTITUTION_TITLE, BULK_TEXT.ERR_REQUIRED)]),
   ]
 
@@ -231,6 +384,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       ...(form.note.trim() ? { note: form.note.trim() } : {}),
       // only the lines already complete (a SKU + a whole qty)
       lines: parsed.filter((l) => l.sku && Number.isInteger(l.q) && l.q >= 1).map((l) => (noMoney ? { pepCode: l.sku!.pepCode, qty: l.q } : { pepCode: l.sku!.pepCode, qty: l.q, discountPct: l.d })),
+      ...receiverParts(true),
       ...(isInst ? {
         institutionName: inst.name.trim(),
         ...(inst.gstin.trim() ? { gstin: inst.gstin.trim().toUpperCase() } : {}),
@@ -259,6 +413,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       ...(BULK_PURPOSE_TYPES.includes(type) && form.purpose.trim() ? { purpose: form.purpose.trim() } : {}),
       ...(form.note.trim() ? { note: form.note.trim() } : {}),
       lines: parsed.map((l) => (noMoney ? { pepCode: l.sku!.pepCode, qty: l.q } : { pepCode: l.sku!.pepCode, qty: l.q, discountPct: l.d })),
+      ...receiverParts(false),
       ...(isInst ? {
         institutionName: inst.name.trim(),
         ...(inst.gstin.trim() ? { gstin: inst.gstin.trim().toUpperCase() } : {}),
@@ -273,7 +428,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
 
   const footer = (
     <>
-      <span className="mr-auto text-[12px] text-ink-600">{totals.units} {BULK_TEXT.TOTAL_UNITS} · <strong className="text-ink-900">{rupees(totals.value)}</strong></span>
+      <span className="mr-auto text-[12px] text-ink-600">{allUnits} {BULK_TEXT.TOTAL_UNITS}{noMoney ? '' : <> · <strong className="text-ink-900">{rupees(totals.value)}</strong></>}</span>
       {step > 1 ? <button onClick={() => setStep(step - 1)} className="rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold">{BULK_TEXT.BACK}</button>
         : <button onClick={onClose} className="rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold">{BULK_TEXT.CANCEL}</button>}
       {(!initial || isDraft) && <button onClick={saveDraft} disabled={save.isPending} className="rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold disabled:opacity-50">{BULK_TEXT.SAVE_DRAFT}</button>}
@@ -386,10 +541,42 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
             ) : saved && (
               <p className="rounded-md bg-alt px-3 py-2 text-[12px] text-ink-600 md:col-span-2">{saved.address.line}, {saved.address.city}, {saved.address.state} {saved.address.pincode}</p>
             )}
+            {multi && <ReceiverQty skus={skuList} qty={qty1} onChange={(code, v) => setQty1((q) => ({ ...q, [code]: v }))} />}
             {isMarketingLike(type) && <Field label={BULK_TEXT.MODE}><Choice value={form.mode} options={BULK_MODES} onChange={(v) => set({ mode: v })} /></Field>}
             {BULK_PURPOSE_TYPES.includes(type) && <Field label={BULK_TEXT.PURPOSE} hint={BULK_TEXT.PURPOSE_HINT}><input className={input} value={form.purpose} onChange={(e) => set({ purpose: e.target.value })} /></Field>}
             <Field label={BULK_TEXT.NOTE} hint={BULK_TEXT.NOTE_HINT} wide><textarea rows={2} className={input} value={form.note} onChange={(e) => set({ note: e.target.value })} /></Field>
           </div>
+          {isMarketingLike(type) && (
+            <div className="mt-5 border-t border-line pt-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.RECEIVERS_TITLE} ({extra.length + 1})</h3>
+                <label className={`ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[12px] font-semibold ${!brand || upload.busy ? 'pointer-events-none opacity-50' : 'text-primary hover:bg-primary-soft/50'}`} title={brand ? undefined : BULK_TEXT.UPLOAD_BRAND_FIRST}>
+                  <Upload className="size-3.5" />{upload.busy ? BULK_TEXT.UPLOAD_READING : BULK_TEXT.UPLOAD_RECEIVERS}
+                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void onUpload(f) }} />
+                </label>
+                <button type="button" onClick={() => downloadText('bulk-receivers-template.csv', receiverTemplateCsv())} className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[12px] font-semibold text-ink-600 hover:bg-alt"><Download className="size-3.5" />{BULK_TEXT.UPLOAD_TEMPLATE}</button>
+              </div>
+              <p className="mb-2 mt-1 text-[12px] text-ink-600">{BULK_TEXT.RECEIVERS_SUB} {BULK_TEXT.UPLOAD_HINT}</p>
+              {upload.error && <p className="mb-2 rounded-md bg-crit-soft px-3 py-2 text-[12px] text-crit">{upload.error}</p>}
+              {upload.note && <p className="mb-2 rounded-md bg-ok-soft px-3 py-2 text-[12px] text-ink-900">{upload.note}</p>}
+              {!!upload.checked?.errors.length && (
+                <div className="mb-2 rounded-md bg-crit-soft px-3 py-2 text-[12px] text-crit">
+                  <div className="flex items-center gap-2 font-semibold">{BULK_TEXT.UPLOAD_BAD(upload.checked.errors.length)}
+                    <button type="button" onClick={() => downloadText('bulk-receivers-problems.csv', receiverErrorsCsv(upload.checked!.errors, upload.rows ?? []))} className="ml-auto inline-flex items-center gap-1 underline"><Download className="size-3.5" />{BULK_TEXT.UPLOAD_ERRORS_FILE}</button>
+                  </div>
+                  <ul className="ml-4 mt-1 max-h-40 list-disc overflow-y-auto">{upload.checked.errors.map((e, i) => <li key={i}>{BULK_TEXT.UPLOAD_ROW(e.row)}: {e.message}</li>)}</ul>
+                </div>
+              )}
+              {extra.map((r, i) => (
+                <ReceiverCard key={r.key} n={i + 2} r={r} skus={skuList} locations={locations.data} onChange={(patch) => setReceiver(r.key, patch)} onRemove={() => setExtra((xs) => xs.filter((x) => x.key !== r.key))} />
+              ))}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" disabled={extra.length + 1 >= BULK_LIMIT.RECEIVERS_MAX || !skuList.length} onClick={addReceiver}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-line px-3 py-1.5 text-[12px] font-semibold text-primary hover:bg-primary-soft/50 disabled:opacity-40"><Plus className="size-4" />{BULK_TEXT.ADD_RECEIVER}</button>
+                {multi && <button type="button" onClick={copyQtyAll} className="rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold text-ink-600 hover:bg-alt">{BULK_TEXT.COPY_QTY_ALL}</button>}
+              </div>
+            </div>
+          )}
           {isInst && (
             <div className="mt-5 border-t border-line pt-4">
               <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.INSTITUTION_TITLE}</h3>
@@ -433,7 +620,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
             </div>
           )}
           {rules.data && (() => {
-            const why = approvalWhy(rules.data[type], totals.units, isMarketingLike(type) ? form.mode : null)
+            const why = approvalWhy(rules.data[type], allUnits, isMarketingLike(type) ? form.mode : null)
             return <p className={`mb-3 rounded-md px-3 py-2 text-[12.5px] ${why.length ? 'bg-warn-soft text-ink-900' : 'bg-ok-soft text-ink-900'}`}>{why.length ? BULK_TEXT.NEEDS_APPROVAL(why.join(', ')) : BULK_TEXT.NO_APPROVAL}</p>
           })()}
           <div className="grid gap-4 text-[13px] md:grid-cols-2">
@@ -444,10 +631,23 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
               {form.priority === BULK_FAST_TRACK && form.fastTrackRemarks.trim() && <div className="text-ink-600">“{form.fastTrackRemarks.trim()}”</div>}
               {BULK_PURPOSE_TYPES.includes(type) && form.purpose.trim() && <div className="text-ink-600">{BULK_TEXT.PURPOSE}: <span className="text-ink-900">{form.purpose.trim()}</span></div>}
             </div>
-            <div className="rounded-md border border-line p-3">
+            {multi ? (
+              <div className="rounded-md border border-line p-3 md:col-span-2">
+                {[{ name: form.receiverName, ph: phone ?? form.receiverPhone, w: where, a: address, q: qty1 }, ...extra.map((r) => ({ name: r.name, ph: normalPhone(r.phone) ?? r.phone, w: r.where, a: r.address, q: r.qty }))].map((r, i) => {
+                  const loc = locations.data?.find((l) => l.id === r.w)
+                  return (
+                    <div key={i} className={i ? 'mt-2 border-t border-line pt-2' : ''}>
+                      <div className="font-semibold">{BULK_TEXT.RECEIVER_N(i + 1)}: {r.name} · {r.ph} <span className="font-normal text-ink-400">({BULK_TEXT.RECEIVER_UNITS(unitsOf(r.q))})</span></div>
+                      <div className="text-ink-600">{r.w === 'new' ? `${r.a.line}, ${r.a.city}, ${r.a.state} ${r.a.pincode}` : loc && `${loc.label}: ${loc.address.line}, ${loc.address.city} ${loc.address.pincode}`}</div>
+                      <div className="text-[12px] text-ink-600">{skuList.flatMap((s) => { const q = qtyNum(r.q, s.pepCode); return q ? [`${s.pepCode} × ${q}`] : [] }).join(' · ')}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : <div className="rounded-md border border-line p-3">
               <div className="font-semibold">{form.receiverName} · {phone}</div>
               <div className="text-ink-600">{where === 'new' ? `${address.line}, ${address.city}, ${address.state} ${address.pincode}` : saved && `${saved.label}: ${saved.address.line}, ${saved.address.city} ${saved.address.pincode}`}</div>
-            </div>
+            </div>}
             {isInst && (
               <div className="rounded-md border border-line p-3 md:col-span-2">
                 <div className="font-semibold">{inst.name}{inst.gstin ? ` · ${inst.gstin.toUpperCase()}` : ''}</div>
@@ -455,7 +655,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
               </div>
             )}
           </div>
-          <table className="mt-3 w-full text-left text-[13px]">
+          {!multi && <table className="mt-3 w-full text-left text-[13px]">
             <tbody>
               {parsed.map((l) => l.sku && (
                 <tr key={l.key} className="border-t border-line">
@@ -472,7 +672,8 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
                 ? <tr className="border-t border-line"><td className="py-2 text-ink-600">{BULK_TEXT.FREE_ORDER}</td><td className="py-2 text-right text-[14px] font-semibold text-ink-900" colSpan={2}>{totals.units} {BULK_TEXT.TOTAL_UNITS}</td></tr>
                 : <tr className="border-t border-line"><td className="py-2 text-ink-600">{BULK_TEXT.TOTAL_MRP} {rupees(totals.mrp)}</td><td className="py-2 text-right text-ink-600">{totals.units} {BULK_TEXT.TOTAL_UNITS}</td><td className="py-2 text-right text-[14px] font-semibold tnum">{rupees(totals.value)}</td></tr>}
             </tbody>
-          </table>
+          </table>}
+          {multi && <p className="mt-3 text-right text-[14px] font-semibold text-ink-900">{BULK_TEXT.FREE_ORDER} · {allUnits} {BULK_TEXT.TOTAL_UNITS}</p>}
         </div>
       )}
     </Modal>

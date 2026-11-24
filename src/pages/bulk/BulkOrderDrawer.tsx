@@ -131,9 +131,15 @@ function Timeline({ events, noMoney = false }: { events: BulkOrderEvent[]; noMon
           {e.changes?.fieldChanges
             ? e.changes.fieldChanges.map((f) => <div key={f.field} className="text-[12px] text-ink-600">{BULK_TEXT.CHANGE_FROM_TO(BULK_FIELD_LABEL[f.field] ?? f.field, show(f.from), show(f.to))}</div>)
             : e.changes?.fields && e.changes.fields.length > 0 && <div className="text-[12px] text-ink-600">{BULK_TEXT.EDITED_FIELDS(e.changes.fields.length)}</div>}
+          {e.changes?.receiverChanges?.map((r) => (
+            <div key={`r${r.receiverNo}-${r.change}`} className="text-[12px] text-ink-600">
+              {r.change === 'added' ? BULK_TEXT.RECEIVER_ADDED(r.receiverNo, r.name) : r.change === 'removed' ? BULK_TEXT.RECEIVER_REMOVED(r.receiverNo, r.name)
+                : `${BULK_TEXT.RECEIVER_CHANGED(r.receiverNo)} ${(r.fields ?? []).map((f) => BULK_TEXT.CHANGE_FROM_TO(BULK_FIELD_LABEL[f.field] ?? f.field, show(f.from), show(f.to))).join(', ')}`}
+            </div>
+          ))}
           {e.changes?.lineChanges?.map((c) => (
-            <div key={`${c.pepCode}-${c.change}`} className="text-[12px] text-ink-600">
-              {c.change === 'added' ? BULK_TEXT.LINE_ADDED(c.pepCode, c.qty?.[1] ?? 0) : c.change === 'removed' ? BULK_TEXT.LINE_REMOVED(c.pepCode) : [
+            <div key={`${c.receiverNo ?? 1}-${c.pepCode}-${c.change}`} className="text-[12px] text-ink-600">
+              {c.receiverNo ? `${BULK_TEXT.RECEIVER_TAG(c.receiverNo)} · ` : ''}{c.change === 'added' ? BULK_TEXT.LINE_ADDED(c.pepCode, c.qty?.[1] ?? 0) : c.change === 'removed' ? BULK_TEXT.LINE_REMOVED(c.pepCode) : [
                 c.qty && BULK_TEXT.CHANGE_FROM_TO(`${c.pepCode} qty`, String(c.qty[0]), String(c.qty[1])),
                 !noMoney && c.discountPct && BULK_TEXT.CHANGE_FROM_TO(`${c.pepCode} discount`, `${c.discountPct[0]}%`, `${c.discountPct[1]}%`),
               ].filter(Boolean).join(', ')}
@@ -311,12 +317,30 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
               {row(BULK_TEXT.NEEDED_BY, d.neededBy ? day(d.neededBy) : "–")}
               {d.fastTrackRemarks && row(BULK_TEXT.FAST_TRACK_REMARKS, d.fastTrackRemarks)}
               {d.purpose && row(BULK_TEXT.PURPOSE, d.purpose)}
-              {row(BULK_TEXT.RECEIVER_NAME, d.receiverName)}
-              {row(BULK_TEXT.RECEIVER_PHONE, d.receiverPhone)}
-              {d.location.label && row(BULK_TEXT.LOCATION, d.location.label)}
-              <p className="mt-1 text-right text-[13px] text-ink-900">{d.location.address.line}<br />{d.location.address.city}, {d.location.address.state} {d.location.address.pincode}</p>
+              {d.receiverCount > 1 ? row(BULK_TEXT.DRAWER_RECEIVERS, String(d.receiverCount)) : <>
+                {row(BULK_TEXT.RECEIVER_NAME, d.receiverName)}
+                {row(BULK_TEXT.RECEIVER_PHONE, d.receiverPhone)}
+                {d.location.label && row(BULK_TEXT.LOCATION, d.location.label)}
+                <p className="mt-1 text-right text-[13px] text-ink-900">{d.location.address.line}<br />{d.location.address.city}, {d.location.address.state} {d.location.address.pincode}</p>
+              </>}
             </section>
           </div>
+
+          {/* v2 piece 2: every receiver of a several-receivers order (its SKUs are tagged R1, R2 ... in the lines below) */}
+          {d.receiverCount > 1 && (
+            <section>
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{BULK_TEXT.DRAWER_RECEIVERS} ({d.receivers.length})</h3>
+              <div className="grid gap-2 md:grid-cols-2">
+                {d.receivers.map((r) => (
+                  <div key={r.receiverNo} className="rounded-md border border-line px-3 py-2 text-[12.5px]">
+                    <div className="font-semibold text-ink-900"><span className="mr-1 rounded bg-alt px-1.5 text-[11px]">{BULK_TEXT.RECEIVER_TAG(r.receiverNo)}</span>{r.receiverName} · {r.receiverPhone}</div>
+                    <div className="text-ink-600">{r.location.label ? `${r.location.label}: ` : ''}{r.location.address.line}, {r.location.address.city}, {r.location.address.state} {r.location.address.pincode}</div>
+                    <div className="text-ink-400">{BULK_TEXT.RECEIVER_UNITS(r.totalUnits)}{r.saleOrderCode ? ` · ${r.saleOrderCode}` : ''}{r.tracking?.courierStatus ? ` · ${r.tracking.courierStatus}` : ''}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {d.institution && (
             <section>
@@ -343,7 +367,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
                 <tbody>
                   {rows.map(({ l, qty, disc, ok, gone }) => (
                     <tr key={l.lineNo} className={`border-t border-line ${gone ? 'opacity-40 line-through' : ''}`}>
-                      <td className="px-3 py-2"><div className="font-mono text-[12px] font-semibold">{l.pepCode}</div><div className="text-[11px] text-ink-600">{l.name}</div>
+                      <td className="px-3 py-2"><div className="font-mono text-[12px] font-semibold">{d.receiverCount > 1 && <span className="mr-1 rounded bg-alt px-1 font-sans text-[10.5px] font-semibold text-ink-600">{BULK_TEXT.RECEIVER_TAG(l.receiverNo)}</span>}{l.pepCode}</div><div className="text-[11px] text-ink-600">{l.name}</div>
                         {fixed !== undefined
                           ? l.qty !== l.requestedQty && <div className="text-[11px] text-warn">{BULK_TEXT.ASKED_QTY(l.requestedQty)}</div>
                           : (l.qty !== l.requestedQty || l.discountPct !== l.requestedDiscountPct) && <div className="text-[11px] text-warn">{BULK_TEXT.CHANGED_BY_APPROVER(l.requestedQty, l.requestedDiscountPct)}</div>}</td>
