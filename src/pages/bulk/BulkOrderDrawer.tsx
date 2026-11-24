@@ -69,6 +69,21 @@ function StatusTimeline({ d }: { d: BulkOrderFull }) {
         ))}
       </ol>
       {d.decisionNote && d.status === BULK_STATUS.APPROVED && <p className="mt-2 rounded-md bg-ok-soft px-3 py-1.5 text-[12px] text-ink-600">“{d.decisionNote}”</p>}
+      {d.tracking && (
+        <div className="mt-3 rounded-md border border-line px-3 py-2 text-[12.5px]">
+          <div className="mb-1 flex items-center gap-2 font-semibold text-ink-900">{BULK_TEXT.TRACKING}
+            {d.tracking.link && /^https?:\/\//.test(d.tracking.link) && <a href={d.tracking.link} target="_blank" rel="noreferrer" className="text-[12px] font-normal text-primary underline">{BULK_TEXT.TRACK_LINK}</a>}
+          </div>
+          <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
+            {([[BULK_TEXT.AWB, d.tracking.awb], [BULK_TEXT.COURIER, d.tracking.courier], [BULK_TEXT.COURIER_STATUS, d.tracking.courierStatus],
+              [BULK_TEXT.DISPATCHED_ON, d.tracking.dispatchedAt && when(d.tracking.dispatchedAt)], [BULK_TEXT.DELIVERED_ON, d.tracking.deliveredAt && when(d.tracking.deliveredAt)],
+              [BULK_TEXT.INVOICE, d.tracking.invoiceCode]] as [string, string | null][]).filter(([, v]) => v).map(([k, v]) => (
+              <div key={k}><span className="text-ink-600">{k}: </span><span className="font-mono text-ink-900">{v}</span></div>
+            ))}
+          </div>
+          {d.tracking.checkedAt && <div className="mt-1 text-[11px] text-ink-400">{BULK_TEXT.TRACKING_UPDATED(when(d.tracking.checkedAt))}</div>}
+        </div>
+      )}
       {d.saleOrder && (
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-3 text-[13px]">
           <span className="text-ink-600">{BULK_TEXT.SALE_ORDER}</span>

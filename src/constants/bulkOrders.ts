@@ -47,7 +47,7 @@ export const BULK_PAGE = {
 } as const
 
 /** v2 1c (2026-11-23): SUBMITTED = no approval needed, with our team; READY = list filter approved + submitted (team tab). */
-export const BULK_STATUS = { DRAFT: 'draft', PENDING: 'pending_approval', SUBMITTED: 'submitted', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled', PROCESSING: 'processing' } as const
+export const BULK_STATUS = { DISPATCHED: 'dispatched', DELIVERED: 'delivered', DRAFT: 'draft', PENDING: 'pending_approval', SUBMITTED: 'submitted', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled', PROCESSING: 'processing' } as const
 /** v2 1g: list filter "active" (submitted + pending + approved; backend BULK_LIST_ACTIVE). */
 export const BULK_LIST_ACTIVE = 'active'
 export const BULK_LIST_READY = 'ready'
@@ -57,8 +57,8 @@ export const BULK_EDITABLE: string[] = [BULK_STATUS.PENDING, BULK_STATUS.SUBMITT
 export const BULK_PROCESSABLE: string[] = [BULK_STATUS.APPROVED, BULK_STATUS.SUBMITTED]
 export type BulkStatus = (typeof BULK_STATUS)[keyof typeof BULK_STATUS]
 /** v2 1g: "processing" (our team made the sale order) reads "Order placed". */
-export const BULK_STATUS_LABEL: Record<string, string> = { draft: 'Draft', pending_approval: 'Pending approval', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', processing: 'Order placed' }
-export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = { draft: 'neutral', pending_approval: 'warn', submitted: 'ok', approved: 'ok', rejected: 'crit', cancelled: 'neutral', processing: 'info' }
+export const BULK_STATUS_LABEL: Record<string, string> = { dispatched: 'Dispatched', delivered: 'Delivered', draft: 'Draft', pending_approval: 'Pending approval', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', processing: 'Order placed' }
+export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = { dispatched: 'info', delivered: 'ok', draft: 'neutral', pending_approval: 'warn', submitted: 'ok', approved: 'ok', rejected: 'crit', cancelled: 'neutral', processing: 'info' }
 /** Institutional requester checks (same as the backend BULK_INSTITUTION). */
 export const BULK_INSTITUTION_RE = {
   GSTIN: /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/,
@@ -86,7 +86,7 @@ export const bulkHidesMoney = (type: string): boolean => BULK_FIXED_PRICE[type a
 /** Timeline words per event (backend BULK_EVENT). */
 export const BULK_EVENT_LABEL: Record<string, string> = {
   created: 'Created', edited: 'Edited', cancelled: 'Cancelled', approved: 'Approved', rejected: 'Rejected', document_added: 'Document uploaded', payment: 'Payment',
-  processed: 'Sale order created', sent_back: 'Sale order sent back',
+  processed: 'Sale order created', sent_back: 'Sale order sent back', submitted: 'Submitted', tracking: 'Courier update (Uniware)',
 }
 
 /**
@@ -118,7 +118,7 @@ export const BULK_DOC_MAX_BYTES = 10 * 1024 * 1024
 /** v2 1g: "Ready to Dispatch" removed; Dispatched / Delivered come from courier tracking (later piece). */
 export const BULK_STEPS = ['Submitted', 'Approved', 'Order placed', 'Dispatched', 'Delivered'] as const
 /** How far an order status is on BULK_STEPS (index of the last step done). */
-export const BULK_STEP_OF: Record<string, number> = { draft: -1, pending_approval: 0, submitted: 1, approved: 1, processing: 2 }
+export const BULK_STEP_OF: Record<string, number> = { draft: -1, pending_approval: 0, submitted: 1, approved: 1, processing: 2, dispatched: 3, delivered: 4 }
 
 /** The design's markers (figma-make-bulk-orders): mode for Marketing only. */
 /** v2 1d (2026-11-23): Porter / Regular, Normal / Fast-track (backend BULK_DELIVERY_MODES / BULK_PRIORITIES). */
@@ -170,7 +170,18 @@ export const BULK_TEXT = {
   STAT_ACTIVE: 'Active',
   STAT_PLACED: 'Order placed',
   STAT_DISPATCHED: 'Dispatched',
-  STAT_DISPATCHED_HINT: 'From courier tracking (coming soon)',
+  STAT_DISPATCHED_HINT: 'Set by Uniware when the shipment leaves the warehouse',
+  /** v2 piece 4: courier tracking (from Uniware). */
+  TRACKING: 'Courier tracking',
+  AWB: 'AWB',
+  COURIER: 'Courier',
+  COURIER_STATUS: 'Courier status',
+  DISPATCHED_ON: 'Dispatched',
+  DELIVERED_ON: 'Delivered',
+  INVOICE: 'Invoice',
+  TRACK_LINK: 'Track',
+  TRACKING_UPDATED: (t: string) => `Updated from Uniware ${t}`,
+  COL_COURIER: 'Courier',
   SAVE_DRAFT: 'Save as draft',
   DRAFT_SAVED: (po: string) => `Draft ${po} saved: open it from the list to continue`,
   CONTINUE_DRAFT: 'Continue',

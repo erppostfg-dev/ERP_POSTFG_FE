@@ -43,6 +43,11 @@ export interface BulkOrder {
   totalValue: number
   createdBy: { id: number; name: string | null }
   createdAt: string
+  /** v2 piece 4: courier tracking from Uniware (null until the shipment shows there). */
+  tracking: {
+    awb: string | null; courier: string | null; courierStatus: string | null; link: string | null
+    dispatchedAt: string | null; deliveredAt: string | null; invoiceCode: string | null; checkedAt: string | null
+  } | null
   /** v2 1e: times changed after it was submitted ("Edited" tag). */
   editCount: number
   decidedBy: { id: number; name: string | null } | null

@@ -62,7 +62,7 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
   // the tiles: one count per status (pageSize 1 = the total only)
   const counts = useQueries({
     // v2 1g worklist cards: Active, Pending approval, Order placed (Dispatched comes with courier tracking)
-    queries: [BULK_LIST_ACTIVE, BULK_STATUS.PENDING, BULK_STATUS.PROCESSING].map((s) => ({
+    queries: [BULK_LIST_ACTIVE, BULK_STATUS.PENDING, BULK_STATUS.PROCESSING, BULK_STATUS.DISPATCHED].map((s) => ({
       queryKey: ['bulk', 'orders', 'count', type, s],
       queryFn: () => listBulkOrders({ type, status: s, pageSize: 1 }).then((r) => r.meta.total),
       enabled: !approvals,
@@ -107,7 +107,7 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
         <Stat label={BULK_TEXT.STAT_ACTIVE} value={counts[0].data} tone="bg-primary" />
         <Stat label={BULK_TEXT.STAT_PENDING} value={counts[1].data} tone="bg-warn" />
         <Stat label={BULK_TEXT.STAT_PLACED} value={counts[2].data} tone="bg-ok" />
-        <div title={BULK_TEXT.STAT_DISPATCHED_HINT}><Stat label={BULK_TEXT.STAT_DISPATCHED} value={0} tone="bg-line" /></div>
+        <div title={BULK_TEXT.STAT_DISPATCHED_HINT}><Stat label={BULK_TEXT.STAT_DISPATCHED} value={counts[3].data} tone="bg-info" /></div>
       </div>}
 
       <div className="rounded-[var(--radius-card)] border border-line bg-surface">
@@ -160,7 +160,8 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
                     <td className="px-3 py-2.5 whitespace-nowrap">{o.neededBy ? day(o.neededBy) : "–"}</td>
                     <td className="px-3 py-2.5"><div className="max-w-[220px] truncate">{o.location.label ?? o.location.address.line}</div><div className="text-[11px] text-ink-600">{o.location.address.city} {o.location.address.pincode}</div></td>
                     <td className="px-3 py-2.5 text-right tnum">{bulkHidesMoney(o.type) ? <span className="text-ink-600">{BULK_TEXT.FREE_ORDER}</span> : rupees(o.totalValue)}</td>
-                    <td className="px-3 py-2.5"><Badge tone={BULK_STATUS_TONE[o.status] ?? 'neutral'}>{BULK_STATUS_LABEL[o.status] ?? o.status}</Badge></td>
+                    <td className="px-3 py-2.5"><Badge tone={BULK_STATUS_TONE[o.status] ?? 'neutral'}>{BULK_STATUS_LABEL[o.status] ?? o.status}</Badge>
+                      {o.tracking && <div className="mt-0.5 text-[11px] text-ink-600">{[o.tracking.courier, o.tracking.courierStatus, o.tracking.awb].filter(Boolean).join(' · ')}</div>}</td>
                     <td className="px-3 py-2.5 text-ink-400"><ChevronRight className="size-4" /></td>
                   </tr>
                 ))}
