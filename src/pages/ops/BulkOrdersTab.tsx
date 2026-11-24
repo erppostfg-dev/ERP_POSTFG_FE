@@ -42,6 +42,7 @@ export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => vo
   const [status, setStatus] = useState<string>(BULK_LIST_READY)
   const { can } = useAuth()
   const canVerifyPayment = can(CAPABILITY.BULK_PAYMENT_VERIFY)
+  const canPaymentDetails = can(CAPABILITY.BULK_PAYMENT_DETAILS)
   const payView = status === PAY_CHIP
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
@@ -131,7 +132,7 @@ export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => vo
         </div>
       </div>
 
-      <BulkOrderDrawer id={openId} load={getTeamBulkOrder} teamCanUpload={canEdit} teamCanVerifyPayment={canVerifyPayment} onClose={() => setOpenId(null)} />
+      <BulkOrderDrawer id={openId} load={getTeamBulkOrder} teamCanUpload={canEdit} teamCanVerifyPayment={canVerifyPayment} teamCanPaymentDetails={canPaymentDetails} onClose={() => setOpenId(null)} />
     </div>
   )
 }

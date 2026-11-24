@@ -12,6 +12,8 @@ export interface BulkRights {
   approve: boolean
   /** Special permission "Bulk Orders: verify payments" (2026-11-13; admin / developer, or a role it is on for). */
   verifyPayment: boolean
+  /** 2026-11-24: 'Bulk Orders: add payment details'. */
+  paymentDetails: boolean
 }
 
 export interface BulkAddress { line: string; city: string; state: string; pincode: string }
@@ -60,6 +62,8 @@ export interface BulkOrder {
     status: string; by: { id: number; name: string | null } | null; at: string | null; note: string | null
     /** v2 piece 5b: the Razorpay link finance pasted (the buyer's Pay now). */
     link: string | null; linkAt: string | null
+    /** 2026-11-24: bank details text (a QR = a payment_qr document). */
+    bankDetails: string | null
   } | null
   /** Institutional requester details (null on Marketing orders; 2026-11-12). */
   institution: {
@@ -291,9 +295,9 @@ export async function getBulkDocumentBytes(id: string, docId: string, team: bool
 /** Opens in a new tab (the browser sends the login cookie). */
 export const bulkDocumentUrl = (id: string, docId: string, team = false) => apiUrl(team ? BULK_ENDPOINT.TEAM_DOCUMENT(id, docId) : BULK_ENDPOINT.DOCUMENT(id, docId))
 /** team = POST_FG's route (2026-11-13); both need "Bulk Orders: verify payments". */
-/** v2 piece 5b: finance pastes the payment link (https). */
-export const setBulkPaymentLink = (id: string, link: string, team = false) =>
-  api<BulkOrderFull>(team ? BULK_ENDPOINT.TEAM_PAYMENT(id) : BULK_ENDPOINT.PAYMENT(id), { method: 'POST', body: JSON.stringify({ action: 'set_link', link }) })
+/** 2026-11-24: payment details ({ link?, bankDetails? }; '' clears one). */
+export const setBulkPaymentDetails = (id: string, details: { link?: string; bankDetails?: string }, team = false) =>
+  api<BulkOrderFull>(team ? BULK_ENDPOINT.TEAM_PAYMENT(id) : BULK_ENDPOINT.PAYMENT(id), { method: 'POST', body: JSON.stringify({ action: 'set_details', ...details }) })
 /** v2 piece 5b: finance verifies (true) or un-verifies a customer's GSTIN. */
 export const verifyInstCustomerGstin = (id: string, verified: boolean) =>
   api<BulkInstCustomer>(BULK_ENDPOINT.CUSTOMER_GSTIN(id), { method: 'POST', body: JSON.stringify({ verified }) })
@@ -301,7 +305,7 @@ export const setBulkPayment = (id: string, action: string, note?: string, team =
   api<BulkOrderFull>(team ? BULK_ENDPOINT.TEAM_PAYMENT(id) : BULK_ENDPOINT.PAYMENT(id), { method: 'POST', body: JSON.stringify(note ? { action, note } : { action }) })
 export const listBulkSettings = () => api<BulkSetting[]>(BULK_ENDPOINT.SETTINGS)
 /** v2 piece 3: email switches (POST_FG admin) and the requester's reminder. */
-export interface BulkNotifySettings { emails: boolean; approvalNeeded: boolean; decision: boolean; remind: boolean }
+export interface BulkNotifySettings { emails: boolean; approvalNeeded: boolean; decision: boolean; remind: boolean; payment: boolean }
 export const getBulkNotifySettings = () => api<BulkNotifySettings>(BULK_ENDPOINT.NOTIFY_SETTINGS)
 export const saveBulkNotifySettings = (change: Partial<BulkNotifySettings>) => api<BulkNotifySettings>(BULK_ENDPOINT.NOTIFY_SETTINGS, { method: 'PUT', body: JSON.stringify(change) })
 export const remindBulkOrder = (id: string) => api<BulkOrderFull>(BULK_ENDPOINT.REMIND(id), { method: 'POST', body: '{}' })

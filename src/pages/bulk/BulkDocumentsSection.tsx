@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { CheckCircle2, Clock, CreditCard, FileCheck2, FileText, MinusCircle, Receipt, Upload } from 'lucide-react'
-import type { BulkOrderFull } from '../../api/bulkOrders'
-import { BULK_DOC_ACCEPT, BULK_DOC_KIND, BULK_DOC_KIND_LABEL, BULK_PAYMENT, BULK_PAYMENT_ACTION, BULK_TEXT, type BulkPaymentAction } from '../../constants/bulkOrders'
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { CheckCircle2, Clock, Copy, CreditCard, FileCheck2, FileText, MinusCircle, QrCode, Receipt, Upload } from 'lucide-react'
+import { getBulkDocumentBytes, type BulkOrderFull } from '../../api/bulkOrders'
+import { BULK_DOC_ACCEPT, BULK_DOC_KIND, BULK_DOC_KIND_LABEL, BULK_PAYMENT, BULK_PAYMENT_ACTION, BULK_PAYMENT_PROOFS_MAX, BULK_TEXT, type BulkPaymentAction } from '../../constants/bulkOrders'
 
 /*
  * Payments & documents of a bulk order (2026-11-13, user: "add smoothness for the proof of payment, it looks odd"; was a
@@ -15,6 +16,19 @@ import { BULK_DOC_ACCEPT, BULK_DOC_KIND, BULK_DOC_KIND_LABEL, BULK_PAYMENT, BULK
  *     marketing"; the server refuses it too).
  */
 
+/** 2026-11-24: the payment QR shown on the order (its bytes fetched with the login cookie, shown as an image). */
+function QrImage({ orderId, docId, team }: { orderId: string; docId: string; team: boolean }) {
+  const bytes = useQuery({ queryKey: ['bulk', 'qr', orderId, docId], queryFn: ({ signal }) => getBulkDocumentBytes(orderId, docId, team, signal) })
+  const [url, setUrl] = useState('')
+  useEffect(() => {
+    if (!bytes.data) return
+    const u = URL.createObjectURL(new Blob([bytes.data]))
+    setUrl(u)
+    return () => URL.revokeObjectURL(u)
+  }, [bytes.data])
+  return url ? <img src={url} alt="Payment QR" className="size-40 rounded-md border border-line bg-white object-contain p-1" /> : <div className="grid size-40 place-items-center rounded-md border border-line text-ink-400"><QrCode className="size-8" /></div>
+}
+
 const when = (s: string) => new Date(s).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 
 /** Per payment state: icon + colours + the two lines of the card. */
@@ -25,9 +39,9 @@ const CARD: Record<string, { icon: typeof Clock; box: string; iconCls: string; t
   [BULK_PAYMENT.INVOICED]: { icon: CreditCard, box: 'border-info/40 bg-info-soft/60', iconCls: 'text-info', title: BULK_TEXT.PAY_INVOICED, sub: BULK_TEXT.PAY_INVOICED_SUB },
   [BULK_PAYMENT.NOT_NEEDED]: { icon: MinusCircle, box: 'border-line bg-alt/50', iconCls: 'text-ink-400', title: BULK_TEXT.PAY_NOT_NEEDED, sub: '' },
 }
-const KIND_ICON: Record<string, string> = { [BULK_DOC_KIND.PAYMENT_PROOF]: 'bg-ok-soft text-ok', [BULK_DOC_KIND.INVOICE]: 'bg-primary-soft text-primary', [BULK_DOC_KIND.PROFORMA]: 'bg-alt text-ink-600' }
+const KIND_ICON: Record<string, string> = { [BULK_DOC_KIND.PAYMENT_QR]: 'bg-info-soft text-info', [BULK_DOC_KIND.PAYMENT_PROOF]: 'bg-ok-soft text-ok', [BULK_DOC_KIND.INVOICE]: 'bg-primary-soft text-primary', [BULK_DOC_KIND.PROFORMA]: 'bg-alt text-ink-600' }
 
-export function BulkDocumentsSection({ d, canUpload, canPay, busy, uploading, onUpload, onOpen, onPay, onLink }: {
+export function BulkDocumentsSection({ d, canUpload, canPay, canDetails, team, busy, uploading, onUpload, onOpen, onPay, onDetails }: {
   d: BulkOrderFull
   canUpload: boolean
   /** "Bulk Orders: verify payments". */
@@ -38,15 +52,22 @@ export function BulkDocumentsSection({ d, canUpload, canPay, busy, uploading, on
   /** Opens a document in the in-app viewer. */
   onOpen: (docId: string) => void
   onPay: (action: BulkPaymentAction, note: string) => void
-  /** v2 piece 5b: finance saves the payment link. */
-  onLink: (link: string) => void
+  /** 2026-11-24: 'Bulk Orders: add payment details' (link / QR / bank details). */
+  canDetails: boolean
+  team: boolean
+  onDetails: (x: { link?: string; bankDetails?: string }) => void
 }) {
   const p = d.payment
   const [link, setLink] = useState(p?.link ?? '')
-  const linkOk = /^https:\/\/[^\s/]+\.\S+$/i.test(link.trim())
+  const [bank, setBank] = useState(p?.bankDetails ?? '')
+  const [copied, setCopied] = useState(false)
+  const qr = d.documents.find((x) => x.kind === BULK_DOC_KIND.PAYMENT_QR && !x.replacedAt)
+  const linkOk = link.trim() === '' || /^https:\/\/[^\s/]+\.\S+$/i.test(link.trim())
+  const detailsChanged = link.trim() !== (p?.link ?? '') || bank.trim() !== (p?.bankDetails ?? '')
   const open = !!p && p.status !== BULK_PAYMENT.VERIFIED && p.status !== BULK_PAYMENT.NOT_NEEDED
   // a proof only where the order has a payment check (not Marketing)
-  const kinds = Object.values(BULK_DOC_KIND).filter((k) => k !== BULK_DOC_KIND.PAYMENT_PROOF || !!p)
+  // a proof / QR only where the order has a payment check; the QR only for people with the payment details permission
+  const kinds = Object.values(BULK_DOC_KIND).filter((k) => (k !== BULK_DOC_KIND.PAYMENT_PROOF || !!p) && (k !== BULK_DOC_KIND.PAYMENT_QR || (!!p && canDetails)))
   const [kindPicked, setKind] = useState('')
   const kind = kinds.includes(kindPicked as (typeof kinds)[number]) ? kindPicked : p && p.status !== BULK_PAYMENT.VERIFIED ? BULK_DOC_KIND.PAYMENT_PROOF : BULK_DOC_KIND.PROFORMA
   const [over, setOver] = useState(false)
@@ -70,13 +91,33 @@ export function BulkDocumentsSection({ d, canUpload, canPay, busy, uploading, on
               : card.sub && <div className="text-[12px] text-ink-600">{card.sub}</div>}
             {p.status === BULK_PAYMENT.UPLOADED && latestProof && <div className="text-[12px] text-ink-600">{latestProof.fileName} · {latestProof.by.name} · {when(latestProof.at)}</div>}
             {p.note && <div className="mt-1.5 rounded-md bg-surface/70 px-2.5 py-1.5 text-[12px] text-ink-600">“{p.note}”</div>}
-            {/* v2 piece 5b: the buyer pays with finance's link */}
-            {p.link && open && <a href={p.link} target="_blank" rel="noopener noreferrer" className={`${btn} mt-2.5 inline-flex items-center gap-1.5 bg-primary text-white hover:opacity-90`}><CreditCard className="size-4" />{BULK_TEXT.PAY_NOW}</a>}
-            {canPay && open && (
-              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            {/* 2026-11-24: how to pay (our team's link / QR / bank details), for the buyer */}
+            {open && (p.link || p.bankDetails || qr) && (
+              <div className="mt-2.5 rounded-md bg-surface/80 p-2.5">
+                <div className="mb-1.5 text-[11px] font-semibold uppercase text-ink-400">{BULK_TEXT.PAY_DETAILS_TITLE}</div>
+                <div className="flex flex-wrap items-start gap-3">
+                  {p.link && <a href={p.link} target="_blank" rel="noopener noreferrer" className={`${btn} inline-flex items-center gap-1.5 bg-primary text-white hover:opacity-90`}><CreditCard className="size-4" />{BULK_TEXT.PAY_NOW}</a>}
+                  {qr && <QrImage orderId={d.id} docId={qr.id} team={team} />}
+                  {p.bankDetails && (
+                    <div className="min-w-0 flex-1">
+                      <pre className="whitespace-pre-wrap break-words font-sans text-[12.5px] text-ink-900">{p.bankDetails}</pre>
+                      <button type="button" onClick={() => { void navigator.clipboard?.writeText(p.bankDetails ?? '').then(() => setCopied(true)) }} className="mt-1 inline-flex items-center gap-1 text-[11.5px] text-primary"><Copy className="size-3.5" />{copied ? BULK_TEXT.PAY_COPIED : BULK_TEXT.PAY_COPY}</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {canDetails && open && (
+              <div className="mt-2.5 flex flex-col gap-2 rounded-md border border-line bg-surface p-2.5">
+                <div className="text-[11px] font-semibold uppercase text-ink-400">{BULK_TEXT.PAY_DETAILS_EDIT}</div>
                 <input value={link} onChange={(e) => setLink(e.target.value)} placeholder={BULK_TEXT.PAY_LINK} title={BULK_TEXT.PAY_LINK_HINT}
-                  className={`min-w-0 flex-1 rounded-md border bg-surface px-2.5 py-1.5 text-[12px] outline-none focus:border-primary ${link && !linkOk ? 'border-crit' : 'border-line'}`} />
-                <button type="button" disabled={busy || !linkOk || link.trim() === (p.link ?? '')} onClick={() => onLink(link.trim())} className={`${btn} border border-line bg-surface hover:bg-alt`}>{BULK_TEXT.PAY_LINK_SAVE}</button>
+                  className={`rounded-md border bg-surface px-2.5 py-1.5 text-[12px] outline-none focus:border-primary ${!linkOk ? 'border-crit' : 'border-line'}`} />
+                <textarea rows={3} maxLength={1000} value={bank} onChange={(e) => setBank(e.target.value)} placeholder={BULK_TEXT.PAY_BANK}
+                  className="rounded-md border border-line bg-surface px-2.5 py-1.5 text-[12px] outline-none focus:border-primary" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" disabled={busy || !linkOk || !detailsChanged} onClick={() => onDetails({ link: link.trim(), bankDetails: bank.trim() })} className={`${btn} border border-line bg-surface hover:bg-alt`}>{BULK_TEXT.PAY_LINK_SAVE}</button>
+                  <span className="text-[11px] text-ink-400">{BULK_TEXT.PAY_QR_HINT}</span>
+                </div>
               </div>
             )}
             {canPay && (
@@ -128,7 +169,7 @@ export function BulkDocumentsSection({ d, canUpload, canPay, busy, uploading, on
             className={`relative flex cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-md border-2 border-dashed px-3 py-4 text-center transition-colors duration-200 ${over ? 'border-primary bg-primary-soft/50' : 'border-line hover:border-primary/50 hover:bg-alt/50'} ${busy ? 'pointer-events-none opacity-70' : ''}`}>
             <Upload className={`size-5 transition-transform duration-200 ${over ? '-translate-y-0.5 text-primary' : 'text-ink-400'}`} />
             <span className="text-[13px] text-ink-900">{uploading ? BULK_TEXT.UPLOADING : BULK_TEXT.DROP_FILE(BULK_DOC_KIND_LABEL[kind])}</span>
-            <span className="text-[11px] text-ink-400">{BULK_TEXT.DROP_TYPES}</span>
+            <span className="text-[11px] text-ink-400">{BULK_TEXT.DROP_TYPES}{kind === BULK_DOC_KIND.PAYMENT_PROOF ? ` · ${BULK_TEXT.PAY_PROOF_HINT(BULK_PAYMENT_PROOFS_MAX)}` : ''}</span>
             {uploading && <span className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-primary-soft"><span className="pf-indeterminate block h-full w-1/3 bg-primary" /></span>}
             <input type="file" accept={BULK_DOC_ACCEPT} className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(kind, f); e.target.value = '' }} />
           </label>

@@ -23,6 +23,7 @@ const rightsOf = (access: Record<string, AccessLevel>, capabilities: Record<stri
   create: BULK_TYPES.filter((t) => access[BULK_PAGE.TYPE[t]] === ACCESS.EDITOR),
   approve: access[BULK_PAGE.APPROVE] === ACCESS.EDITOR,
   verifyPayment: !!capabilities[CAPABILITY.BULK_PAYMENT_VERIFY],
+  paymentDetails: !!capabilities[CAPABILITY.BULK_PAYMENT_DETAILS],
 })
 
 type Page = 'orders' | 'approvals' | 'locations' | 'customers'

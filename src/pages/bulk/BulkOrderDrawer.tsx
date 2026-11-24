@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronDown, RotateCcw, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { approveBulkOrder, cancelBulkOrder, remindBulkOrder, getBulkOrder, rejectBulkOrder, setBulkPayment, setBulkPaymentLink, uploadBulkDocument, type BulkOrderEvent, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
+import { approveBulkOrder, cancelBulkOrder, remindBulkOrder, getBulkOrder, rejectBulkOrder, setBulkPayment, setBulkPaymentDetails, uploadBulkDocument, type BulkOrderEvent, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
 import { Badge, Drawer } from '../../components/ui'
 import {
   BULK_DOC_KIND_LABEL, BULK_DOC_MAX_BYTES, BULK_EVENT_LABEL, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE,
@@ -154,10 +154,12 @@ function Timeline({ events, noMoney = false }: { events: BulkOrderEvent[]; noMon
   )
 }
 
-export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamCanVerifyPayment, onClose, onEdit, onToast }: {
+export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamCanVerifyPayment, teamCanPaymentDetails, onClose, onEdit, onToast }: {
   id: string | null
   /** Our team's view: may they verify payments (special permission "Bulk Orders: verify payments", 2026-11-13). */
   teamCanVerifyPayment?: boolean
+  /** 2026-11-24: 'Bulk Orders: add payment details'. */
+  teamCanPaymentDetails?: boolean
   /** Our team's view (load given): may they upload documents (PO review editor). */
   teamCanUpload?: boolean
   /** The portal person's rights; none = read only (no Edit / Cancel / Approve / Reject). */
@@ -235,9 +237,10 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
   const cancel = useMutation({ mutationFn: () => cancelBulkOrder(id!, reason.trim() || undefined), onSuccess: (r) => done(BULK_TEXT.CANCELLED(r.poNumber))(r), onError: fail })
   const open = !!d && d.status !== BULK_STATUS.REJECTED && d.status !== BULK_STATUS.CANCELLED
   // v2 piece 5b: finance (verify payments) uploads invoices in the portal too
-  const canUpload = open && (team ? !!teamCanUpload : !!rights && (rights.create.includes(d.type) || rights.approve || (rights.verifyPayment && !!d.payment)))
+  const canUpload = open && (team ? !!teamCanUpload : !!rights && (rights.create.includes(d.type) || rights.approve || ((rights.verifyPayment || rights.paymentDetails) && !!d.payment)))
   // who verifies payments (2026-11-13): the special permission, in the portal and in POST_FG (was the portal approver)
   const canPay = open && !!d?.payment && (team ? !!teamCanVerifyPayment : !!rights?.verifyPayment)
+  const canDetails = open && !!d?.payment && (team ? !!teamCanPaymentDetails : !!rights?.paymentDetails)
   const upload = useMutation({
     mutationFn: ({ kind, file }: { kind: string; file: File }) => uploadBulkDocument(id!, kind, file, team),
     onSuccess: (r) => done(BULK_TEXT.UPLOADED(r.documents[0]?.fileName ?? ''))(r),
@@ -254,7 +257,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
     onError: fail,
   })
   const payLink = useMutation({
-    mutationFn: (l: string) => setBulkPaymentLink(id!, l, team),
+    mutationFn: (x: { link?: string; bankDetails?: string }) => setBulkPaymentDetails(id!, x, team),
     onSuccess: (r) => done(BULK_TEXT.PAYMENT_SAVED(BULK_PAYMENT_LABEL[r.payment?.status ?? ''] ?? ''))(r),
     onError: fail,
   })
@@ -415,7 +418,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
           </section>
 
           <BulkDocumentsSection d={d} canUpload={canUpload} canPay={canPay} busy={busy} uploading={upload.isPending}
-            onUpload={pick} onOpen={setViewDoc} onPay={(action, n) => pay.mutate({ action, note: n })} onLink={(l) => payLink.mutate(l)} />
+            onUpload={pick} onOpen={setViewDoc} onPay={(action, n) => pay.mutate({ action, note: n })} canDetails={canDetails} team={team} onDetails={(x) => payLink.mutate(x)} />
 
           {d.events.length > 0 && (
             <section className="rounded-md border border-line">

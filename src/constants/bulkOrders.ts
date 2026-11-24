@@ -112,14 +112,16 @@ export const BULK_PAYMENT_LABEL: Record<string, string> = {
 export const BULK_PAYMENT_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = {
   unbilled: 'neutral', invoiced: 'info', payment_submitted: 'warn', paid: 'ok', not_needed: 'neutral',
 }
-export const BULK_PAYMENT_ACTION = { VERIFY: 'verify', REFUSE: 'refuse', NOT_NEEDED: 'not_needed', SET_LINK: 'set_link' } as const
+export const BULK_PAYMENT_ACTION = { VERIFY: 'verify', REFUSE: 'refuse', NOT_NEEDED: 'not_needed', SET_DETAILS: 'set_details' } as const
+/** 2026-11-24 (user: 'put 3'): proof screenshots per payment (backend BULK_ORDERS.PAYMENT_PROOFS_MAX). */
+export const BULK_PAYMENT_PROOFS_MAX = 3
 export type BulkPaymentAction = (typeof BULK_PAYMENT_ACTION)[keyof typeof BULK_PAYMENT_ACTION]
 
 /** Documents on an order (backend BULK_DOC_KIND); PDF / PNG / JPG up to 10 MB. */
-export const BULK_DOC_KIND = { PROFORMA: 'proforma_invoice', INVOICE: 'invoice', PAYMENT_PROOF: 'payment_proof' } as const
+export const BULK_DOC_KIND = { PROFORMA: 'proforma_invoice', INVOICE: 'invoice', PAYMENT_PROOF: 'payment_proof', PAYMENT_QR: 'payment_qr' } as const
 /** A document's content type -> the file viewer's type (the name may have no extension). */
 export const BULK_DOC_EXT: Record<string, string> = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg' }
-export const BULK_DOC_KIND_LABEL: Record<string, string> = { proforma_invoice: 'Proforma invoice', invoice: 'Invoice', payment_proof: 'Proof of payment' }
+export const BULK_DOC_KIND_LABEL: Record<string, string> = { proforma_invoice: 'Proforma invoice', invoice: 'Invoice', payment_proof: 'Proof of payment', payment_qr: 'Payment QR' }
 export const BULK_DOC_ACCEPT = '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg'
 export const BULK_DOC_MAX_BYTES = 10 * 1024 * 1024
 
@@ -229,6 +231,7 @@ export const BULK_TEXT = {
   NOTIFY_APPROVAL: 'Approval needed (to the approvers)',
   NOTIFY_DECISION: 'Approved / rejected (to the requester)',
   NOTIFY_REMIND: 'Remind (to our COPT team)',
+  NOTIFY_PAYMENT: 'Payment (to the requester: details added, payment verified / refused)',
   AWB: 'AWB',
   COURIER: 'Courier',
   COURIER_STATUS: 'Courier status',
@@ -437,9 +440,16 @@ export const BULK_TEXT = {
   PAY_UPLOADED_SUB: 'Open the proof to check it against the order.',
   PAY_VERIFIED: 'Paid',
   PAY_NOW: 'Pay now',
-  PAY_LINK: 'Payment link (Razorpay)',
-  PAY_LINK_SAVE: 'Save link',
+  PAY_LINK: 'Payment link (https://…)',
+  PAY_LINK_SAVE: 'Save payment details',
   PAY_LINK_HINT: 'Paste the https:// link: the buyer sees a Pay now button.',
+  PAY_DETAILS_TITLE: 'Pay with',
+  PAY_DETAILS_EDIT: 'Payment details (any of: link, QR, bank details)',
+  PAY_BANK: 'Bank details (account, IFSC, UPI …)',
+  PAY_QR_HINT: 'To add a QR code, upload it below as “Payment QR”.',
+  PAY_COPY: 'Copy',
+  PAY_COPIED: 'Copied',
+  PAY_PROOF_HINT: (n: number) => `Up to ${n} screenshots / files for one payment (UTR / reference visible).`,
   GSTIN_VERIFY: 'Verify GSTIN',
   GSTIN_UNVERIFY: 'Mark unverified',
   PAY_NOT_NEEDED: 'Payment not needed',

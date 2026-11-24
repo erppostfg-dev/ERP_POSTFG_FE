@@ -43,7 +43,7 @@ function NotifyCard() {
     onSuccess: (s) => qc.setQueryData(['bulk', 'notify-settings'], s),
   })
   const s = q.data
-  const rows: [keyof BulkNotifySettings, string][] = [['approvalNeeded', BULK_TEXT.NOTIFY_APPROVAL], ['decision', BULK_TEXT.NOTIFY_DECISION], ['remind', BULK_TEXT.NOTIFY_REMIND]]
+  const rows: [keyof BulkNotifySettings, string][] = [['approvalNeeded', BULK_TEXT.NOTIFY_APPROVAL], ['decision', BULK_TEXT.NOTIFY_DECISION], ['remind', BULK_TEXT.NOTIFY_REMIND], ['payment', BULK_TEXT.NOTIFY_PAYMENT]]
   return (
     <div className="flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
       <Mail className="mt-0.5 size-5 shrink-0 text-primary" />
