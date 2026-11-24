@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronDown, RotateCcw, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { approveBulkOrder, cancelBulkOrder, remindBulkOrder, getBulkOrder, rejectBulkOrder, setBulkPayment, uploadBulkDocument, type BulkOrderEvent, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
+import { approveBulkOrder, cancelBulkOrder, remindBulkOrder, getBulkOrder, rejectBulkOrder, setBulkPayment, setBulkPaymentLink, uploadBulkDocument, type BulkOrderEvent, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
 import { Badge, Drawer } from '../../components/ui'
 import {
   BULK_DOC_KIND_LABEL, BULK_DOC_MAX_BYTES, BULK_EVENT_LABEL, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE,
@@ -234,7 +234,8 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
   const reject = useMutation({ mutationFn: () => rejectBulkOrder(id!, reason.trim()), onSuccess: (r) => done(BULK_TEXT.REJECTED(r.poNumber))(r), onError: fail })
   const cancel = useMutation({ mutationFn: () => cancelBulkOrder(id!, reason.trim() || undefined), onSuccess: (r) => done(BULK_TEXT.CANCELLED(r.poNumber))(r), onError: fail })
   const open = !!d && d.status !== BULK_STATUS.REJECTED && d.status !== BULK_STATUS.CANCELLED
-  const canUpload = open && (team ? !!teamCanUpload : !!rights && (rights.create.includes(d.type) || rights.approve))
+  // v2 piece 5b: finance (verify payments) uploads invoices in the portal too
+  const canUpload = open && (team ? !!teamCanUpload : !!rights && (rights.create.includes(d.type) || rights.approve || (rights.verifyPayment && !!d.payment)))
   // who verifies payments (2026-11-13): the special permission, in the portal and in POST_FG (was the portal approver)
   const canPay = open && !!d?.payment && (team ? !!teamCanVerifyPayment : !!rights?.verifyPayment)
   const upload = useMutation({
@@ -252,7 +253,12 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
     onSuccess: (r) => done(BULK_TEXT.PAYMENT_SAVED(BULK_PAYMENT_LABEL[r.payment?.status ?? ''] ?? ''))(r),
     onError: fail,
   })
-  const busy = approve.isPending || reject.isPending || cancel.isPending || upload.isPending || pay.isPending
+  const payLink = useMutation({
+    mutationFn: (l: string) => setBulkPaymentLink(id!, l, team),
+    onSuccess: (r) => done(BULK_TEXT.PAYMENT_SAVED(BULK_PAYMENT_LABEL[r.payment?.status ?? ''] ?? ''))(r),
+    onError: fail,
+  })
+  const busy = approve.isPending || reject.isPending || cancel.isPending || upload.isPending || pay.isPending || payLink.isPending
 
   const row = (k: string, v: React.ReactNode) => (
     <div className="flex justify-between gap-4 py-1.5 text-[13px]"><span className="text-ink-600">{k}</span><span className="text-right text-ink-900">{v}</span></div>
@@ -409,7 +415,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
           </section>
 
           <BulkDocumentsSection d={d} canUpload={canUpload} canPay={canPay} busy={busy} uploading={upload.isPending}
-            onUpload={pick} onOpen={setViewDoc} onPay={(action, n) => pay.mutate({ action, note: n })} />
+            onUpload={pick} onOpen={setViewDoc} onPay={(action, n) => pay.mutate({ action, note: n })} onLink={(l) => payLink.mutate(l)} />
 
           {d.events.length > 0 && (
             <section className="rounded-md border border-line">

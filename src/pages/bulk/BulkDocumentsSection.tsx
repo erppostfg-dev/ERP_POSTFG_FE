@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle2, Clock, FileCheck2, FileText, MinusCircle, Receipt, Upload, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, CreditCard, FileCheck2, FileText, MinusCircle, Receipt, Upload } from 'lucide-react'
 import type { BulkOrderFull } from '../../api/bulkOrders'
 import { BULK_DOC_ACCEPT, BULK_DOC_KIND, BULK_DOC_KIND_LABEL, BULK_PAYMENT, BULK_PAYMENT_ACTION, BULK_TEXT, type BulkPaymentAction } from '../../constants/bulkOrders'
 
@@ -22,12 +22,12 @@ const CARD: Record<string, { icon: typeof Clock; box: string; iconCls: string; t
   [BULK_PAYMENT.AWAITING]: { icon: Clock, box: 'border-line bg-alt/50', iconCls: 'text-ink-400', title: BULK_TEXT.PAY_AWAITING, sub: BULK_TEXT.PAY_AWAITING_SUB },
   [BULK_PAYMENT.UPLOADED]: { icon: FileCheck2, box: 'border-warn/40 bg-warn-soft/60', iconCls: 'text-warn', title: BULK_TEXT.PAY_UPLOADED, sub: BULK_TEXT.PAY_UPLOADED_SUB },
   [BULK_PAYMENT.VERIFIED]: { icon: CheckCircle2, box: 'border-ok/40 bg-ok-soft/60', iconCls: 'text-ok', title: BULK_TEXT.PAY_VERIFIED, sub: '' },
-  [BULK_PAYMENT.REFUSED]: { icon: XCircle, box: 'border-crit/40 bg-crit-soft/60', iconCls: 'text-crit', title: BULK_TEXT.PAY_REFUSED, sub: BULK_TEXT.PAY_REFUSED_SUB },
+  [BULK_PAYMENT.INVOICED]: { icon: CreditCard, box: 'border-info/40 bg-info-soft/60', iconCls: 'text-info', title: BULK_TEXT.PAY_INVOICED, sub: BULK_TEXT.PAY_INVOICED_SUB },
   [BULK_PAYMENT.NOT_NEEDED]: { icon: MinusCircle, box: 'border-line bg-alt/50', iconCls: 'text-ink-400', title: BULK_TEXT.PAY_NOT_NEEDED, sub: '' },
 }
 const KIND_ICON: Record<string, string> = { [BULK_DOC_KIND.PAYMENT_PROOF]: 'bg-ok-soft text-ok', [BULK_DOC_KIND.INVOICE]: 'bg-primary-soft text-primary', [BULK_DOC_KIND.PROFORMA]: 'bg-alt text-ink-600' }
 
-export function BulkDocumentsSection({ d, canUpload, canPay, busy, uploading, onUpload, onOpen, onPay }: {
+export function BulkDocumentsSection({ d, canUpload, canPay, busy, uploading, onUpload, onOpen, onPay, onLink }: {
   d: BulkOrderFull
   canUpload: boolean
   /** "Bulk Orders: verify payments". */
@@ -38,8 +38,13 @@ export function BulkDocumentsSection({ d, canUpload, canPay, busy, uploading, on
   /** Opens a document in the in-app viewer. */
   onOpen: (docId: string) => void
   onPay: (action: BulkPaymentAction, note: string) => void
+  /** v2 piece 5b: finance saves the payment link. */
+  onLink: (link: string) => void
 }) {
   const p = d.payment
+  const [link, setLink] = useState(p?.link ?? '')
+  const linkOk = /^https:\/\/[^\s/]+\.\S+$/i.test(link.trim())
+  const open = !!p && p.status !== BULK_PAYMENT.VERIFIED && p.status !== BULK_PAYMENT.NOT_NEEDED
   // a proof only where the order has a payment check (not Marketing)
   const kinds = Object.values(BULK_DOC_KIND).filter((k) => k !== BULK_DOC_KIND.PAYMENT_PROOF || !!p)
   const [kindPicked, setKind] = useState('')
@@ -65,6 +70,15 @@ export function BulkDocumentsSection({ d, canUpload, canPay, busy, uploading, on
               : card.sub && <div className="text-[12px] text-ink-600">{card.sub}</div>}
             {p.status === BULK_PAYMENT.UPLOADED && latestProof && <div className="text-[12px] text-ink-600">{latestProof.fileName} · {latestProof.by.name} · {when(latestProof.at)}</div>}
             {p.note && <div className="mt-1.5 rounded-md bg-surface/70 px-2.5 py-1.5 text-[12px] text-ink-600">“{p.note}”</div>}
+            {/* v2 piece 5b: the buyer pays with finance's link */}
+            {p.link && open && <a href={p.link} target="_blank" rel="noopener noreferrer" className={`${btn} mt-2.5 inline-flex items-center gap-1.5 bg-primary text-white hover:opacity-90`}><CreditCard className="size-4" />{BULK_TEXT.PAY_NOW}</a>}
+            {canPay && open && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <input value={link} onChange={(e) => setLink(e.target.value)} placeholder={BULK_TEXT.PAY_LINK} title={BULK_TEXT.PAY_LINK_HINT}
+                  className={`min-w-0 flex-1 rounded-md border bg-surface px-2.5 py-1.5 text-[12px] outline-none focus:border-primary ${link && !linkOk ? 'border-crit' : 'border-line'}`} />
+                <button type="button" disabled={busy || !linkOk || link.trim() === (p.link ?? '')} onClick={() => onLink(link.trim())} className={`${btn} border border-line bg-surface hover:bg-alt`}>{BULK_TEXT.PAY_LINK_SAVE}</button>
+              </div>
+            )}
             {canPay && (
               <div className="mt-2.5 flex flex-wrap gap-2">
                 {latestProof && p.status === BULK_PAYMENT.UPLOADED && (

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import {
-  addInstCustomer, addInstCustomerAddress, listInstCustomers, setInstCustomerAddressActive, updateInstCustomer,
+  addInstCustomer, addInstCustomerAddress, listInstCustomers, setInstCustomerAddressActive, updateInstCustomer, verifyInstCustomerGstin,
   type BulkAddress, type BulkInstCustomer, type BulkInstCustomerInput, type BulkRights,
 } from '../../api/bulkOrders'
 import { PageTitle } from '../../components/ui'
@@ -129,6 +129,8 @@ export default function BulkCustomers({ rights }: { rights: BulkRights }) {
     mutationFn: (c: BulkInstCustomer) => updateInstCustomer(c.id, { ...fromInput(c), active: !c.active }),
     onSuccess: refresh,
   })
+  // v2 piece 5b: finance verifies a GSTIN
+  const gstin = useMutation({ mutationFn: (x: { id: string; verified: boolean }) => verifyInstCustomerGstin(x.id, x.verified), onSuccess: refresh })
   const shipToggle = useMutation({ mutationFn: (x: { c: string; a: string; active: boolean }) => setInstCustomerAddressActive(x.c, x.a, x.active), onSuccess: refresh })
 
   return (
@@ -154,6 +156,7 @@ export default function BulkCustomers({ rights }: { rights: BulkRights }) {
                         <button onClick={() => setOpen(open === c.id ? null : c.id)} className="text-left text-[13.5px] font-semibold text-ink-900 hover:text-primary">{c.companyName}</button>
                         {c.gstin && <span className="font-mono text-[12px] text-ink-600">{c.gstin}</span>}
                         {c.gstin && <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.gstinVerified ? 'bg-ok-soft text-ok' : 'bg-warn-soft text-warn'}`}>{c.gstinVerified ? BULK_TEXT.GSTIN_VERIFIED : BULK_TEXT.GSTIN_UNVERIFIED}</span>}
+                        {c.gstin && rights.verifyPayment && <button disabled={gstin.isPending} onClick={() => gstin.mutate({ id: c.id, verified: !c.gstinVerified })} className="rounded-md border border-line px-2 py-0.5 text-[11.5px] text-ink-600">{c.gstinVerified ? BULK_TEXT.GSTIN_UNVERIFY : BULK_TEXT.GSTIN_VERIFY}</button>}
                         {!c.active && <span className="rounded-full bg-alt px-2 py-0.5 text-[11px] text-ink-600">{BULK_TEXT.CUSTOMER_OFF}</span>}
                         <span className="ml-auto text-[12px] text-ink-600">{c.contactName} · {c.contactPhone} · {c.defaultDiscountPct}%</span>
                         {canEdit && <button onClick={() => setEditing(c.id)} className="rounded-md border border-line px-2 py-0.5 text-[12px] font-semibold">{BULK_TEXT.CUSTOMER_EDIT}</button>}

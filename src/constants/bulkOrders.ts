@@ -12,6 +12,7 @@ export const BULK_ENDPOINT = {
   CUSTOMERS: '/bulk-orders/customers',
   CUSTOMER: (id: string) => `/bulk-orders/customers/${encodeURIComponent(id)}`,
   CUSTOMER_ADDRESSES: (id: string) => `/bulk-orders/customers/${encodeURIComponent(id)}/addresses`,
+  CUSTOMER_GSTIN: (id: string) => `/bulk-orders/customers/${encodeURIComponent(id)}/gstin`,
   CUSTOMER_ADDRESS: (id: string, addressId: string) => `/bulk-orders/customers/${encodeURIComponent(id)}/addresses/${encodeURIComponent(addressId)}`,
   ORDER: (id: string) => `/bulk-orders/${encodeURIComponent(id)}`,
   CANCEL: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/cancel`,
@@ -103,14 +104,15 @@ export const BULK_EVENT_LABEL: Record<string, string> = {
  * Payment check (backend BULK_PAYMENT_STATUS, 2026-11-12): only orders whose type has it ON (Settings); never blocks
  * approval or processing; people with "Bulk Orders: verify payments" verify / refuses the proof or marks it not needed.
  */
-export const BULK_PAYMENT = { AWAITING: 'awaiting_proof', UPLOADED: 'proof_uploaded', VERIFIED: 'verified', REFUSED: 'refused', NOT_NEEDED: 'not_needed' } as const
+/** v2 piece 5b (2026-11-24, PRD): Unbilled -> Invoiced -> Payment submitted -> Paid (a refused proof = back to Invoiced). */
+export const BULK_PAYMENT = { AWAITING: 'unbilled', INVOICED: 'invoiced', UPLOADED: 'payment_submitted', VERIFIED: 'paid', NOT_NEEDED: 'not_needed' } as const
 export const BULK_PAYMENT_LABEL: Record<string, string> = {
-  awaiting_proof: 'Awaiting proof', proof_uploaded: 'Proof uploaded · to check', verified: 'Payment verified', refused: 'Proof refused', not_needed: 'Not needed',
+  unbilled: 'Unbilled', invoiced: 'Invoiced', payment_submitted: 'Payment submitted · to check', paid: 'Paid', not_needed: 'Not needed',
 }
 export const BULK_PAYMENT_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = {
-  awaiting_proof: 'neutral', proof_uploaded: 'warn', verified: 'ok', refused: 'crit', not_needed: 'info',
+  unbilled: 'neutral', invoiced: 'info', payment_submitted: 'warn', paid: 'ok', not_needed: 'neutral',
 }
-export const BULK_PAYMENT_ACTION = { VERIFY: 'verify', REFUSE: 'refuse', NOT_NEEDED: 'not_needed' } as const
+export const BULK_PAYMENT_ACTION = { VERIFY: 'verify', REFUSE: 'refuse', NOT_NEEDED: 'not_needed', SET_LINK: 'set_link' } as const
 export type BulkPaymentAction = (typeof BULK_PAYMENT_ACTION)[keyof typeof BULK_PAYMENT_ACTION]
 
 /** Documents on an order (backend BULK_DOC_KIND); PDF / PNG / JPG up to 10 MB. */
@@ -427,13 +429,19 @@ export const BULK_TEXT = {
   PAYMENT_NOT_NEEDED: 'Payment not needed',
   /** Payment card + documents (2026-11-13, BulkDocumentsSection). */
   DOCUMENTS_ONLY: 'Documents',
-  PAY_AWAITING: 'Waiting for the proof of payment',
-  PAY_AWAITING_SUB: 'Upload it below when it comes. It never holds the order.',
-  PAY_UPLOADED: 'Proof uploaded · waiting to be checked',
+  PAY_AWAITING: 'Unbilled · waiting for the invoice',
+  PAY_AWAITING_SUB: 'Finance uploads the invoice and the payment link here. It never holds the order.',
+  PAY_INVOICED: 'Invoiced · waiting for the payment',
+  PAY_INVOICED_SUB: 'Pay with the link, then upload the proof of payment (PDF / JPG / PNG with the UTR / reference no.).',
+  PAY_UPLOADED: 'Payment submitted · waiting to be checked',
   PAY_UPLOADED_SUB: 'Open the proof to check it against the order.',
-  PAY_VERIFIED: 'Payment verified',
-  PAY_REFUSED: 'Proof refused',
-  PAY_REFUSED_SUB: 'Upload a new proof below.',
+  PAY_VERIFIED: 'Paid',
+  PAY_NOW: 'Pay now',
+  PAY_LINK: 'Payment link (Razorpay)',
+  PAY_LINK_SAVE: 'Save link',
+  PAY_LINK_HINT: 'Paste the https:// link: the buyer sees a Pay now button.',
+  GSTIN_VERIFY: 'Verify GSTIN',
+  GSTIN_UNVERIFY: 'Mark unverified',
   PAY_NOT_NEEDED: 'Payment not needed',
   PAY_BY: (name: string, at: string) => `by ${name} · ${at}`,
   REVIEW_VERIFY: 'Review & verify',

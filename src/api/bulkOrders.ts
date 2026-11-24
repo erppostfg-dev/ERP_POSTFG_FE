@@ -56,7 +56,11 @@ export interface BulkOrder {
   decidedAt: string | null
   decisionNote: string | null
   /** null = no payment check on this order (off for its type when it was created). */
-  payment: { status: string; by: { id: number; name: string | null } | null; at: string | null; note: string | null } | null
+  payment: {
+    status: string; by: { id: number; name: string | null } | null; at: string | null; note: string | null
+    /** v2 piece 5b: the Razorpay link finance pasted (the buyer's Pay now). */
+    link: string | null; linkAt: string | null
+  } | null
   /** Institutional requester details (null on Marketing orders; 2026-11-12). */
   institution: {
     /** v2 piece 5a: the saved customer it was placed for (null = typed) + whether finance verified its GSTIN (null = typed). */
@@ -287,6 +291,12 @@ export async function getBulkDocumentBytes(id: string, docId: string, team: bool
 /** Opens in a new tab (the browser sends the login cookie). */
 export const bulkDocumentUrl = (id: string, docId: string, team = false) => apiUrl(team ? BULK_ENDPOINT.TEAM_DOCUMENT(id, docId) : BULK_ENDPOINT.DOCUMENT(id, docId))
 /** team = POST_FG's route (2026-11-13); both need "Bulk Orders: verify payments". */
+/** v2 piece 5b: finance pastes the payment link (https). */
+export const setBulkPaymentLink = (id: string, link: string, team = false) =>
+  api<BulkOrderFull>(team ? BULK_ENDPOINT.TEAM_PAYMENT(id) : BULK_ENDPOINT.PAYMENT(id), { method: 'POST', body: JSON.stringify({ action: 'set_link', link }) })
+/** v2 piece 5b: finance verifies (true) or un-verifies a customer's GSTIN. */
+export const verifyInstCustomerGstin = (id: string, verified: boolean) =>
+  api<BulkInstCustomer>(BULK_ENDPOINT.CUSTOMER_GSTIN(id), { method: 'POST', body: JSON.stringify({ verified }) })
 export const setBulkPayment = (id: string, action: string, note?: string, team = false) =>
   api<BulkOrderFull>(team ? BULK_ENDPOINT.TEAM_PAYMENT(id) : BULK_ENDPOINT.PAYMENT(id), { method: 'POST', body: JSON.stringify(note ? { action, note } : { action }) })
 export const listBulkSettings = () => api<BulkSetting[]>(BULK_ENDPOINT.SETTINGS)
