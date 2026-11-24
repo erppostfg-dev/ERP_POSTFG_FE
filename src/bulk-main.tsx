@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import BulkApp from './pages/bulk/BulkApp'
 import { QUERY_CACHE } from './constants/ui'
 import './index.css'
+import './bulk.css'
 import { blockNumberStepping } from './lib/numberInputs'
 
 /*

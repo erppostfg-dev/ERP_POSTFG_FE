@@ -160,7 +160,8 @@ export const BULK_TEXT = {
   ORDERS_SUB: 'Create, submit and track bulk orders. Prices are our MRP less your discount; an approver checks every order.',
   LOCATIONS_TITLE: 'Saved locations',
   LOCATIONS_SUB: 'Delivery addresses saved from the order form. Pick one in a new order instead of typing it again.',
-  CREATE: 'Create order',
+  /** PRD v2: the order is placed later by our team, so the portal asks for it. */
+  CREATE: 'Create order request',
   SIGN_IN_TITLE: 'Bulk orders portal',
   SIGN_IN_SUB: 'Marketing and institutional bulk orders for mCaffeine.',
   SIGN_IN: 'Sign in with Google',
