@@ -41,6 +41,8 @@ export interface BulkOrder {
   totalValue: number
   createdBy: { id: number; name: string | null }
   createdAt: string
+  /** v2 1e: times changed after it was submitted ("Edited" tag). */
+  editCount: number
   decidedBy: { id: number; name: string | null } | null
   decidedAt: string | null
   decisionNote: string | null
@@ -96,6 +98,9 @@ export interface BulkOrderEvent {
   changes: {
     lines?: { lineNo: number; pepCode: string; qty?: [number, number]; discountPct?: [number, number]; mrp?: [number, number]; removed?: boolean }[]
     fields?: string[]
+    /** v2 1e: edited: each field old -> new, each line added / removed / changed. */
+    fieldChanges?: { field: string; from: string | number | null; to: string | number | null }[]
+    lineChanges?: { pepCode: string; change: 'added' | 'removed' | 'changed'; qty?: [number, number]; discountPct?: [number, number] }[]
     /** v2 1c: created / edited: the reasons approval is needed ([] = none); an edit's order status move is in `status`. */
     approval?: string[]
     /** document_added */
@@ -128,6 +133,8 @@ export interface BulkOrderInput {
   priority: string
   note?: string
   fastTrackRemarks?: string
+  /** v2 1e: required on an edit. */
+  remark?: string
   purpose?: string
   lines: { pepCode: string; qty: number; discountPct?: number }[]
   /** Institutional only (required: name + billing address or billingSameAsDelivery). */

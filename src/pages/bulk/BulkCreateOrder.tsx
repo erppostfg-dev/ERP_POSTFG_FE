@@ -132,6 +132,8 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
     : { orderedBy: '', neededBy: '', receiverName: '', receiverPhone: '', mode: BULK_MODES[1], priority: BULK_PRIORITIES[0], note: '', fastTrackRemarks: '', purpose: '' })
   // v2 1d: a field's error shows once it was left (blur), and every error on the Review step
   const [touched, setTouched] = useState<Set<string>>(new Set())
+  // v2 1e: an edit says why (required, kept in the history)
+  const [editRemark, setEditRemark] = useState('')
   const leave = (k: string) => () => setTouched((t) => (t.has(k) ? t : new Set(t).add(k)))
   const [where, setWhere] = useState<string>(initial?.location.id ?? 'new') // 'new' or a saved location id
   const [address, setAddress] = useState(initial && !initial.location.id ? { ...initial.location.address } : { line: '', city: '', state: '', pincode: '' })
@@ -195,6 +197,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const submit = () => {
     setErrors([])
     save.mutate({
+      ...(initial ? { remark: editRemark.trim() } : {}),
       type,
       orderedBy: form.orderedBy.trim(),
       receiverName: form.receiverName.trim(),
@@ -230,7 +233,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
         // v2 1d: from the delivery step the Review step opens even with errors (it lists them); Submit waits for none
         <button onClick={() => setStep(step + 1)} disabled={step === 1 && !itemsOk} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{BULK_TEXT.NEXT}</button>
       ) : (
-        <button onClick={submit} disabled={save.isPending || !itemsOk || !deliveryOk} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{save.isPending ? BULK_TEXT.SUBMITTING : initial ? BULK_TEXT.SAVE_CHANGES : BULK_TEXT.SUBMIT}</button>
+        <button onClick={submit} disabled={save.isPending || !itemsOk || !deliveryOk || (!!initial && !editRemark.trim())} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{save.isPending ? BULK_TEXT.SUBMITTING : initial ? BULK_TEXT.SAVE_CHANGES : BULK_TEXT.SUBMIT}</button>
       )}
     </>
   )
@@ -358,6 +361,13 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
         <div>
           <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.REVIEW_TITLE}</h3>
           <p className="mb-2 text-[12px] text-ink-600">{BULK_TEXT.REVIEW_SUB}</p>
+          {initial && (
+            <label className="mb-3 flex flex-col gap-1">
+              <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.EDIT_REMARK}</span>
+              <textarea rows={2} maxLength={500} className={`${input} ${editRemark.trim() ? '' : 'border-warn'}`} value={editRemark} onChange={(e) => setEditRemark(e.target.value)} />
+              <span className="text-[11px] text-ink-400">{BULK_TEXT.EDIT_REMARK_HINT}</span>
+            </label>
+          )}
           {allProblems.length > 0 && (
             <div className="mb-3 rounded-md bg-crit-soft px-3 py-2 text-[12.5px] text-crit">
               <div className="font-semibold">{BULK_TEXT.REVIEW_FIX}</div>

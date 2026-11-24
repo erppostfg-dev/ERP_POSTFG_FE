@@ -107,7 +107,7 @@ export function BulkOrdersTab({ onCount, canEdit }: { onCount: (n: number) => vo
                 <tbody>
                   {rows.map((o) => (
                     <tr key={o.id} onClick={() => setOpenId(o.id)} className="cursor-pointer border-t border-line text-[13px] hover:bg-alt/50">
-                      <td className="px-3 py-2.5"><div className="font-mono font-semibold">{o.poNumber}</div><div className="text-[11px] text-ink-600">{when(o.createdAt)}</div></td>
+                      <td className="px-3 py-2.5"><div className="font-mono font-semibold">{o.poNumber}{o.editCount > 0 && <span title={BULK_TEXT.EDITED_TAG_TITLE(o.editCount)} className="ml-1.5 rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-semibold text-warn">{BULK_TEXT.EDITED_TAG}</span>}</div><div className="text-[11px] text-ink-600">{when(o.createdAt)}</div></td>
                       <td className="px-3 py-2.5"><div className="font-medium">{o.orderedBy}</div><div className="text-[11px] text-ink-600">{o.createdBy.name}</div></td>
                       <td className="whitespace-nowrap px-3 py-2.5">{o.neededBy ? day(o.neededBy) : "–"}</td>
                       <td className="px-3 py-2.5"><div className="max-w-[200px] truncate">{o.location.label ?? o.location.address.line}</div><div className="text-[11px] text-ink-600">{o.location.address.city} {o.location.address.pincode}</div></td>

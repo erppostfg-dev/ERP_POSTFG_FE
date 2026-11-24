@@ -127,7 +127,7 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
               <tbody>
                 {rows.map((o) => (
                   <tr key={o.id} onClick={() => setOpenId(o.id)} className="cursor-pointer border-t border-line text-[13px] hover:bg-alt/50">
-                    <td className="px-3 py-2.5"><div className="font-mono font-semibold text-ink-900">{o.poNumber}</div><div className="text-[11px] text-ink-600">{when(o.createdAt)}</div></td>
+                    <td className="px-3 py-2.5"><div className="font-mono font-semibold text-ink-900">{o.poNumber}{o.editCount > 0 && <span title={BULK_TEXT.EDITED_TAG_TITLE(o.editCount)} className="ml-1.5 rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-semibold text-warn">{BULK_TEXT.EDITED_TAG}</span>}</div><div className="text-[11px] text-ink-600">{when(o.createdAt)}</div></td>
                     <td className="px-3 py-2.5"><div className="font-medium text-ink-900">{o.orderedBy}</div><div className="text-[11px] text-ink-600">{BULK_TYPE_LABEL[o.type]}</div></td>
                     <td className="px-3 py-2.5"><div className="font-medium tnum">{o.totalUnits} {BULK_TEXT.TOTAL_UNITS}</div><div className="text-[11px] text-ink-600">{o.lineCount} SKU{o.lineCount === 1 ? '' : 's'}</div></td>
                     <td className="px-3 py-2.5 whitespace-nowrap">{o.neededBy ? day(o.neededBy) : "–"}</td>

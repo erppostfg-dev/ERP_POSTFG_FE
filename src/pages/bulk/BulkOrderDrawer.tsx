@@ -6,7 +6,7 @@ import { approveBulkOrder, cancelBulkOrder, getBulkOrder, rejectBulkOrder, setBu
 import { Badge, Drawer } from '../../components/ui'
 import {
   BULK_DOC_KIND_LABEL, BULK_DOC_MAX_BYTES, BULK_EVENT_LABEL, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE,
-  BULK_EDITABLE, BULK_FIXED_PRICE, bulkHidesMoney, BULK_PROCESS_TYPES, BULK_PROCESSABLE, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_STEP_OF, BULK_STEPS, BULK_TEXT, BULK_TYPE_LABEL, type BulkPaymentAction,
+  BULK_EDITABLE, BULK_FIELD_LABEL, BULK_FIXED_PRICE, bulkHidesMoney, BULK_PROCESS_TYPES, BULK_PROCESSABLE, BULK_STATUS, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_STEP_OF, BULK_STEPS, BULK_TEXT, BULK_TYPE_LABEL, type BulkPaymentAction,
 } from '../../constants/bulkOrders'
 import { BulkProcessPanel } from '../ops/BulkProcessPanel'
 import { BulkDocumentViewer } from './BulkDocumentViewer'
@@ -90,6 +90,9 @@ function StatusTimeline({ d }: { d: BulkOrderFull }) {
   )
 }
 
+/** A history value as words: dates as stored, empty as "(empty)". */
+const show = (v: string | number | null): string => (v === null || v === '' ? BULK_TEXT.EMPTY_VALUE : String(v).slice(0, 80))
+
 function Timeline({ events, noMoney = false }: { events: BulkOrderEvent[]; noMoney?: boolean }) {
   return (
     <ol className="relative ml-1 border-l border-line pl-4">
@@ -110,7 +113,17 @@ function Timeline({ events, noMoney = false }: { events: BulkOrderEvent[]; noMon
           ))}
           {e.action === 'edited' && e.changes?.status && <div className="text-[12px] text-ink-600">{BULK_TEXT.EVENT_STATUS(BULK_STATUS_LABEL[e.changes.status[0]] ?? e.changes.status[0], BULK_STATUS_LABEL[e.changes.status[1]] ?? e.changes.status[1])}</div>}
           {e.changes?.approval && (e.action === 'created' || (e.action === 'edited' && e.changes.status)) && <div className="text-[12px] text-ink-600">{e.changes.approval.length ? BULK_TEXT.EVENT_APPROVAL(e.changes.approval.join(', ')) : BULK_TEXT.EVENT_NO_APPROVAL}</div>}
-          {e.changes?.fields && e.changes.fields.length > 0 && <div className="text-[12px] text-ink-600">{BULK_TEXT.EDITED_FIELDS(e.changes.fields.length)}</div>}
+          {e.changes?.fieldChanges
+            ? e.changes.fieldChanges.map((f) => <div key={f.field} className="text-[12px] text-ink-600">{BULK_TEXT.CHANGE_FROM_TO(BULK_FIELD_LABEL[f.field] ?? f.field, show(f.from), show(f.to))}</div>)
+            : e.changes?.fields && e.changes.fields.length > 0 && <div className="text-[12px] text-ink-600">{BULK_TEXT.EDITED_FIELDS(e.changes.fields.length)}</div>}
+          {e.changes?.lineChanges?.map((c) => (
+            <div key={`${c.pepCode}-${c.change}`} className="text-[12px] text-ink-600">
+              {c.change === 'added' ? BULK_TEXT.LINE_ADDED(c.pepCode, c.qty?.[1] ?? 0) : c.change === 'removed' ? BULK_TEXT.LINE_REMOVED(c.pepCode) : [
+                c.qty && BULK_TEXT.CHANGE_FROM_TO(`${c.pepCode} qty`, String(c.qty[0]), String(c.qty[1])),
+                !noMoney && c.discountPct && BULK_TEXT.CHANGE_FROM_TO(`${c.pepCode} discount`, `${c.discountPct[0]}%`, `${c.discountPct[1]}%`),
+              ].filter(Boolean).join(', ')}
+            </div>
+          ))}
           {e.changes?.fileName && <div className="text-[12px] text-ink-600">{BULK_DOC_KIND_LABEL[e.changes.kind ?? ''] ?? e.changes.kind}: {e.changes.fileName}{e.changes.replaced?.length ? ` (${BULK_TEXT.REPLACED} ${e.changes.replaced.join(', ')})` : ''}</div>}
           {e.changes?.saleOrderCode && <div className="text-[12px] text-ink-600"><span className="font-mono">{e.changes.saleOrderCode}</span>{e.changes.facilityCode ? ` · ${e.changes.facilityCode} · ${e.changes.uniwareChannel ?? ''} · ${e.changes.customerCode ?? ''}` : ''}</div>}
           {e.changes?.status && <div className="text-[12px] text-ink-600">{BULK_TEXT.CHANGED('', BULK_PAYMENT_LABEL[e.changes.status[0]] ?? e.changes.status[0], BULK_PAYMENT_LABEL[e.changes.status[1]] ?? e.changes.status[1]).trim()}</div>}
@@ -245,6 +258,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
       {error && <div className="mb-3 rounded-md bg-crit-soft px-3 py-2 text-[12px] text-crit">{error}</div>}
       {d && (
         <div className="flex flex-col gap-5">
+          {d.editCount > 0 && <p className="rounded-md bg-warn-soft px-3 py-2 text-[12.5px] text-ink-900">{BULK_TEXT.EDITED_BANNER(d.editCount)}</p>}
           <section>
             <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{BULK_TEXT.STATUS_TIMELINE}</h3>
             <StatusTimeline d={d} />

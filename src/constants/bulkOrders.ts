@@ -339,6 +339,16 @@ export const BULK_TEXT = {
   CHANGED: (what: string, from: string, to: string) => `${what} ${from} → ${to}`,
   REMOVED: 'removed',
   EDITED_FIELDS: (n: number) => `${n} detail${n === 1 ? '' : 's'} changed`,
+  /** v2 1e: edits need a remark; the history shows old -> new. */
+  EDIT_REMARK: 'Why are you changing this order?',
+  EDIT_REMARK_HINT: 'Required. Kept in the order history with the changes.',
+  EDITED_TAG: 'Edited',
+  EDITED_TAG_TITLE: (n: number) => `Changed ${n} time${n === 1 ? '' : 's'} after it was submitted: see History`,
+  EDITED_BANNER: (n: number) => `This order was changed ${n} time${n === 1 ? '' : 's'} after it was submitted. The changes are in History below.`,
+  CHANGE_FROM_TO: (label: string, from: string, to: string) => `${label}: ${from} → ${to}`,
+  LINE_ADDED: (code: string, qty: number) => `${code}: added (${qty})`,
+  LINE_REMOVED: (code: string) => `${code}: removed`,
+  EMPTY_VALUE: '(empty)',
   // Institutional requester details (2026-11-12, required where marked)
   INSTITUTION_TITLE: 'Institution (billing)',
   INSTITUTION_SUB: 'Used for the invoice and the customer in Uniware.',
@@ -378,3 +388,12 @@ export const BULK_TEXT = {
   FIXED_PRICE_NOTE: (price: string) => `Every unit goes to Uniware at ${price} (no discount). Type the Uniware channel (e.g. JIVA) and its customer code.`,
   PAYMENT_PENDING_NOTE: 'Payment not verified yet: you can still create the sale order; check payment before dispatch.',
 } as const
+
+/** v2 1e: names of the order fields in the history (backend field keys -> words). */
+export const BULK_FIELD_LABEL: Record<string, string> = {
+  orderedBy: 'Ordered by', receiverName: 'Receiver', receiverPhone: 'Receiver phone', neededBy: 'Needed by',
+  deliveryMode: 'Order mode', priority: 'Priority', note: 'Special instructions', fastTrackRemarks: 'Why urgent', purpose: 'Purpose',
+  locationId: 'Saved location', locationLabel: 'Location name', addressLine: 'Address', city: 'City', state: 'State', pincode: 'Pincode',
+  institutionName: 'Institution', gstin: 'GSTIN', contactEmail: 'Contact email',
+  billingAddressLine: 'Billing address', billingCity: 'Billing city', billingState: 'Billing state', billingPincode: 'Billing pincode',
+}
