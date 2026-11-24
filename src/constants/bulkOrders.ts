@@ -14,6 +14,9 @@ export const BULK_ENDPOINT = {
   DOCUMENT: (id: string, docId: string) => `/bulk-orders/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}`,
   PAYMENT: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/payment`,
   SETTINGS: '/bulk-orders/settings',
+  /** v2 piece 3: email switches (admin) + the requester's reminder. */
+  NOTIFY_SETTINGS: '/bulk-orders/settings/notifications',
+  REMIND: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/remind`,
   SETTING: (type: string) => `/bulk-orders/settings/${encodeURIComponent(type)}`,
   SKUS: '/bulk-orders/skus',
   LOCATIONS: '/bulk-orders/locations',
@@ -86,7 +89,7 @@ export const bulkHidesMoney = (type: string): boolean => BULK_FIXED_PRICE[type a
 /** Timeline words per event (backend BULK_EVENT). */
 export const BULK_EVENT_LABEL: Record<string, string> = {
   created: 'Created', edited: 'Edited', cancelled: 'Cancelled', approved: 'Approved', rejected: 'Rejected', document_added: 'Document uploaded', payment: 'Payment',
-  processed: 'Sale order created', sent_back: 'Sale order sent back', submitted: 'Submitted', tracking: 'Courier update (Uniware)',
+  processed: 'Sale order created', sent_back: 'Sale order sent back', submitted: 'Submitted', tracking: 'Courier update (Uniware)', reminded: 'Reminder sent to our team',
 }
 
 /**
@@ -173,6 +176,19 @@ export const BULK_TEXT = {
   STAT_DISPATCHED_HINT: 'Set by Uniware when the shipment leaves the warehouse',
   /** v2 piece 4: courier tracking (from Uniware). */
   TRACKING: 'Courier tracking',
+  /** v2 piece 3: bell, remind, email switches. */
+  BELL: 'Notifications',
+  BELL_EMPTY: 'Nothing new.',
+  REMIND: 'Remind our team',
+  REMIND_AT: (t: string) => `Remind possible from ${t}`,
+  REMIND_HINT: 'Sends a reminder to our team (bell + email) to place this order.',
+  REMINDED: (po: string) => `Reminder sent for ${po}`,
+  NOTIFY_TITLE: 'Notifications (email)',
+  NOTIFY_SUB: 'The bell always shows these. These switches only control the emails.',
+  NOTIFY_EMAILS: 'Send emails',
+  NOTIFY_APPROVAL: 'Approval needed (to the approvers)',
+  NOTIFY_DECISION: 'Approved / rejected (to the requester)',
+  NOTIFY_REMIND: 'Remind (to our COPT team)',
   AWB: 'AWB',
   COURIER: 'Courier',
   COURIER_STATUS: 'Courier status',

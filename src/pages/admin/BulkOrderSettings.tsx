@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Package } from 'lucide-react'
+import { AlertTriangle, Mail, Package } from 'lucide-react'
 import { useState } from 'react'
-import { listBulkSettings, updateBulkSetting, type BulkSetting } from '../../api/bulkOrders'
+import { getBulkNotifySettings, listBulkSettings, saveBulkNotifySettings, updateBulkSetting, type BulkNotifySettings, type BulkSetting } from '../../api/bulkOrders'
 import { BULK_TEXT, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
 import { Toggle } from '../ops/VerifySettings'
 
@@ -34,6 +34,40 @@ function ApprovalOver({ s, busy, onSave }: { s: BulkSetting; busy: boolean; onSa
   )
 }
 
+/** v2 piece 3: the one place for bulk order emails (the bell always shows them). */
+function NotifyCard() {
+  const qc = useQueryClient()
+  const q = useQuery({ queryKey: ['bulk', 'notify-settings'], queryFn: getBulkNotifySettings })
+  const save = useMutation({
+    mutationFn: (change: Partial<BulkNotifySettings>) => saveBulkNotifySettings(change),
+    onSuccess: (s) => qc.setQueryData(['bulk', 'notify-settings'], s),
+  })
+  const s = q.data
+  const rows: [keyof BulkNotifySettings, string][] = [['approvalNeeded', BULK_TEXT.NOTIFY_APPROVAL], ['decision', BULK_TEXT.NOTIFY_DECISION], ['remind', BULK_TEXT.NOTIFY_REMIND]]
+  return (
+    <div className="flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
+      <Mail className="mt-0.5 size-5 shrink-0 text-primary" />
+      <div className="flex-1">
+        <div className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.NOTIFY_TITLE}</div>
+        <p className="mt-1 max-w-3xl text-[12.5px] text-ink-600">{BULK_TEXT.NOTIFY_SUB}</p>
+        {s && (
+          <div className="mt-2 space-y-1.5">
+            <div className="flex items-center justify-between gap-3 text-[13px] font-semibold text-ink-900">{BULK_TEXT.NOTIFY_EMAILS}
+              <Toggle on={s.emails} busy={save.isPending} onChange={(on) => save.mutate({ emails: on })} />
+            </div>
+            {rows.map(([k, label]) => (
+              <div key={k} className={`flex items-center justify-between gap-3 pl-3 text-[12.5px] ${s.emails ? 'text-ink-600' : 'text-ink-400'}`}>{label}
+                <Toggle on={s[k]} busy={save.isPending || !s.emails} onChange={(on) => save.mutate({ [k]: on })} />
+              </div>
+            ))}
+          </div>
+        )}
+        {(q.error ?? save.error) && <p className="mt-1 text-[12px] text-crit">{(q.error ?? save.error)?.message}</p>}
+      </div>
+    </div>
+  )
+}
+
 export function BulkOrderSettings() {
   const qc = useQueryClient()
   const list = useQuery({ queryKey: ['bulk', 'settings'], queryFn: listBulkSettings })
@@ -45,6 +79,7 @@ export function BulkOrderSettings() {
   return (
     <div className="space-y-3">
       <p className="max-w-3xl text-[12.5px] text-ink-600">{BULK_TEXT.SETTINGS_SUB}</p>
+      <NotifyCard />
       {list.data?.map((s) => (
         <div key={s.type} className="flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
           <Package className="mt-0.5 size-5 shrink-0 text-primary" />

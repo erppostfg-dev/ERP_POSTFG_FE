@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronDown, RotateCcw, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { approveBulkOrder, cancelBulkOrder, getBulkOrder, rejectBulkOrder, setBulkPayment, uploadBulkDocument, type BulkOrderEvent, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
+import { approveBulkOrder, cancelBulkOrder, remindBulkOrder, getBulkOrder, rejectBulkOrder, setBulkPayment, uploadBulkDocument, type BulkOrderEvent, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
 import { Badge, Drawer } from '../../components/ui'
 import {
   BULK_DOC_KIND_LABEL, BULK_DOC_MAX_BYTES, BULK_EVENT_LABEL, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE,
@@ -193,6 +193,14 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
   const canDecide = !!d && pending && !!rights?.approve
   // v2 1c: the requester changes a pending OR submitted order (before its sale order)
   const canChange = !!d && BULK_EDITABLE.includes(d.status) && !!rights?.create.includes(d.type)
+  // v2 piece 3: the requester's type may remind our team once the order waited long enough (server checks again)
+  const canRemind = !team && !!d && !!d.remindAt && !!rights?.create.includes(d.type)
+  const remindNow = !!d?.remindAt && new Date(d.remindAt).getTime() <= Date.now()
+  const remind = useMutation({
+    mutationFn: () => remindBulkOrder(id!),
+    onSuccess: (o) => { qc.setQueryData(key, o); onToast?.(BULK_TEXT.REMINDED(o.poNumber)) },
+    onError: (e) => setError(e.message),
+  })
   // Marketing: the portal shows no money; prices at the type's fixed price
   const fixed = d ? BULK_FIXED_PRICE[d.type] : undefined
   const noMoney = !team && !!d && bulkHidesMoney(d.type)
@@ -257,6 +265,11 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
       </>
     ) : (
       <>
+        {canRemind && d && (
+          <button disabled={busy || !remindNow} title={remindNow ? BULK_TEXT.REMIND_HINT : BULK_TEXT.REMIND_AT(when(d.remindAt!))} onClick={() => remind.mutate()} className={`${btn} border border-line`}>
+            {BULK_TEXT.REMIND}{!remindNow ? ` · ${when(d.remindAt!)}` : ''}
+          </button>
+        )}
         {canChange && <button disabled={busy} onClick={() => setAsk('cancel')} className={`${btn} mr-auto text-crit hover:bg-crit-soft`}>{d?.status === BULK_STATUS.DRAFT ? BULK_TEXT.DISCARD_DRAFT : BULK_TEXT.CANCEL_ORDER}</button>}
         {canChange && <button disabled={busy} onClick={() => d && onEdit?.(d)} className={`${btn} border border-line`}>{d?.status === BULK_STATUS.DRAFT ? BULK_TEXT.CONTINUE_DRAFT : BULK_TEXT.EDIT}</button>}
         {canDecide && <button disabled={busy} onClick={() => setAsk('reject')} className={`${btn} border border-crit text-crit`}>{BULK_TEXT.REJECT}</button>}

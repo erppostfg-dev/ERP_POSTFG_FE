@@ -4,6 +4,7 @@ import { Box, CheckCheck, LogOut, MapPin } from 'lucide-react'
 import { api, ApiError, apiUrl } from '../../api/client'
 import { listBulkOrders, type BulkRights } from '../../api/bulkOrders'
 import { ACCESS, AUTH_ENDPOINTS, ERROR_CODE, LOGIN_ERROR_FALLBACK, LOGIN_ERROR_MESSAGES, type AccessLevel } from '../../constants/auth'
+import { BulkBell } from './BulkBell'
 import { BULK_ENDPOINT, BULK_PAGE, BULK_STATUS, BULK_TEXT, BULK_TYPES } from '../../constants/bulkOrders'
 import BulkOrders from './BulkOrders'
 import BulkLocations from './BulkLocations'
@@ -135,6 +136,7 @@ export default function BulkApp() {
                 <span className="block text-[11px] text-ink-600">{roleLabel}</span>
               </span>
             </div>
+            <BulkBell />
             <button onClick={() => void signOut()} title={BULK_TEXT.SIGN_OUT} className="rounded-md p-1.5 text-ink-400 hover:bg-alt hover:text-ink-900"><LogOut className="size-4" /></button>
           </div>
         </header>

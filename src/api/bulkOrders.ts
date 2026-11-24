@@ -119,7 +119,7 @@ export interface BulkOrderEvent {
   } | null
 }
 
-export type BulkOrderFull = BulkOrder & { lines: BulkOrderLine[]; events: BulkOrderEvent[]; documents: BulkDocument[] }
+export type BulkOrderFull = BulkOrder & { lines: BulkOrderLine[]; events: BulkOrderEvent[]; documents: BulkDocument[]; /** v2 piece 3: when Remind is possible (null = not waiting). */ remindAt: string | null }
 
 export interface BulkApproveInput { lines?: { lineNo: number; qty?: number; discountPct?: number }[]; removeLines?: number[]; note?: string }
 
@@ -229,6 +229,11 @@ export const bulkDocumentUrl = (id: string, docId: string, team = false) => apiU
 export const setBulkPayment = (id: string, action: string, note?: string, team = false) =>
   api<BulkOrderFull>(team ? BULK_ENDPOINT.TEAM_PAYMENT(id) : BULK_ENDPOINT.PAYMENT(id), { method: 'POST', body: JSON.stringify(note ? { action, note } : { action }) })
 export const listBulkSettings = () => api<BulkSetting[]>(BULK_ENDPOINT.SETTINGS)
+/** v2 piece 3: email switches (POST_FG admin) and the requester's reminder. */
+export interface BulkNotifySettings { emails: boolean; approvalNeeded: boolean; decision: boolean; remind: boolean }
+export const getBulkNotifySettings = () => api<BulkNotifySettings>(BULK_ENDPOINT.NOTIFY_SETTINGS)
+export const saveBulkNotifySettings = (change: Partial<BulkNotifySettings>) => api<BulkNotifySettings>(BULK_ENDPOINT.NOTIFY_SETTINGS, { method: 'PUT', body: JSON.stringify(change) })
+export const remindBulkOrder = (id: string) => api<BulkOrderFull>(BULK_ENDPOINT.REMIND(id), { method: 'POST', body: '{}' })
 export const updateBulkSetting = (type: BulkType, change: { paymentCheck?: boolean; approvalOverUnits?: number | null }) =>
   api<BulkSetting[]>(BULK_ENDPOINT.SETTING(type), { method: 'PUT', body: JSON.stringify(change) })
 
