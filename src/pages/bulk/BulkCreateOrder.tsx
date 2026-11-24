@@ -51,7 +51,7 @@ function Choice<T extends string>({ value, options, onChange }: { value: T; opti
 }
 
 /** SKU search box with a result list (code / name / EAN; active SKUs with an MRP only). */
-function SkuPicker({ value, taken, onPick, hideMrp = false }: { value: BulkSku | null; taken: Set<string>; onPick: (s: BulkSku) => void; hideMrp?: boolean }) {
+function SkuPicker({ value, taken, onPick, hideMrp = false, brand }: { value: BulkSku | null; taken: Set<string>; onPick: (s: BulkSku) => void; hideMrp?: boolean; brand: string }) {
   const [text, setText] = useState('')
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -59,7 +59,7 @@ function SkuPicker({ value, taken, onPick, hideMrp = false }: { value: BulkSku |
     const t = setTimeout(() => setQ(text.trim()), BULK_LIMIT.SKU_DEBOUNCE_MS)
     return () => clearTimeout(t)
   }, [text])
-  const found = useQuery({ queryKey: ['bulk', 'skus', q], queryFn: ({ signal }) => searchBulkSkus(q, signal), enabled: q.length >= BULK_LIMIT.SKU_QUERY_MIN })
+  const found = useQuery({ queryKey: ['bulk', 'skus', brand, q], queryFn: ({ signal }) => searchBulkSkus(q, brand, signal), enabled: !!brand && q.length >= BULK_LIMIT.SKU_QUERY_MIN })
   // where the result list goes: right under the search box, kept there while the form scrolls / the window resizes
   const box = useRef<HTMLDivElement>(null)
   const [at, setAt] = useState<{ top: number; left: number; width: number } | null>(null)
@@ -86,6 +86,8 @@ function SkuPicker({ value, taken, onPick, hideMrp = false }: { value: BulkSku |
     )
   }
   const typed = text.trim()
+  // v2 1f: no brand chosen yet = no search
+  if (!brand) return <div className="rounded-md border border-dashed border-line px-2.5 py-1.5 text-[12px] text-ink-400">{BULK_TEXT.BRAND_FIRST}</div>
   return (
     <div ref={box}>
       <div className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1.5 focus-within:border-primary">
@@ -149,7 +151,19 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
 
   const locations = useQuery({ queryKey: ['bulk', 'locations', type], queryFn: () => listBulkLocations(type) })
   // v2 1c: the type's approval rules (list meta) -> the Review step says whether Submit needs approval
-  const rules = useQuery({ queryKey: ['bulk', 'approval-rules'], queryFn: () => listBulkOrders({ pageSize: 1 }).then((r) => r.meta.approvalRules) })
+  // v2 1c / 1f: the approval rules + the brands (both on the list's meta; one small request)
+  const meta = useQuery({ queryKey: ['bulk', 'form-meta'], queryFn: () => listBulkOrders({ pageSize: 1 }).then((r) => r.meta) })
+  const rules = { data: meta.data?.approvalRules }
+  const [brand, setBrand] = useState<string>(initial?.brand ?? '')
+  const [brandNote, setBrandNote] = useState(false)
+  /** v2 1f: a new brand drops the lines of another brand (one brand per order). */
+  const pickBrand = (b: string) => {
+    if (b === brand) return
+    const keep = lines.filter((l) => !l.sku || (l.sku.brand ?? brand).toLowerCase() === b.toLowerCase())
+    setBrandNote(keep.length !== lines.length)
+    setLines(keep.length ? keep : [{ key: nextKey++, sku: null, qty: '', discount: '' }])
+    setBrand(b)
+  }
 
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
   const setLine = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -159,7 +173,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   // v2 (2026-11-23): a priced line under ₹1 is refused by the server: flagged here first
   const tooSmall = (l: (typeof parsed)[number]) => !!l.sku && !bulkHidesMoney(type) && lineTooSmall(lineTotal(l.sku.mrp, l.d, l.q))
   const lineOk = (l: (typeof parsed)[number]) => !!l.sku && Number.isInteger(l.q) && l.q >= 1 && validDiscount(l.d) && !tooSmall(l)
-  const itemsOk = parsed.length > 0 && parsed.every(lineOk)
+  const itemsOk = !!brand && parsed.length > 0 && parsed.every(lineOk)
   const totals = parsed.reduce((t, l) => (l.sku && lineOk(l) ? { units: t.units + l.q, mrp: round2(t.mrp + l.sku.mrp * l.q), value: round2(t.value + lineTotal(l.sku.mrp, l.d, l.q)) } : t), { units: 0, mrp: 0, value: 0 })
 
   const phone = normalPhone(form.receiverPhone)
@@ -199,6 +213,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
     save.mutate({
       ...(initial ? { remark: editRemark.trim() } : {}),
       type,
+      brand,
       orderedBy: form.orderedBy.trim(),
       receiverName: form.receiverName.trim(),
       receiverPhone: form.receiverPhone,
@@ -261,6 +276,16 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
         <div>
           <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.ITEMS_TITLE}</h3>
           <p className="mb-3 text-[12px] text-ink-600">{noMoney ? BULK_TEXT.ITEMS_SUB_QTY_ONLY : BULK_TEXT.ITEMS_SUB}</p>
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-[12px]">
+            <span className="font-medium text-ink-600">{BULK_TEXT.BRAND_LABEL}</span>
+            <select className={`${input} w-56`} value={brand} onChange={(e) => pickBrand(e.target.value)}>
+              <option value="">{BULK_TEXT.BRAND_PICK}</option>
+              {meta.data?.brands.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <span className="text-ink-400">{BULK_TEXT.BRAND_HINT}</span>
+            {meta.data && meta.data.brands.length === 0 && <span className="text-crit">{BULK_TEXT.BRAND_NONE}</span>}
+            {brandNote && <span className="text-warn">{BULK_TEXT.BRAND_CHANGED}</span>}
+          </div>
           <div className="overflow-x-auto">
             <table className={`w-full ${noMoney ? 'min-w-[480px]' : 'min-w-[720px]'} text-left text-[13px]`}>
               <thead className="text-[11px] font-semibold uppercase text-ink-600">
@@ -276,7 +301,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
                   return (
                     <tr key={l.key} className="border-t border-line align-top">
                       <td className="py-2 text-[11px] text-ink-400">{String(i + 1).padStart(2, '0')}</td>
-                      <td className="py-2 pr-2"><SkuPicker value={l.sku} taken={taken} hideMrp={noMoney} onPick={(s) => setLine(l.key, { sku: s })} /></td>
+                      <td className="py-2 pr-2"><SkuPicker value={l.sku} taken={taken} hideMrp={noMoney} brand={brand} onPick={(s) => setLine(l.key, { sku: s })} /></td>
                       {!noMoney && <td className="py-2 text-right tnum">{l.sku ? rupees(l.sku.mrp) : '–'}</td>}
                       <td className="py-2 pl-3"><input type="number" min={1} step={1} value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} className={`${input} ${badQty ? 'border-crit' : ''}`} /></td>
                       {!noMoney && <>
@@ -381,7 +406,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
           <div className="grid gap-4 text-[13px] md:grid-cols-2">
             <div className="rounded-md border border-line p-3">
               <div className="font-semibold">{form.orderedBy}</div>
-              <div className="text-ink-600">{BULK_TYPE_LABEL[type]} · {form.priority}{isMarketingLike(type) ? ` · ${form.mode}` : ''}</div>
+              <div className="text-ink-600">{BULK_TYPE_LABEL[type]} · {brand} · {form.priority}{isMarketingLike(type) ? ` · ${form.mode}` : ''}</div>
               <div className="mt-2 text-ink-600">{BULK_TEXT.NEEDED_BY}: <span className="text-ink-900">{form.neededBy || '–'}</span></div>
               {form.priority === BULK_FAST_TRACK && form.fastTrackRemarks.trim() && <div className="text-ink-600">“{form.fastTrackRemarks.trim()}”</div>}
               {BULK_PURPOSE_TYPES.includes(type) && form.purpose.trim() && <div className="text-ink-600">{BULK_TEXT.PURPOSE}: <span className="text-ink-900">{form.purpose.trim()}</span></div>}

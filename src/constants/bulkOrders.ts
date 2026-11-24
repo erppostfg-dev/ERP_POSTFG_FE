@@ -174,6 +174,13 @@ export const BULK_TEXT = {
   STEPS: ['Order items', 'Delivery details', 'Review & submit'],
   ITEMS_TITLE: 'What would you like to order?',
   ITEMS_SUB: 'Search our SKUs by code, name or EAN. The MRP fills in; add your discount % per SKU.',
+  /** v2 1f: one brand per order (the SKU master's brand). */
+  BRAND_LABEL: 'Brand',
+  BRAND_PICK: 'Select the brand',
+  BRAND_HINT: 'One brand per order. Only SKUs of this brand can be added.',
+  BRAND_FIRST: 'Select the brand first',
+  BRAND_CHANGED: 'Brand changed: the SKUs of the other brand were removed.',
+  BRAND_NONE: 'No brands yet: the SKU master has no brand filled in. Ask the masters team.',
   ITEMS_SUB_QTY_ONLY: 'Search our SKUs by code, name or EAN and type the quantity of each.',
   SKU_SEARCH: 'Search SKU code, name or EAN',
   SKU_NONE: 'No active SKU with an MRP matches',

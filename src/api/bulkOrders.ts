@@ -35,6 +35,8 @@ export interface BulkOrder {
   fastTrackRemarks: string | null
   /** v2 1d: Marketing only. */
   purpose: string | null
+  /** v2 1f: the order's brand (null on orders made before). */
+  brand: string | null
   lineCount: number
   totalUnits: number
   totalMrp: number
@@ -116,7 +118,7 @@ export type BulkOrderFull = BulkOrder & { lines: BulkOrderLine[]; events: BulkOr
 
 export interface BulkApproveInput { lines?: { lineNo: number; qty?: number; discountPct?: number }[]; removeLines?: number[]; note?: string }
 
-export interface BulkSku { pepCode: string; name: string | null; mrp: number; ean: string | null }
+export interface BulkSku { pepCode: string; name: string | null; mrp: number; ean: string | null; brand?: string | null }
 
 export interface BulkLocation { id: string; type: BulkType; label: string; address: BulkAddress; createdAt: string }
 
@@ -136,6 +138,8 @@ export interface BulkOrderInput {
   /** v2 1e: required on an edit. */
   remark?: string
   purpose?: string
+  /** v2 1f: required: one brand per order. */
+  brand: string
   lines: { pepCode: string; qty: number; discountPct?: number }[]
   /** Institutional only (required: name + billing address or billingSameAsDelivery). */
   institutionName?: string
@@ -157,7 +161,7 @@ const qs = (o: Record<string, string | number | undefined>) => {
 /** v2 1c: the approval rules of a type (list meta): more units than overUnits (null = never) or one of the modes. */
 export interface BulkApprovalRule { overUnits: number | null; modes: string[] }
 export const listBulkOrders = (q: BulkListQuery) =>
-  apiWithMeta<BulkOrder[], { total: number; page: number; pageSize: number; approvalRules: Partial<Record<BulkType, BulkApprovalRule>> }>(
+  apiWithMeta<BulkOrder[], { total: number; page: number; pageSize: number; approvalRules: Partial<Record<BulkType, BulkApprovalRule>>; brands: string[] }>(
     `${BULK_ENDPOINT.ORDERS}${qs({ type: q.type, status: q.status, q: q.q, page: q.page, pageSize: q.pageSize ?? BULK_LIMIT.PAGE_SIZE })}`,
   )
 
@@ -221,7 +225,8 @@ export const listBulkSettings = () => api<BulkSetting[]>(BULK_ENDPOINT.SETTINGS)
 export const updateBulkSetting = (type: BulkType, change: { paymentCheck?: boolean; approvalOverUnits?: number | null }) =>
   api<BulkSetting[]>(BULK_ENDPOINT.SETTING(type), { method: 'PUT', body: JSON.stringify(change) })
 
-export const searchBulkSkus = (q: string, signal?: AbortSignal) => api<BulkSku[]>(`${BULK_ENDPOINT.SKUS}${qs({ q })}`, { signal })
+/** v2 1f: SKUs of one brand only (no brand = nothing). */
+export const searchBulkSkus = (q: string, brand: string, signal?: AbortSignal) => api<BulkSku[]>(`${BULK_ENDPOINT.SKUS}${qs({ q, brand })}`, { signal })
 
 export const listBulkLocations = (type: BulkType) => api<BulkLocation[]>(`${BULK_ENDPOINT.LOCATIONS}${qs({ type })}`)
 

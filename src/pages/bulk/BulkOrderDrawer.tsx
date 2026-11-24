@@ -268,6 +268,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
             <section>
               <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{BULK_TEXT.DRAWER_ORDER}</h3>
               {row(BULK_TEXT.ORDERED_BY, d.orderedBy)}
+              {d.brand && row(BULK_TEXT.BRAND_LABEL, d.brand)}
               {row(BULK_TEXT.CREATED_BY, `${d.createdBy.name ?? ''} · ${when(d.createdAt)}`)}
               {row(BULK_TEXT.PRIORITY, d.priority)}
               {d.mode && row(BULK_TEXT.MODE, d.mode)}
