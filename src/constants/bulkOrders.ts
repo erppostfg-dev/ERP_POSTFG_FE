@@ -10,6 +10,9 @@ export const BULK_ENDPOINT = {
   RECEIVERS_CHECK: '/bulk-orders/receivers/check',
   /** 2026-11-24: duplicate warning before Submit. */
   DUPLICATE_CHECK: '/bulk-orders/duplicate-check',
+  /** 2026-11-24: buyer organisations (admin). */
+  ORGS: '/bulk-orders/settings/orgs',
+  ORG: (id: string) => `/bulk-orders/settings/orgs/${encodeURIComponent(id)}`,
   /** v2 piece 5a: Institutional customers. */
   CUSTOMERS: '/bulk-orders/customers',
   CUSTOMER: (id: string) => `/bulk-orders/customers/${encodeURIComponent(id)}`,
@@ -168,6 +171,12 @@ export const BULK_TEXT = {
   NAV_LOCATIONS: 'Saved locations',
   // v2 piece 5a: Institutional customers
   NAV_CUSTOMERS: 'Customers',
+  ORGS_TITLE: 'Buyer organisations',
+  ORGS_SUB: 'Outside companies that order in the portal. Their people see only their own orders and customers; our people see everything. Add the people in Users & Roles first (with the Bulk Orders: Institutional role), then their emails here.',
+  ORG_NAME: 'Organisation name',
+  ORG_EMAILS: 'People (emails, comma separated)',
+  ORG_ADD: 'Add organisation',
+  ORG_NO_PEOPLE: 'No people yet',
   STOCK_LINE: (parts: string) => `Stock on hand: ${parts}`,
   STOCK_NONE: 'Stock: not in the stock report (a combo counts as its items)',
   STOCK_AS_OF: (day: string) => `Stock from the in-transit report of ${day} (mother warehouses, on hand).`,

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { getBulkNotifySettings, listBulkSettings, saveBulkNotifySettings, updateBulkSetting, type BulkNotifySettings, type BulkSetting } from '../../api/bulkOrders'
 import { BULK_TEXT, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
 import { Toggle } from '../ops/VerifySettings'
+import { BulkBuyerOrgsCard } from './BulkBuyerOrgsCard'
 
 /*
  * Users & Roles -> Settings -> Bulk Orders (2026-11-12, user: "keep the admin in POST_FG only, central admin"): per order
@@ -80,6 +81,7 @@ export function BulkOrderSettings() {
     <div className="space-y-3">
       <p className="max-w-3xl text-[12.5px] text-ink-600">{BULK_TEXT.SETTINGS_SUB}</p>
       <NotifyCard />
+      <BulkBuyerOrgsCard />
       {list.data?.map((s) => (
         <div key={s.type} className="flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
           <Package className="mt-0.5 size-5 shrink-0 text-primary" />

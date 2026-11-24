@@ -239,6 +239,13 @@ export const setInstCustomerAddressActive = (id: string, addressId: string, acti
 export interface BulkOrderStock { asOf: string | null; warehouses: string[]; note: string | null; skus: Record<string, Record<string, number> | null> }
 export const getBulkOrderStock = (id: string, team = false) => api<BulkOrderStock>(team ? BULK_ENDPOINT.TEAM_STOCK(id) : BULK_ENDPOINT.STOCK(id))
 
+/** 2026-11-24: a buyer organisation (admin, POST_FG Settings). */
+export interface BulkBuyerOrg { id: string; name: string; active: boolean; members: { userId: number; email: string; name: string | null }[]; createdAt: string; updatedAt: string }
+export const listBuyerOrgs = () => api<BulkBuyerOrg[]>(BULK_ENDPOINT.ORGS)
+export const addBuyerOrg = (name: string, emails: string[]) => api<BulkBuyerOrg>(BULK_ENDPOINT.ORGS, { method: 'POST', body: JSON.stringify({ name, emails }) })
+export const updateBuyerOrg = (id: string, change: { name?: string; active?: boolean; emails?: string[] }) =>
+  api<BulkBuyerOrg>(BULK_ENDPOINT.ORG(id), { method: 'PUT', body: JSON.stringify(change) })
+
 /** 2026-11-24: my recent orders like this one (same SKUs, a pincode in common); [] = none. Never blocks. */
 export const bulkDuplicateCheck = (type: BulkType, pepCodes: string[], pincodes: string[], excludeId?: string) =>
   api<{ id: string; poNumber: string; status: string; createdAt: string; totalUnits: number }[]>(BULK_ENDPOINT.DUPLICATE_CHECK, { method: 'POST', body: JSON.stringify({ type, pepCodes, pincodes, ...(excludeId ? { excludeId } : {}) }) })
