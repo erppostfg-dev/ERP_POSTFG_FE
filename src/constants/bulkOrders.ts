@@ -33,6 +33,9 @@ export const BULK_ENDPOINT = {
   /** Our team's read-only view in POST_FG (PO Processing & Review > Bulk Orders, step 3a). */
   TEAM: '/po-review/bulk-orders',
   TEAM_ORDER: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}`,
+  /** 2026-11-24: stock of the order's SKUs at the mother warehouses (approvers / our team). */
+  STOCK: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/stock`,
+  TEAM_STOCK: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/stock`,
   TEAM_DOCUMENTS: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/documents`,
   TEAM_DOCUMENT: (id: string, docId: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}`,
   /** Step 3b (2026-11-12): warehouses + matching saved customers; create the sale order (PO review editor). */
@@ -165,6 +168,9 @@ export const BULK_TEXT = {
   NAV_LOCATIONS: 'Saved locations',
   // v2 piece 5a: Institutional customers
   NAV_CUSTOMERS: 'Customers',
+  STOCK_LINE: (parts: string) => `Stock on hand: ${parts}`,
+  STOCK_NONE: 'Stock: not in the stock report (a combo counts as its items)',
+  STOCK_AS_OF: (day: string) => `Stock from the in-transit report of ${day} (mother warehouses, on hand).`,
   // 2026-11-24 quick wins
   DUPLICATE_WARN: (list: string) => `Looks like a repeat of your recent order ${list} (same SKUs to the same pincode). Submit only if you need it again.`,
   WAITING_MORE_THAN: 'Waiting more than',

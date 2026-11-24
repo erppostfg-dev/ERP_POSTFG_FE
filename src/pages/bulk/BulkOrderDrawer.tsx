@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronDown, RotateCcw, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { approveBulkOrder, cancelBulkOrder, remindBulkOrder, getBulkOrder, rejectBulkOrder, setBulkPayment, setBulkPaymentDetails, uploadBulkDocument, type BulkOrderEvent, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
+import { approveBulkOrder, cancelBulkOrder, getBulkOrderStock, remindBulkOrder, getBulkOrder, rejectBulkOrder, setBulkPayment, setBulkPaymentDetails, uploadBulkDocument, type BulkOrderEvent, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
 import { Badge, Drawer } from '../../components/ui'
 import {
   BULK_DOC_KIND_LABEL, BULK_DOC_MAX_BYTES, BULK_EVENT_LABEL, BULK_PAYMENT_LABEL, BULK_PAYMENT_TONE,
@@ -199,6 +199,8 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
 
   const pending = d?.status === BULK_STATUS.PENDING
   const canDecide = !!d && pending && !!rights?.approve
+  // 2026-11-24: stock at the mother warehouses for approvers (portal) and our team (POST_FG)
+  const stock = useQuery({ queryKey: ['bulk', 'stock', id, team], queryFn: () => getBulkOrderStock(id!, team), enabled: !!d && (team || !!rights?.approve) })
   // v2 1c: the requester changes a pending OR submitted order (before its sale order)
   const canChange = !!d && BULK_EDITABLE.includes(d.status) && !!rights?.create.includes(d.type)
   // v2 piece 3: the requester's type may remind our team once the order waited long enough (server checks again)
@@ -367,6 +369,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
 
           <section>
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{BULK_TEXT.DRAWER_LINES} ({d.lines.length})</h3>
+            {stock.data && (team || rights?.approve) && <p className="mb-2 text-[11.5px] text-ink-400">{stock.data.asOf ? BULK_TEXT.STOCK_AS_OF(stock.data.asOf) : stock.data.note}</p>}
             {canDecide && <p className="mb-2 text-[12px] text-ink-600">{fixed !== undefined ? BULK_TEXT.APPROVE_HINT_QTY_ONLY : BULK_TEXT.APPROVE_HINT}</p>}
             <div className="overflow-x-auto rounded-md border border-line">
               <table className={`w-full ${noMoney ? 'min-w-[420px]' : 'min-w-[640px]'} text-left text-[13px]`}>
@@ -377,6 +380,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
                   {rows.map(({ l, qty, disc, ok, gone }) => (
                     <tr key={l.lineNo} className={`border-t border-line ${gone ? 'opacity-40 line-through' : ''}`}>
                       <td className="px-3 py-2"><div className="font-mono text-[12px] font-semibold">{d.receiverCount > 1 && <span className="mr-1 rounded bg-alt px-1 font-sans text-[10.5px] font-semibold text-ink-600">{BULK_TEXT.RECEIVER_TAG(l.receiverNo)}</span>}{l.pepCode}</div><div className="text-[11px] text-ink-600">{l.name}</div>
+                        {stock.data?.asOf && (() => { const st = stock.data.skus[l.pepCode]; return <div className="text-[11px] text-ink-400">{st ? BULK_TEXT.STOCK_LINE(stock.data.warehouses.map((w) => `${w} ${st[w] ?? 0}`).join(' · ')) : BULK_TEXT.STOCK_NONE}</div> })()}
                         {fixed !== undefined
                           ? l.qty !== l.requestedQty && <div className="text-[11px] text-warn">{BULK_TEXT.ASKED_QTY(l.requestedQty)}</div>
                           : (l.qty !== l.requestedQty || l.discountPct !== l.requestedDiscountPct) && <div className="text-[11px] text-warn">{BULK_TEXT.CHANGED_BY_APPROVER(l.requestedQty, l.requestedDiscountPct)}</div>}</td>

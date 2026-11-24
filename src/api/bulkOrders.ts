@@ -235,6 +235,10 @@ export const addInstCustomerAddress = (id: string, label: string, address: BulkA
 export const setInstCustomerAddressActive = (id: string, addressId: string, active: boolean) =>
   api<BulkInstCustomer>(BULK_ENDPOINT.CUSTOMER_ADDRESS(id, addressId), { method: 'PUT', body: JSON.stringify({ active }) })
 
+/** 2026-11-24: units on hand per mother warehouse for each SKU of the order (null = not in the report). */
+export interface BulkOrderStock { asOf: string | null; warehouses: string[]; note: string | null; skus: Record<string, Record<string, number> | null> }
+export const getBulkOrderStock = (id: string, team = false) => api<BulkOrderStock>(team ? BULK_ENDPOINT.TEAM_STOCK(id) : BULK_ENDPOINT.STOCK(id))
+
 /** 2026-11-24: my recent orders like this one (same SKUs, a pincode in common); [] = none. Never blocks. */
 export const bulkDuplicateCheck = (type: BulkType, pepCodes: string[], pincodes: string[], excludeId?: string) =>
   api<{ id: string; poNumber: string; status: string; createdAt: string; totalUnits: number }[]>(BULK_ENDPOINT.DUPLICATE_CHECK, { method: 'POST', body: JSON.stringify({ type, pepCodes, pincodes, ...(excludeId ? { excludeId } : {}) }) })
