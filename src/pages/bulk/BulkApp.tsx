@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Box, CheckCheck, LogOut, MapPin } from 'lucide-react'
+import { Box, Building2, CheckCheck, LogOut, MapPin } from 'lucide-react'
 import { api, ApiError, apiUrl } from '../../api/client'
 import { listBulkOrders, type BulkRights } from '../../api/bulkOrders'
 import { ACCESS, AUTH_ENDPOINTS, ERROR_CODE, LOGIN_ERROR_FALLBACK, LOGIN_ERROR_MESSAGES, type AccessLevel } from '../../constants/auth'
 import { BulkBell } from './BulkBell'
-import { BULK_ENDPOINT, BULK_PAGE, BULK_STATUS, BULK_TEXT, BULK_TYPES } from '../../constants/bulkOrders'
+import { BULK_ENDPOINT, BULK_PAGE, BULK_STATUS, BULK_TEXT, BULK_TYPE, BULK_TYPES } from '../../constants/bulkOrders'
 import BulkOrders from './BulkOrders'
 import BulkLocations from './BulkLocations'
+import BulkCustomers from './BulkCustomers'
 import { CAPABILITY } from '../../constants/reviewEdit'
 
 /*
@@ -24,7 +25,7 @@ const rightsOf = (access: Record<string, AccessLevel>, capabilities: Record<stri
   verifyPayment: !!capabilities[CAPABILITY.BULK_PAYMENT_VERIFY],
 })
 
-type Page = 'orders' | 'approvals' | 'locations'
+type Page = 'orders' | 'approvals' | 'locations' | 'customers'
 
 function SignIn({ error }: { error?: string }) {
   return (
@@ -95,8 +96,10 @@ export default function BulkApp() {
     { key: 'orders', label: BULK_TEXT.NAV_ORDERS, icon: <Box className="size-4" /> },
     ...(rights.approve ? [{ key: 'approvals' as const, label: BULK_TEXT.NAV_APPROVALS, icon: <CheckCheck className="size-4" />, count: waiting.data }] : []),
     { key: 'locations', label: BULK_TEXT.NAV_LOCATIONS, icon: <MapPin className="size-4" /> },
+    // v2 piece 5a: Institutional customers (people with the Institutional page)
+    ...(rights.view.includes(BULK_TYPE.INSTITUTIONAL) ? [{ key: 'customers' as const, label: BULK_TEXT.NAV_CUSTOMERS, icon: <Building2 className="size-4" /> }] : []),
   ]
-  const titles: Record<Page, string> = { orders: BULK_TEXT.ORDERS_TITLE, approvals: BULK_TEXT.APPROVALS_TITLE, locations: BULK_TEXT.LOCATIONS_TITLE }
+  const titles: Record<Page, string> = { orders: BULK_TEXT.ORDERS_TITLE, approvals: BULK_TEXT.APPROVALS_TITLE, locations: BULK_TEXT.LOCATIONS_TITLE, customers: BULK_TEXT.CUSTOMERS_TITLE }
   const initials = user.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 
   return (
@@ -141,7 +144,7 @@ export default function BulkApp() {
           </div>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">
-          {page === 'locations' ? <BulkLocations rights={rights} /> : <BulkOrders key={page} rights={rights} mode={page} />}
+          {page === 'locations' ? <BulkLocations rights={rights} /> : page === 'customers' ? <BulkCustomers rights={rights} /> : <BulkOrders key={page} rights={rights} mode={page} />}
         </div>
       </main>
     </div>

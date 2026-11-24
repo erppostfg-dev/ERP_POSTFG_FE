@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, Plus, Search, Trash2, Upload } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { checkBulkReceivers, createBulkOrder, listBulkLocations, listBulkOrders, updateBulkOrder, searchBulkSkus, type BulkLocation, type BulkOrderFull, type BulkOrderInput, type BulkReceiverInput, type BulkReceiverRow, type BulkReceiversChecked, type BulkSku } from '../../api/bulkOrders'
+import { checkBulkReceivers, createBulkOrder, listBulkLocations, listInstCustomers, listBulkOrders, updateBulkOrder, searchBulkSkus, type BulkLocation, type BulkOrderFull, type BulkOrderInput, type BulkReceiverInput, type BulkReceiverRow, type BulkReceiversChecked, type BulkSku } from '../../api/bulkOrders'
 import { Modal } from '../../components/ui'
 import { BULK_INSTITUTION_RE, BULK_STATUS, bulkHidesMoney, isMarketingLike, BULK_LINE_TOTAL_MIN, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, BULK_FAST_TRACK, BULK_PURPOSE_TYPES, type BulkType } from '../../constants/bulkOrders'
 import { formProblems } from '../../lib/bulkForm'
@@ -232,6 +232,16 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
     billing: initial?.institution ? { ...initial.institution.billingAddress } : { line: '', city: '', state: '', pincode: '' },
   }))
   const setI = (patch: Partial<typeof inst>) => setInst((x) => ({ ...x, ...patch }))
+  // v2 piece 5a: an Institutional order for a saved customer ('' = details typed as before)
+  const [customerId, setCustomerId] = useState<string>(initial?.institution?.customerId ?? '')
+  const customers = useQuery({ queryKey: ['bulk', 'customers'], queryFn: listInstCustomers, enabled: type === BULK_TYPE.INSTITUTIONAL })
+  const chosen = customers.data?.find((c) => c.id === customerId)
+  /** A customer picked: its default discount fills the lines that have none. */
+  const pickCustomer = (id: string) => {
+    setCustomerId(id)
+    const c = customers.data?.find((x) => x.id === id)
+    if (c && c.defaultDiscountPct > 0) setLines((ls) => ls.map((l) => (l.discount === '' || Number(l.discount) === 0 ? { ...l, discount: String(c.defaultDiscountPct) } : l)))
+  }
 
   const locations = useQuery({ queryKey: ['bulk', 'locations', type], queryFn: () => listBulkLocations(type) })
   // v2 1c: the type's approval rules (list meta) -> the Review step says whether Submit needs approval
@@ -335,7 +345,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const gstinBad = !!inst.gstin.trim() && !GSTIN_RE.test(inst.gstin.trim().toUpperCase())
   const emailBad = !!inst.email.trim() && !EMAIL_RE.test(inst.email.trim())
   const billingOk = inst.same || (!!inst.billing.line.trim() && !!inst.billing.city.trim() && !!inst.billing.state.trim() && /^[1-9]\d{5}$/.test(inst.billing.pincode.trim()))
-  const instOk = !isInst || (!!inst.name.trim() && !gstinBad && !emailBad && billingOk)
+  const instOk = !isInst || (customerId ? !!chosen?.active : !!inst.name.trim() && !gstinBad && !emailBad && billingOk)
   const problems = formProblems(form, todayIst())
   const pinBad = where === 'new' && !/^[1-9]\d{5}$/.test(address.pincode.trim())
   const err = (k: keyof typeof problems) => (touched.has(k) || step === 3 ? problems[k] : undefined)
@@ -385,7 +395,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       // only the lines already complete (a SKU + a whole qty)
       lines: parsed.filter((l) => l.sku && Number.isInteger(l.q) && l.q >= 1).map((l) => (noMoney ? { pepCode: l.sku!.pepCode, qty: l.q } : { pepCode: l.sku!.pepCode, qty: l.q, discountPct: l.d })),
       ...receiverParts(true),
-      ...(isInst ? {
+      ...(isInst ? customerId ? { customerId } : {
         institutionName: inst.name.trim(),
         ...(inst.gstin.trim() ? { gstin: inst.gstin.trim().toUpperCase() } : {}),
         ...(inst.email.trim() ? { contactEmail: inst.email.trim() } : {}),
@@ -414,7 +424,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       ...(form.note.trim() ? { note: form.note.trim() } : {}),
       lines: parsed.map((l) => (noMoney ? { pepCode: l.sku!.pepCode, qty: l.q } : { pepCode: l.sku!.pepCode, qty: l.q, discountPct: l.d })),
       ...receiverParts(false),
-      ...(isInst ? {
+      ...(isInst ? customerId ? { customerId } : {
         institutionName: inst.name.trim(),
         ...(inst.gstin.trim() ? { gstin: inst.gstin.trim().toUpperCase() } : {}),
         ...(inst.email.trim() ? { contactEmail: inst.email.trim() } : {}),
@@ -581,7 +591,32 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
             <div className="mt-5 border-t border-line pt-4">
               <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.INSTITUTION_TITLE}</h3>
               <p className="mb-3 text-[12px] text-ink-600">{BULK_TEXT.INSTITUTION_SUB}</p>
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="mb-3 grid gap-3 md:grid-cols-2">
+                <Field label={BULK_TEXT.ORDER_CUSTOMER} wide hint={customerId ? BULK_TEXT.ORDER_CUSTOMER_HINT : undefined}>
+                  <select className={input} value={customerId} onChange={(e) => pickCustomer(e.target.value)}>
+                    <option value="">{BULK_TEXT.ORDER_CUSTOMER_TYPED}</option>
+                    {customers.data?.filter((c) => c.active || c.id === customerId).map((c) => <option key={c.id} value={c.id}>{c.companyName}{c.gstin ? ` · ${c.gstin}` : ''}</option>)}
+                  </select>
+                </Field>
+                {chosen && (
+                  <>
+                    <div className="rounded-md bg-alt px-3 py-2 text-[12.5px] text-ink-600 md:col-span-2">
+                      <span className="font-semibold text-ink-900">{chosen.companyName}</span>{chosen.gstin ? ` · ${chosen.gstin}` : ''}
+                      {chosen.gstin && <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${chosen.gstinVerified ? 'bg-ok-soft text-ok' : 'bg-warn-soft text-warn'}`}>{chosen.gstinVerified ? BULK_TEXT.GSTIN_VERIFIED : BULK_TEXT.GSTIN_UNVERIFIED}</span>}
+                      <div>{BULK_TEXT.BILLING_ADDRESS}: {chosen.billingAddress.line}, {chosen.billingAddress.city}, {chosen.billingAddress.state} {chosen.billingAddress.pincode}{chosen.contactEmail ? ` · ${chosen.contactEmail}` : ''}</div>
+                    </div>
+                    {chosen.addresses.some((a) => a.active) && (
+                      <Field label={BULK_TEXT.ORDER_SHIP_PICK} wide>
+                        <select className={input} value="" onChange={(e) => { const a = chosen.addresses.find((x) => x.id === e.target.value); if (a) { setWhere('new'); setAddress({ ...a.address }); set({ receiverName: form.receiverName || chosen.contactName, receiverPhone: form.receiverPhone || chosen.contactPhone }) } }}>
+                          <option value="">{BULK_TEXT.ORDER_SHIP_PICK_NONE}</option>
+                          {chosen.addresses.filter((a) => a.active).map((a) => <option key={a.id} value={a.id}>{a.label} · {a.address.city} {a.address.pincode}</option>)}
+                        </select>
+                      </Field>
+                    )}
+                  </>
+                )}
+              </div>
+              {!customerId && <div className="grid gap-3 md:grid-cols-2">
                 <Field label={BULK_TEXT.INSTITUTION_NAME} wide><input className={input} maxLength={200} value={inst.name} onChange={(e) => setI({ name: e.target.value })} /></Field>
                 <Field label={BULK_TEXT.GSTIN} hint={gstinBad ? BULK_TEXT.BAD_GSTIN : undefined}><input className={`${input} uppercase ${gstinBad ? 'border-crit' : ''}`} maxLength={15} value={inst.gstin} onChange={(e) => setI({ gstin: e.target.value.trim() })} /></Field>
                 <Field label={BULK_TEXT.CONTACT_EMAIL} hint={emailBad ? BULK_TEXT.BAD_EMAIL : undefined}><input type="email" className={`${input} ${emailBad ? 'border-crit' : ''}`} maxLength={150} value={inst.email} onChange={(e) => setI({ email: e.target.value })} /></Field>
@@ -596,7 +631,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
                     <Field label={BULK_TEXT.PINCODE}><input inputMode="numeric" maxLength={6} className={`${input} ${inst.billing.pincode && !/^[1-9]\d{5}$/.test(inst.billing.pincode) ? 'border-crit' : ''}`} value={inst.billing.pincode} onChange={(e) => setI({ billing: { ...inst.billing, pincode: e.target.value.trim() } })} /></Field>
                   </>
                 )}
-              </div>
+              </div>}
             </div>
           )}
         </div>
@@ -650,8 +685,13 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
             </div>}
             {isInst && (
               <div className="rounded-md border border-line p-3 md:col-span-2">
+                {chosen ? <>
+                  <div className="font-semibold">{chosen.companyName}{chosen.gstin ? ` · ${chosen.gstin}` : ''}{chosen.gstin && !chosen.gstinVerified ? ` (${BULK_TEXT.GSTIN_UNVERIFIED})` : ''}</div>
+                  <div className="text-ink-600">{chosen.billingAddress.line}, {chosen.billingAddress.city}, {chosen.billingAddress.state} {chosen.billingAddress.pincode}{chosen.contactEmail ? ` · ${chosen.contactEmail}` : ''}</div>
+                </> : <>
                 <div className="font-semibold">{inst.name}{inst.gstin ? ` · ${inst.gstin.toUpperCase()}` : ''}</div>
                 <div className="text-ink-600">{inst.same ? BULK_TEXT.BILLING_SAME : `${inst.billing.line}, ${inst.billing.city}, ${inst.billing.state} ${inst.billing.pincode}`}{inst.email ? ` · ${inst.email}` : ''}</div>
+                </>}
               </div>
             )}
           </div>

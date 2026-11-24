@@ -346,7 +346,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
             <section>
               <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{BULK_TEXT.INSTITUTION_TITLE}</h3>
               {row(BULK_TEXT.INSTITUTION_NAME, d.institution.name)}
-              {d.institution.gstin && row('GSTIN', <span className="font-mono">{d.institution.gstin}</span>)}
+              {d.institution.gstin && row('GSTIN', <><span className="font-mono">{d.institution.gstin}</span>{d.institution.gstinVerified === false && <span className="ml-1.5 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-semibold text-warn">{BULK_TEXT.GSTIN_UNVERIFIED}</span>}</>)}
               {d.institution.email && row('Email', d.institution.email)}
               {row(BULK_TEXT.BILLING_LINE, <>{d.institution.billingAddress.line}<br />{d.institution.billingAddress.city}, {d.institution.billingAddress.state} {d.institution.billingAddress.pincode}</>)}
             </section>

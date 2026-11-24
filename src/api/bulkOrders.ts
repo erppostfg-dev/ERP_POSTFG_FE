@@ -58,7 +58,11 @@ export interface BulkOrder {
   /** null = no payment check on this order (off for its type when it was created). */
   payment: { status: string; by: { id: number; name: string | null } | null; at: string | null; note: string | null } | null
   /** Institutional requester details (null on Marketing orders; 2026-11-12). */
-  institution: { name: string; gstin: string | null; email: string | null; billingAddress: BulkAddress } | null
+  institution: {
+    /** v2 piece 5a: the saved customer it was placed for (null = typed) + whether finance verified its GSTIN (null = typed). */
+    customerId: string | null; gstinVerified: boolean | null
+    name: string; gstin: string | null; email: string | null; billingAddress: BulkAddress
+  } | null
   /** Our team's sale order (step 3b); null until processed, and again after a send back. */
   saleOrder: {
     code: string; facilityCode: string; uniwareChannel: string; customerCode: string; uploadId: string | null
@@ -178,6 +182,8 @@ export interface BulkOrderInput {
   contactEmail?: string
   billingSameAsDelivery?: boolean
   billingAddress?: BulkAddress
+  /** v2 piece 5a: Institutional, placed for this saved customer (its billing details are used). */
+  customerId?: string
 }
 
 export interface BulkListQuery { type?: BulkType | ''; status?: string; payment?: string; q?: string; page?: number; pageSize?: number; archived?: boolean }
@@ -197,6 +203,26 @@ export const listBulkOrders = (q: BulkListQuery) =>
   )
 
 export const getBulkOrder = (id: string) => api<BulkOrderFull>(BULK_ENDPOINT.ORDER(id))
+
+/** v2 piece 5a: an Institutional customer (Customers page). */
+export interface BulkInstCustomer {
+  id: string; companyName: string; gstin: string | null
+  gstinVerified: { by: { id: number | null; name: string | null }; at: string } | null
+  billingAddress: BulkAddress; contactName: string; contactPhone: string; contactEmail: string | null; defaultDiscountPct: number
+  active: boolean; addresses: { id: string; label: string; address: BulkAddress; active: boolean }[]
+  createdBy: { id: number; name: string | null }; createdAt: string; updatedAt: string
+}
+export interface BulkInstCustomerInput {
+  companyName: string; gstin?: string; billingAddress: BulkAddress; contactName: string; contactPhone: string; contactEmail?: string
+  defaultDiscountPct: number; active?: boolean; addresses?: { label: string; address: BulkAddress }[]
+}
+export const listInstCustomers = () => api<BulkInstCustomer[]>(BULK_ENDPOINT.CUSTOMERS)
+export const addInstCustomer = (input: BulkInstCustomerInput) => api<BulkInstCustomer>(BULK_ENDPOINT.CUSTOMERS, { method: 'POST', body: JSON.stringify(input) })
+export const updateInstCustomer = (id: string, input: BulkInstCustomerInput) => api<BulkInstCustomer>(BULK_ENDPOINT.CUSTOMER(id), { method: 'PUT', body: JSON.stringify(input) })
+export const addInstCustomerAddress = (id: string, label: string, address: BulkAddress) =>
+  api<BulkInstCustomer>(BULK_ENDPOINT.CUSTOMER_ADDRESSES(id), { method: 'POST', body: JSON.stringify({ label, address }) })
+export const setInstCustomerAddressActive = (id: string, addressId: string, active: boolean) =>
+  api<BulkInstCustomer>(BULK_ENDPOINT.CUSTOMER_ADDRESS(id, addressId), { method: 'PUT', body: JSON.stringify({ active }) })
 
 /** v2 piece 2: one row of an uploaded receivers file (`row` = its row number in the file). */
 export interface BulkReceiverRow { row: number; receiverName: string; receiverPhone: string; line: string; city: string; state: string; pincode: string; pepCode: string; qty: number | string }
