@@ -138,8 +138,10 @@ export interface BulkOrderInput {
   /** v2 1e: required on an edit. */
   remark?: string
   purpose?: string
-  /** v2 1f: required: one brand per order. */
-  brand: string
+  /** v2 1f: required: one brand per order (a draft may leave it empty). */
+  brand?: string
+  /** v2 1g: true = save as a draft. */
+  draft?: boolean
   lines: { pepCode: string; qty: number; discountPct?: number }[]
   /** Institutional only (required: name + billing address or billingSameAsDelivery). */
   institutionName?: string
@@ -149,7 +151,7 @@ export interface BulkOrderInput {
   billingAddress?: BulkAddress
 }
 
-export interface BulkListQuery { type?: BulkType | ''; status?: string; payment?: string; q?: string; page?: number; pageSize?: number }
+export interface BulkListQuery { type?: BulkType | ''; status?: string; payment?: string; q?: string; page?: number; pageSize?: number; archived?: boolean }
 
 const qs = (o: Record<string, string | number | undefined>) => {
   const p = new URLSearchParams()
@@ -162,7 +164,7 @@ const qs = (o: Record<string, string | number | undefined>) => {
 export interface BulkApprovalRule { overUnits: number | null; modes: string[] }
 export const listBulkOrders = (q: BulkListQuery) =>
   apiWithMeta<BulkOrder[], { total: number; page: number; pageSize: number; approvalRules: Partial<Record<BulkType, BulkApprovalRule>>; brands: string[] }>(
-    `${BULK_ENDPOINT.ORDERS}${qs({ type: q.type, status: q.status, q: q.q, page: q.page, pageSize: q.pageSize ?? BULK_LIMIT.PAGE_SIZE })}`,
+    `${BULK_ENDPOINT.ORDERS}${qs({ type: q.type, status: q.status, q: q.q, page: q.page, pageSize: q.pageSize ?? BULK_LIMIT.PAGE_SIZE, archived: q.archived ? 1 : undefined })}`,
   )
 
 export const getBulkOrder = (id: string) => api<BulkOrderFull>(BULK_ENDPOINT.ORDER(id))

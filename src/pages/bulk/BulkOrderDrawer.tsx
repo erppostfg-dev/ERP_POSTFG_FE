@@ -242,8 +242,8 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
       </>
     ) : (
       <>
-        {canChange && <button disabled={busy} onClick={() => setAsk('cancel')} className={`${btn} mr-auto text-crit hover:bg-crit-soft`}>{BULK_TEXT.CANCEL_ORDER}</button>}
-        {canChange && <button disabled={busy} onClick={() => d && onEdit?.(d)} className={`${btn} border border-line`}>{BULK_TEXT.EDIT}</button>}
+        {canChange && <button disabled={busy} onClick={() => setAsk('cancel')} className={`${btn} mr-auto text-crit hover:bg-crit-soft`}>{d?.status === BULK_STATUS.DRAFT ? BULK_TEXT.DISCARD_DRAFT : BULK_TEXT.CANCEL_ORDER}</button>}
+        {canChange && <button disabled={busy} onClick={() => d && onEdit?.(d)} className={`${btn} border border-line`}>{d?.status === BULK_STATUS.DRAFT ? BULK_TEXT.CONTINUE_DRAFT : BULK_TEXT.EDIT}</button>}
         {canDecide && <button disabled={busy} onClick={() => setAsk('reject')} className={`${btn} border border-crit text-crit`}>{BULK_TEXT.REJECT}</button>}
         {canDecide && <button disabled={busy || !valid} onClick={() => approve.mutate()} className={`${btn} bg-ok text-white`}>{BULK_TEXT.APPROVE}{valid && !noMoney ? ` · ${rupees(preview)}` : ''}</button>}
       </>

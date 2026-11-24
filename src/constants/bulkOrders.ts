@@ -47,15 +47,18 @@ export const BULK_PAGE = {
 } as const
 
 /** v2 1c (2026-11-23): SUBMITTED = no approval needed, with our team; READY = list filter approved + submitted (team tab). */
-export const BULK_STATUS = { PENDING: 'pending_approval', SUBMITTED: 'submitted', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled', PROCESSING: 'processing' } as const
+export const BULK_STATUS = { DRAFT: 'draft', PENDING: 'pending_approval', SUBMITTED: 'submitted', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled', PROCESSING: 'processing' } as const
+/** v2 1g: list filter "active" (submitted + pending + approved; backend BULK_LIST_ACTIVE). */
+export const BULK_LIST_ACTIVE = 'active'
 export const BULK_LIST_READY = 'ready'
 /** Statuses the requester may still edit / cancel (backend BULK_EDITABLE_STATUSES). */
-export const BULK_EDITABLE: string[] = [BULK_STATUS.PENDING, BULK_STATUS.SUBMITTED]
+export const BULK_EDITABLE: string[] = [BULK_STATUS.PENDING, BULK_STATUS.SUBMITTED, BULK_STATUS.DRAFT]
 /** Statuses our team may turn into a sale order (backend BULK_PROCESSABLE_STATUSES). */
 export const BULK_PROCESSABLE: string[] = [BULK_STATUS.APPROVED, BULK_STATUS.SUBMITTED]
 export type BulkStatus = (typeof BULK_STATUS)[keyof typeof BULK_STATUS]
-export const BULK_STATUS_LABEL: Record<string, string> = { pending_approval: 'Pending approval', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', processing: 'Processing' }
-export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = { pending_approval: 'warn', submitted: 'ok', approved: 'ok', rejected: 'crit', cancelled: 'neutral', processing: 'info' }
+/** v2 1g: "processing" (our team made the sale order) reads "Order placed". */
+export const BULK_STATUS_LABEL: Record<string, string> = { draft: 'Draft', pending_approval: 'Pending approval', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', processing: 'Order placed' }
+export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = { draft: 'neutral', pending_approval: 'warn', submitted: 'ok', approved: 'ok', rejected: 'crit', cancelled: 'neutral', processing: 'info' }
 /** Institutional requester checks (same as the backend BULK_INSTITUTION). */
 export const BULK_INSTITUTION_RE = {
   GSTIN: /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/,
@@ -112,9 +115,10 @@ export const BULK_DOC_MAX_BYTES = 10 * 1024 * 1024
  * The status timeline's steps (design figma-make-bulk-orders Timeline). Today the backend reaches Submitted + Approved;
  * Processing comes with step 3b, Ready to Dispatch / Dispatched / Delivered with the Uniware status of its sale order.
  */
-export const BULK_STEPS = ['Submitted', 'Approved', 'Processing', 'Ready to Dispatch', 'Dispatched', 'Delivered'] as const
+/** v2 1g: "Ready to Dispatch" removed; Dispatched / Delivered come from courier tracking (later piece). */
+export const BULK_STEPS = ['Submitted', 'Approved', 'Order placed', 'Dispatched', 'Delivered'] as const
 /** How far an order status is on BULK_STEPS (index of the last step done). */
-export const BULK_STEP_OF: Record<string, number> = { pending_approval: 0, submitted: 1, approved: 1, processing: 2 }
+export const BULK_STEP_OF: Record<string, number> = { draft: -1, pending_approval: 0, submitted: 1, approved: 1, processing: 2 }
 
 /** The design's markers (figma-make-bulk-orders): mode for Marketing only. */
 /** v2 1d (2026-11-23): Porter / Regular, Normal / Fast-track (backend BULK_DELIVERY_MODES / BULK_PRIORITIES). */
@@ -126,6 +130,8 @@ export const BULK_PURPOSE_TYPES: string[] = ['marketing']
 
 export const BULK_LIMIT = {
   PAGE_SIZE: 50,
+  /** The server allows up to 200 a page (backend BULK_ORDERS.PAGE_SIZE_MAX): CSV export reads with it. */
+  PAGE_SIZE_MAX: 200,
   SKU_QUERY_MIN: 2,
   /** Wait after the last key before the SKU search is sent (ms): one search per word typed, not per letter. Each text's
    *  answer is kept (STALE_MS), and an older search still on its way is cancelled (2026-11-11). */
@@ -160,6 +166,19 @@ export const BULK_TEXT = {
   ALL_STATUSES: 'All statuses',
   ALL_TYPES: 'All',
   STAT_TOTAL: 'All orders',
+  /** v2 1g worklist cards. */
+  STAT_ACTIVE: 'Active',
+  STAT_PLACED: 'Order placed',
+  STAT_DISPATCHED: 'Dispatched',
+  STAT_DISPATCHED_HINT: 'From courier tracking (coming soon)',
+  SAVE_DRAFT: 'Save as draft',
+  DRAFT_SAVED: (po: string) => `Draft ${po} saved: open it from the list to continue`,
+  CONTINUE_DRAFT: 'Continue',
+  DISCARD_DRAFT: 'Discard draft',
+  ARCHIVE: 'Archive',
+  ARCHIVE_HINT: 'Rejected / cancelled orders older than 30 days',
+  EXPORT_CSV: 'Export CSV',
+  EXPORTING: 'Exporting...',
   STAT_PENDING: 'Pending approval',
   STAT_APPROVED: 'Approved',
   STAT_SUBMITTED: 'Submitted (no approval)',

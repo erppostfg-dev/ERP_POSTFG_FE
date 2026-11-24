@@ -5,7 +5,7 @@ import { Plus, Search, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import { createBulkOrder, listBulkLocations, listBulkOrders, updateBulkOrder, searchBulkSkus, type BulkOrderFull, type BulkOrderInput, type BulkSku } from '../../api/bulkOrders'
 import { Modal } from '../../components/ui'
-import { BULK_INSTITUTION_RE, bulkHidesMoney, isMarketingLike, BULK_LINE_TOTAL_MIN, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, BULK_FAST_TRACK, BULK_PURPOSE_TYPES, type BulkType } from '../../constants/bulkOrders'
+import { BULK_INSTITUTION_RE, BULK_STATUS, bulkHidesMoney, isMarketingLike, BULK_LINE_TOTAL_MIN, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, BULK_FAST_TRACK, BULK_PURPOSE_TYPES, type BulkType } from '../../constants/bulkOrders'
 import { formProblems } from '../../lib/bulkForm'
 import { approvalWhy, lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
 
@@ -208,10 +208,42 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
     },
   })
 
+  // v2 1g: editing a draft = no remark (nothing was sent yet); Save as draft keeps whatever is filled
+  const isDraft = initial?.status === BULK_STATUS.DRAFT
+  const needsRemark = !!initial && !isDraft
+  const saveDraft = () => {
+    setErrors([])
+    save.mutate({
+      draft: true,
+      type,
+      ...(brand ? { brand } : {}),
+      orderedBy: form.orderedBy.trim(),
+      receiverName: form.receiverName.trim(),
+      receiverPhone: form.receiverPhone.trim(),
+      ...(where === 'new'
+        ? { address: { line: address.line.trim(), city: address.city.trim(), state: address.state.trim(), pincode: address.pincode.trim() } }
+        : { locationId: where }),
+      ...(form.neededBy ? { neededBy: form.neededBy } : {}),
+      ...(isMarketingLike(type) ? { mode: form.mode } : {}),
+      priority: form.priority,
+      ...(form.priority === BULK_FAST_TRACK && form.fastTrackRemarks.trim() ? { fastTrackRemarks: form.fastTrackRemarks.trim() } : {}),
+      ...(BULK_PURPOSE_TYPES.includes(type) && form.purpose.trim() ? { purpose: form.purpose.trim() } : {}),
+      ...(form.note.trim() ? { note: form.note.trim() } : {}),
+      // only the lines already complete (a SKU + a whole qty)
+      lines: parsed.filter((l) => l.sku && Number.isInteger(l.q) && l.q >= 1).map((l) => (noMoney ? { pepCode: l.sku!.pepCode, qty: l.q } : { pepCode: l.sku!.pepCode, qty: l.q, discountPct: l.d })),
+      ...(isInst ? {
+        institutionName: inst.name.trim(),
+        ...(inst.gstin.trim() ? { gstin: inst.gstin.trim().toUpperCase() } : {}),
+        ...(inst.email.trim() ? { contactEmail: inst.email.trim() } : {}),
+        billingSameAsDelivery: inst.same,
+        ...(inst.same ? {} : { billingAddress: { line: inst.billing.line.trim(), city: inst.billing.city.trim(), state: inst.billing.state.trim(), pincode: inst.billing.pincode.trim() } }),
+      } : {}),
+    })
+  }
   const submit = () => {
     setErrors([])
     save.mutate({
-      ...(initial ? { remark: editRemark.trim() } : {}),
+      ...(needsRemark ? { remark: editRemark.trim() } : {}),
       type,
       brand,
       orderedBy: form.orderedBy.trim(),
@@ -244,11 +276,12 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       <span className="mr-auto text-[12px] text-ink-600">{totals.units} {BULK_TEXT.TOTAL_UNITS} · <strong className="text-ink-900">{rupees(totals.value)}</strong></span>
       {step > 1 ? <button onClick={() => setStep(step - 1)} className="rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold">{BULK_TEXT.BACK}</button>
         : <button onClick={onClose} className="rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold">{BULK_TEXT.CANCEL}</button>}
+      {(!initial || isDraft) && <button onClick={saveDraft} disabled={save.isPending} className="rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold disabled:opacity-50">{BULK_TEXT.SAVE_DRAFT}</button>}
       {step < 3 ? (
         // v2 1d: from the delivery step the Review step opens even with errors (it lists them); Submit waits for none
         <button onClick={() => setStep(step + 1)} disabled={step === 1 && !itemsOk} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{BULK_TEXT.NEXT}</button>
       ) : (
-        <button onClick={submit} disabled={save.isPending || !itemsOk || !deliveryOk || (!!initial && !editRemark.trim())} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{save.isPending ? BULK_TEXT.SUBMITTING : initial ? BULK_TEXT.SAVE_CHANGES : BULK_TEXT.SUBMIT}</button>
+        <button onClick={submit} disabled={save.isPending || !itemsOk || !deliveryOk || (needsRemark && !editRemark.trim())} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{save.isPending ? BULK_TEXT.SUBMITTING : initial ? BULK_TEXT.SAVE_CHANGES : BULK_TEXT.SUBMIT}</button>
       )}
     </>
   )
@@ -386,7 +419,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
         <div>
           <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.REVIEW_TITLE}</h3>
           <p className="mb-2 text-[12px] text-ink-600">{BULK_TEXT.REVIEW_SUB}</p>
-          {initial && (
+          {needsRemark && (
             <label className="mb-3 flex flex-col gap-1">
               <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.EDIT_REMARK}</span>
               <textarea rows={2} maxLength={500} className={`${input} ${editRemark.trim() ? '' : 'border-warn'}`} value={editRemark} onChange={(e) => setEditRemark(e.target.value)} />
