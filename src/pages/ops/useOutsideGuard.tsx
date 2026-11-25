@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle } from 'lucide-react'
 import { Button, Modal } from '../../components/ui'
@@ -57,7 +58,8 @@ export function useOutsideGuard(): { guard: (uploadIds: string[], action: GuardA
     const rest = pending.uploadIds.filter((id) => !flagged.has(id))
     const canSkip = T.SKIPPABLE.includes(pending.action) && rest.length > 0
     const n = flagged.size
-    dialog = (
+    // drawn on the page (portal): the guard is also used inside a table cell (the row's Mark uploaded)
+    dialog = createPortal(
       <Modal open onClose={close} title={T.TITLE(n, pending.uploadIds.length)} sub={T.SUB[pending.action]}
         footer={
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -91,12 +93,13 @@ export function useOutsideGuard(): { guard: (uploadIds: string[], action: GuardA
           </div>
           {!pending.checked && <p className="text-[12px] text-warn">{T.NOT_CHECKED}</p>}
           <div className="space-y-1">
-            <label htmlFor="outside-guard-reason" className="text-[12px] font-medium text-ink-600">{T.REASON}</label>
+            <label htmlFor="outside-guard-reason" className="block text-[12px] font-medium text-ink-600">{T.REASON}</label>
             <textarea id="outside-guard-reason" value={remark} onChange={(e) => setRemark(e.target.value.slice(0, OUTSIDE_REMARK_MAX))} rows={2}
               className={`${inputCls} h-auto min-h-[60px] resize-y py-2 leading-snug`} />
           </div>
         </div>
-      </Modal>
+      </Modal>,
+      document.body,
     )
   }
   return { guard, dialog }

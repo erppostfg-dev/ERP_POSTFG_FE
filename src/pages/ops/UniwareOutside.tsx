@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Ban, Check, CheckCircle2, Link2, RefreshCw, XCircle, type LucideIcon } from 'lucide-react'
 import { Badge, Button, Modal } from '../../components/ui'
@@ -75,7 +76,8 @@ export function OutsideBadge({ f, poNumber, canEdit, onDone }: { f: OutsideFindi
         className="inline-flex items-center gap-1 rounded-full bg-crit-soft px-2 py-0.5 text-[11.5px] font-semibold text-crit ring-1 ring-crit/30 hover:bg-crit/15">
         <AlertTriangle className="size-3" />{T.BADGE(f.code)}{f.more > 0 ? ` +${f.more}` : ''}
       </button>
-      {open && <OutsideDialog f={f} poNumber={poNumber} canEdit={canEdit} onClose={() => setOpen(false)} onDone={(m) => { setOpen(false); onDone(m) }} />}
+      {/* 2026-11-25: drawn on the page, not inside the table cell (the cell's one-line text rule cut the notes and pushed the text box out) */}
+      {open && createPortal(<OutsideDialog f={f} poNumber={poNumber} canEdit={canEdit} onClose={() => setOpen(false)} onDone={(m) => { setOpen(false); onDone(m) }} />, document.body)}
     </>
   )
 }
@@ -169,7 +171,7 @@ function OutsideDialog({ f, poNumber, canEdit, onClose, onDone }: { f: OutsideFi
             </div>
             {pick === 'dismiss' && (
               <div className="pf-tab-in space-y-1">
-                <label htmlFor={`outside-why-${f.id}`} className="text-[12px] font-medium text-ink-600">{T.WHY}</label>
+                <label htmlFor={`outside-why-${f.id}`} className="block text-[12px] font-medium text-ink-600">{T.WHY}</label>
                 <textarea id={`outside-why-${f.id}`} autoFocus value={remark} onChange={(e) => setRemark(e.target.value.slice(0, OUTSIDE_REMARK_MAX))} rows={3}
                   className={`${inputCls} h-auto min-h-[76px] resize-y py-2 leading-snug`} />
               </div>
