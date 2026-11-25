@@ -247,8 +247,10 @@ export interface OptionGroup {
  * open by themselves); a folded group opens / closes smoothly on a click of its title; arrow keys + Enter move through
  * the items that are showing. Empty groups are left out.
  */
-export function GroupedSelect({ value, groups, onChange, placeholder = '—' }: {
+export function GroupedSelect({ value, groups, onChange, placeholder = '—', emptyLabel }: {
   value: string; groups: OptionGroup[]; onChange: (v: string) => void; placeholder?: string
+  /** 2026-11-25: an empty choice on top (e.g. '— None —'): picking it clears the value. Left out = none offered. */
+  emptyLabel?: string
 }) {
   const p = usePopover()
   const [q, setQ] = useState('')
@@ -295,6 +297,9 @@ export function GroupedSelect({ value, groups, onChange, placeholder = '—' }: 
             {q && <X className="size-3.5 shrink-0 cursor-pointer text-ink-400 hover:text-ink-900" onClick={() => setQ('')} />}
           </label>
           <div className="max-h-80 overflow-y-auto">
+            {emptyLabel && !f && (
+              <button type="button" onClick={() => pick('')} className={`flex w-full items-center rounded px-2 py-1.5 text-left text-[12.5px] italic hover:bg-alt ${value ? 'text-ink-400' : 'font-semibold text-primary'}`}>{emptyLabel}</button>
+            )}
             {!shown.length && <div className="px-2 py-1.5 text-[12.5px] text-ink-400">No match</div>}
             {shown.map((g, gi) => {
               const expanded = isOpen(g)
@@ -317,9 +322,9 @@ export function GroupedSelect({ value, groups, onChange, placeholder = '—' }: 
                       <span className="flex-1">{g.label}</span>
                       <span className="rounded-full bg-alt px-1.5 text-[10px] text-ink-400">{g.items.length}</span>
                     </button>
-                  ) : (
+                  ) : g.label ? (
                     <div className="px-2 pb-0.5 pt-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">{g.label}</div>
-                  )}
+                  ) : null}
                   {/* Height animates from 0 to its content: grid rows 0fr -> 1fr. */}
                   <div className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
                     <div className="overflow-hidden">{items}</div>

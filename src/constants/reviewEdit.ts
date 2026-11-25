@@ -11,6 +11,8 @@ export const CAPABILITY = {
   PO_REVIEW_EDIT_ALL: 'po-review:edit-all',
   /** Bulk Orders: verify / refuse a proof of payment or mark it not needed (2026-11-13). */
   BULK_PAYMENT_VERIFY: 'bulk-orders:verify-payment',
+  /** Bulk Orders: add / change payment details (link, QR, bank details) (2026-11-24). */
+  BULK_PAYMENT_DETAILS: 'bulk-orders:payment-details',
 } as const
 
 export type LineField = 'pep' | 'qty' | 'mrp' | 'rate'

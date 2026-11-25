@@ -34,6 +34,7 @@ const remember = (master: string, rid: string | number | null, values: Record<st
 const pepRow = (s: PepSkuItem): Row => (remember('pep', s.id, {
   pepCode: s.pepCode, productName: s.productName, brand: s.brand, productType: s.productType, mrp: s.mrp, gstTaxType: s.gstTaxType, eanCode: s.eanCode,
   hsnCode: s.hsnCode, lengthMm: s.lengthMm, widthMm: s.widthMm, heightMm: s.heightMm, weightG: s.weightG, shelfLife: s.shelfLife,
+  bulkOrderable: s.bulkOrderable ? 'Yes' : 'No',
 }), {
   rid: s.id, code: s.pepCode, name: s.productName ?? '', brand: s.brand ?? '', type: s.productType ?? '',
   category: NOT_IN_DB, sub: NOT_IN_DB, filling: NOT_IN_DB, mrp: s.mrp ?? '', gst: s.gstTaxType ? `${s.gstTaxType}%` : '',
@@ -43,6 +44,7 @@ const pepRow = (s: PepSkuItem): Row => (remember('pep', s.id, {
   // shown since 2026-10-28 (the data was in the DB): base SKU, expiry basis, the In-transit report's fields
   baseSku: s.finalPepCode ?? '', expiryFrom: s.determineExpiryFrom ?? '', itName: s.intransitName ?? '', itType: s.intransitType ?? '',
   itCount: s.intransitCategory ?? '', itMrp: s.intransitMrp ?? '', itCogs: s.intransitCogs ?? '', itConsider: s.intransitConsider ? 'Yes' : 'No',
+  bulk: s.bulkOrderable ? 'Yes' : 'No',
 })
 /* Channel SKU master from the backend. A channel code is unique only within its channel, so the row key is the DB id.
    margin comes as a fraction (0.27) and is shown as a percent; the listing status has no column (NOT_IN_DB). */
@@ -109,6 +111,10 @@ const LOADERS: Record<string, (signal: AbortSignal) => Promise<Row[]>> = {
 }
 /** Masters with an Add form (2026-10-27); Warehouses has no table yet. */
 const ADDABLE: readonly string[] = ['pep', 'channelSku', 'customer', 'chWh'] satisfies AddMaster[]
+/** The page whose access decides who changes each master (2026-11-25: Editor there = Add / Edit / Switch; the backend checks the same). */
+const MASTER_PAGE: Record<string, string> = {
+  pep: PATHS.PEP_SKUS, channelSku: PATHS.CHANNEL_SKUS, customer: PATHS.CHANNEL_CUSTOMERS, chWh: PATHS.CHANNEL_LOCATIONS, pepWh: PATHS.WAREHOUSES, routes: PATHS.WAREHOUSES,
+}
 const distinct = (rows: Row[], k: string) => [...new Set(rows.map((r) => String(r[k] ?? '')).filter(Boolean))].sort()
 
 // ---- Config per master ------------------------------------------------------
@@ -132,16 +138,16 @@ const CFG: Record<string, Cfg> = {
   pep: {
     title: 'PEP SKU Master', sub: 'Every sellable PEP SKU with its Uniware name, classification, MRP and GST', key: 'code', entity: 'PEP SKUs', addLabel: 'Add SKU',
     search: ['code', 'name', 'category', 'sub'], placeholder: 'Search SKU code, Uniware name, category…',
-    cols: [['SKU Code', 'code', 'mono'], ['Uniware Name', 'name', 'text'], ['Brand', 'brand', 'text'], ['SKU Type', 'type', 'text'], ['Category', 'category', 'text'], ['Sub-Category', 'sub', 'text'], ['Filling', 'filling', 'text'], ['MRP', 'mrp', 'money'], ['GST', 'gst', 'text'], ['Base SKU', 'baseSku', 'mono']],
+    cols: [['SKU Code', 'code', 'mono'], ['Uniware Name', 'name', 'text'], ['Brand', 'brand', 'text'], ['SKU Type', 'type', 'text'], ['Category', 'category', 'text'], ['Sub-Category', 'sub', 'text'], ['Filling', 'filling', 'text'], ['MRP', 'mrp', 'money'], ['GST', 'gst', 'text'], ['Base SKU', 'baseSku', 'mono'], ['Bulk orders', 'bulk', 'text']],
     fields: [{ key: 'code', label: 'SKU code' }, { key: 'name', label: 'Uniware name' }, { key: 'brand', label: 'Brand' }, { key: 'type', label: 'SKU type' },
       { key: 'category', label: 'Category' }, { key: 'sub', label: 'Sub-category' }, { key: 'filling', label: 'Filling' }, { key: 'mrp', label: 'MRP (₹)' },
       { key: 'gst', label: 'GST' }, { key: 'ean', label: 'EAN' }, { key: 'hsn', label: 'HSN code' },
       { key: 'size', label: 'Size L × W × H (mm)' }, { key: 'weight', label: 'Weight (g)' }, { key: 'shelfLife', label: 'Shelf life' }, { key: 'status', label: 'Status' },
       { key: 'baseSku', label: 'Base SKU (counted as)' }, { key: 'expiryFrom', label: 'Expiry counted from' },
       { key: 'itName', label: 'In-transit name' }, { key: 'itType', label: 'In-transit type' }, { key: 'itCount', label: 'In-transit count' },
-      { key: 'itMrp', label: 'In-transit MRP (₹)' }, { key: 'itCogs', label: 'In-transit COGS (₹)' }, { key: 'itConsider', label: 'Counted in in-transit stock' }],
+      { key: 'itMrp', label: 'In-transit MRP (₹)' }, { key: 'itCogs', label: 'In-transit COGS (₹)' }, { key: 'itConsider', label: 'Counted in in-transit stock' }, { key: 'bulk', label: 'Shown in Bulk Orders' }],
     filters: [],
-    filterKeys: [['brand', 'Brand'], ['type', 'SKU Type'], ['gst', 'GST'], ['status', 'Status'], ['itConsider', 'In-transit stock']],
+    filterKeys: [['brand', 'Brand'], ['type', 'SKU Type'], ['gst', 'GST'], ['status', 'Status'], ['itConsider', 'In-transit stock'], ['bulk', 'Bulk orders']],
     readOnly: true,
     trailing: [
       { label: 'Status', render: status },
@@ -260,10 +266,12 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
   const c = CFG[id]
   const s = useSection<Row>(rows, c.search)
   const [edit, setEdit] = useState<{ row: Row; prev?: string } | null>(null)
-  // Add forms: admin / developer only for now (user, 2026-10-27); the backend checks the role too
+  // Add / Edit / Switch: admin / developer, or Editor on this master's page (Users & Roles; user 2026-11-25; was admin /
+  // developer only since 2026-10-27); the backend checks the same
   const auth = useAuth()
   const queryClient = useQueryClient()
-  const isMasterAdmin = auth.status === 'signedIn' && auth.user.roles.some((r) => (MASTER_ADD_ROLES as readonly string[]).includes(r))
+  const isMasterAdmin = (auth.status === 'signedIn' && auth.user.roles.some((r) => (MASTER_ADD_ROLES as readonly string[]).includes(r)))
+    || (!!MASTER_PAGE[id] && auth.accessFor(MASTER_PAGE[id]) === ACCESS.EDITOR)
   const canAdd = ADDABLE.includes(id) && isMasterAdmin
   const [adding, setAdding] = useState(false)
   const [historyOf, setHistoryOf] = useState<Row | null>(null)

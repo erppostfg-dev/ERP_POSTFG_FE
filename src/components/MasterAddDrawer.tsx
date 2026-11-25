@@ -108,7 +108,12 @@ const D2C_TEST_LOCKED_KEYS = ['allowInternalTransfer']
 /** Edit forms: the Add fields (status is switched from the row instead), keys locked, plus columns only Edit has. */
 const lock = (fields: Field[], keys: string[]): Field[] => fields.filter((f) => f.kind !== 'active').map((f) => (keys.includes(f.key) ? { ...f, locked: true } : f))
 const EDIT_FORMS: Record<EditMaster, { title: string; fields: Field[] }> = {
-  pep: { title: 'Edit PEP SKU', fields: lock(FORMS.pep.fields, ['pepCode']) },
+  pep: {
+    title: 'Edit PEP SKU',
+    fields: [...lock(FORMS.pep.fields, ['pepCode']),
+      // 2026-11-24: only SKUs switched on here (or loaded by npm run bulk:skus) are shown in the Bulk Orders portal
+      { key: 'bulkOrderable', label: 'Shown in Bulk Orders', kind: 'select', options: pick(['Yes', 'No']) }],
+  },
   channelSku: { title: 'Edit channel SKU', fields: lock(FORMS.channelSku.fields, ['channelId', 'channelCode']) },
   customer: {
     title: 'Edit channel',

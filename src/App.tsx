@@ -26,6 +26,7 @@ import { APPROVALS_BADGE_REFRESH_MS } from './constants/poReview'
 import { useAuth, type User } from './auth/AuthContext'
 import { FullPageMessage } from './auth/RequireAuth'
 import { ACCESS, ROLE_LABEL, TEAM_LABEL, UI_TEXT } from './constants/auth'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { DummyDataStrip } from './components/DummyData'
 import { HOME_PATH, MASTER_TAB_BY_PATH, NAV_GROUPS, PATHS, RAIL_PAGES, isDummyPage, type NavGroup } from './constants/pages'
 import { SIDEBAR_COLLAPSED_KEY } from './constants/ui'
@@ -253,7 +254,7 @@ export default function App() {
             {dummy && <DummyDataStrip />}
             {/* Every page opened so far stays mounted; only the current one is shown. */}
             {pages.filter(([path]) => visited.includes(path)).map(([path, element]) => (
-              <div key={path} hidden={path !== pathname}>{canSee(path) ? element : <FullPageMessage text={UI_TEXT.NO_ACCESS} />}</div>
+              <div key={path} hidden={path !== pathname}>{canSee(path) ? <ErrorBoundary>{element}</ErrorBoundary> : <FullPageMessage text={UI_TEXT.NO_ACCESS} />}</div>
             ))}
             {/* Redirects and "not found" only: the pages themselves are rendered above. */}
             <Routes>

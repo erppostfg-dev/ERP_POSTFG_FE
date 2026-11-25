@@ -1,4 +1,5 @@
-import { api, apiWithMeta } from './client'
+import { api, apiForm, apiUrl, ApiError, apiWithMeta } from './client'
+import { ERROR_CODE } from '../constants/auth'
 import { MASTERS_ENDPOINT } from '../constants/masters'
 import type { HistoryItem } from './poOverview'
 
@@ -33,6 +34,8 @@ export type PepSkuItem = {
   intransitMrp: number | null
   intransitCogs: number | null
   intransitConsider: boolean
+  /** Shown in the Bulk Orders portal (2026-11-24; npm run bulk:skus / Edit). */
+  bulkOrderable: boolean
 }
 
 export function listPepSkus(signal?: AbortSignal) {
@@ -269,3 +272,40 @@ export const editTransferRoute = (id: number, body: TransferRouteEditBody) =>
 /** The location's PO prefix: a channel-location edit (PATCH /masters/edit/location/:locationId). */
 export const editTransferPrefix = (locationId: string, body: EditBody) =>
   offline()?.editPrefix(locationId, body) ?? editMasterRow('location', locationId, body)
+
+// ---- Transfer routes bulk upload (2026-11-25) ----------------------------------------------------------------------
+export type RouteUploadChange = { field: string; old: string | null; value: string | null }
+export type RouteUploadRow = {
+  row: number; sender: string; channel: string; location: string; uniwareChannel: string; receiving: string | null
+  action: 'new' | 'update' | 'same' | 'error'; routeId: number | null; changes: RouteUploadChange[]; errors: string[]; warnings: string[]
+}
+export type RouteUploadPreview = {
+  fileName: string | null; rowCount: number; canImport: boolean; added: number; updated: number; unchanged: number; errors: number
+  /** Warehouses the import switches on for internal transfers. */
+  enable: string[]; rows: RouteUploadRow[]
+}
+export type RouteUploadResult = { added: number; updated: number; unchanged: number; errors: number; switchedOn: string[] }
+
+/** GET the template .csv as text (header + one real route as the example). */
+export const getRoutesTemplate = async (): Promise<string> => {
+  let res: Response
+  try {
+    res = await fetch(apiUrl(MASTERS_ENDPOINT.TRANSFER_ROUTES_TEMPLATE), { credentials: 'include' })
+  } catch {
+    throw new ApiError(0, ERROR_CODE.NETWORK, 'Cannot reach the server')
+  }
+  if (!res.ok) {
+    const err = (await res.json().catch(() => null))?.error
+    throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? res.statusText, err?.details)
+  }
+  const text = await res.text()
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+}
+const routesForm = (file: File, remark?: string) => {
+  const form = new FormData()
+  form.append('file', file)
+  if (remark) form.append('remark', remark)
+  return form
+}
+export const previewRoutesUpload = (file: File) => apiForm<RouteUploadPreview>(MASTERS_ENDPOINT.TRANSFER_ROUTES_PREVIEW, routesForm(file))
+export const importRoutesUpload = (file: File, remark?: string) => apiForm<RouteUploadResult>(MASTERS_ENDPOINT.TRANSFER_ROUTES_IMPORT, routesForm(file, remark))

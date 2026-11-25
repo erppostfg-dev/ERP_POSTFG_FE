@@ -99,7 +99,7 @@ export function SubTabs<T extends string>({ value, onChange, tabs }: { value: T;
 
 // Right contextual drawer (~520px)
 /** Time of the drawer's slide in / out (ms); the same as .pf-drawer-* in index.css. */
-const DRAWER_MS = 250
+const DRAWER_MS = 300
 
 /**
  * A panel sliding in from the right over a fading backdrop; ✕, a backdrop click and Esc slide it out first, then call
@@ -266,25 +266,39 @@ export function Toolbar({
 }
 
 // ---- Modal ------------------------------------------------------------
+/** Time of the modal's fade out (ms); the same as .pf-modal-out in index.css. */
+const MODAL_MS = 240
+
 export function Modal({
   open, onClose, title, sub, children, footer, wide = false,
 }: { open: boolean; onClose: () => void; title: ReactNode; sub?: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
+  // 2026-11-25: opens with a rise + fade (pf-modal-in); ✕ / Esc / a click outside fade it out first (MODAL_MS)
+  const [leaving, setLeaving] = useState(false)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+  const closing = useRef(false)
+  const close = useCallback(() => {
+    if (closing.current) return
+    closing.current = true
+    setLeaving(true)
+    setTimeout(() => { closing.current = false; setLeaving(false); closeRef.current() }, MODAL_MS)
+  }, [])
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
     if (open) document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, close])
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/40 p-4 backdrop-blur-[1px]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} className={`mt-[6vh] w-full ${wide ? 'max-w-4xl' : 'max-w-lg'} rounded-[var(--radius)] border border-line bg-surface shadow-xl`}>
+    <div className={`fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/40 p-4 backdrop-blur-[1px] ${leaving ? 'pf-backdrop-out' : 'pf-backdrop-in'}`} onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div ref={ref} className={`mt-[6vh] w-full ${wide ? 'max-w-4xl' : 'max-w-lg'} rounded-[var(--radius)] border border-line bg-surface shadow-xl ${leaving ? 'pf-modal-out' : 'pf-modal-in'}`}>
         <div className="flex items-start justify-between border-b border-line px-5 py-3.5">
           <div>
             <h3 className="text-[15px] font-semibold text-ink-900">{title}</h3>
             {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
           </div>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-ink-900">✕</button>
+          <button onClick={close} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-ink-900">✕</button>
         </div>
         <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">{footer}</div>}

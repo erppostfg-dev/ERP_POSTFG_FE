@@ -33,7 +33,9 @@ export function PriceCheck({ rows, choices, onChoose, master, onMaster, canEdit,
   master: Set<string>
   onMaster: (lineNo: string, on: boolean) => void
   canEdit: boolean
-  totals: { po: string; chosen: string; explained: string | null; left: string | null }
+  totals: { po: string; chosen: string; explained: string | null; left: string | null
+    /** no total issue on the PO: the difference is accepted with the tick below the line items (acceptTotal) */
+    leftIsNew?: boolean }
 }) {
   if (!rows.length) return null
 
@@ -104,7 +106,7 @@ export function PriceCheck({ rows, choices, onChoose, master, onMaster, canEdit,
       <div className="flex flex-col items-end gap-0.5 text-[12.5px] text-ink-600">
         <div>{T.TOTALS(totals.po, totals.chosen)}</div>
         {totals.explained && <div className="text-ink-400">{T.TOTAL_EXPLAINED(totals.explained)}</div>}
-        {totals.left && <div className="font-medium text-crit">{T.TOTAL_LEFT(totals.left)}</div>}
+        {totals.left && <div className="font-medium text-crit">{totals.leftIsNew ? T.TOTAL_LEFT_NEW(totals.left) : T.TOTAL_LEFT(totals.left)}</div>}
       </div>
     </div>
   )

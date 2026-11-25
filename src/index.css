@@ -104,15 +104,16 @@ body {
 }
 .pf-tab-in { animation: pf-tab-in 300ms ease-out; }
 
-/* Drawer: slides in from the right over a fading backdrop, and back out (250 ms; DRAWER_MS in components/ui.tsx). */
-@keyframes pf-drawer-in { from { transform: translateX(100%); } to { transform: none; } }
-@keyframes pf-drawer-out { from { transform: none; } to { transform: translateX(100%); } }
+/* Drawer: slides in from the right over a fading backdrop, and back out. 2026-11-25 (user: 'coming too fast, make it
+   smoother'): 420 ms in with a soft ease-out + a light fade, 300 ms out (DRAWER_MS in components/ui.tsx = the out time). */
+@keyframes pf-drawer-in { from { transform: translateX(100%); opacity: 0.6; } to { transform: none; opacity: 1; } }
+@keyframes pf-drawer-out { from { transform: none; opacity: 1; } to { transform: translateX(100%); opacity: 0.6; } }
 @keyframes pf-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pf-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
-.pf-drawer-in { animation: pf-drawer-in 250ms cubic-bezier(0.2, 0.8, 0.2, 1); }
-.pf-drawer-out { animation: pf-drawer-out 250ms ease-in forwards; }
-.pf-backdrop-in { animation: pf-backdrop-in 250ms ease-out; }
-.pf-backdrop-out { animation: pf-backdrop-out 250ms ease-in forwards; }
+.pf-drawer-in { animation: pf-drawer-in 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+.pf-drawer-out { animation: pf-drawer-out 300ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+.pf-backdrop-in { animation: pf-backdrop-in 380ms ease-out; }
+.pf-backdrop-out { animation: pf-backdrop-out 300ms ease-in forwards; }
 
 /* A row someone else just changed (live update): a short highlight that fades out. */
 @keyframes pf-row-flash { from { background-color: var(--color-warn-soft); } to { background-color: transparent; } }
@@ -129,6 +130,12 @@ input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; marg
 /* Our dropdowns and calendar (components/pickers.tsx): a short fade + drop when opening, the reverse when closing. */
 @keyframes pf-pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes pf-pop-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+/* Modal (2026-11-25, user: 'same for the create order request'): rises + fades in over the fading backdrop, fades out
+   (MODAL_MS in components/ui.tsx = the out time). */
+@keyframes pf-modal-in { from { opacity: 0; transform: translateY(14px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes pf-modal-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px) scale(0.98); } }
+.pf-modal-in { animation: pf-modal-in 360ms cubic-bezier(0.22, 1, 0.36, 1); }
+.pf-modal-out { animation: pf-modal-out 240ms ease-in forwards; }
 .pf-pop-in { animation: pf-pop-in 150ms ease-out; }
 .pf-pop-out { animation: pf-pop-out 150ms ease-in forwards; }
 

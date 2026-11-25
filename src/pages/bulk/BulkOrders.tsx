@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
+import { GroupedSelect } from '../../components/pickers'
 import { useInfiniteQuery, useQueries } from '@tanstack/react-query'
 import { ChevronRight, Plus, Search } from 'lucide-react'
 import { listBulkOrders, type BulkOrder, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
 import { Badge, PageTitle } from '../../components/ui'
-import { BULK_STATUS, bulkHidesMoney, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
+import { BULK_LIMIT, BULK_LIST_ACTIVE, BULK_STATUS, bulkHidesMoney, BULK_STATUS_LABEL, BULK_STATUS_TONE, BULK_TEXT, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
 import { rupees } from '../../lib/bulkPrice'
 import BulkCreateOrder from './BulkCreateOrder'
 import BulkOrderDrawer from './BulkOrderDrawer'
@@ -39,6 +40,9 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
   const [creating, setCreating] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
   const [toast, setToast] = useState('')
+  // v2 1g: the archive (closed orders older than 30 days) + its CSV export
+  const [archived, setArchived] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => setQ(text.trim()), 300)
@@ -51,20 +55,44 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
   }, [toast])
 
   const list = useInfiniteQuery({
-    queryKey: ['bulk', 'orders', type, status, q],
-    queryFn: ({ pageParam }) => listBulkOrders({ type, status, q, page: pageParam }),
+    queryKey: ['bulk', 'orders', type, status, q, archived],
+    queryFn: ({ pageParam }) => listBulkOrders({ type, status, q, page: pageParam, archived }),
     initialPageParam: 1,
     getNextPageParam: (last) => (last.meta.page * last.meta.pageSize < last.meta.total ? last.meta.page + 1 : undefined),
   })
   // the tiles: one count per status (pageSize 1 = the total only)
   const counts = useQueries({
-    queries: ['', BULK_STATUS.PENDING, BULK_STATUS.APPROVED, BULK_STATUS.REJECTED].map((s) => ({
+    // v2 1g worklist cards: Active, Pending approval, Order placed (Dispatched comes with courier tracking)
+    queries: [BULK_LIST_ACTIVE, BULK_STATUS.PENDING, BULK_STATUS.PROCESSING, BULK_STATUS.DISPATCHED].map((s) => ({
       queryKey: ['bulk', 'orders', 'count', type, s],
       queryFn: () => listBulkOrders({ type, status: s, pageSize: 1 }).then((r) => r.meta.total),
       enabled: !approvals,
     })),
   })
   const rows: BulkOrder[] = list.data?.pages.flatMap((p) => p.data) ?? []
+  /** v2 1g: the archive as CSV (every page of the current filter, read 200 at a time). */
+  const exportCsv = async () => {
+    setExporting(true)
+    try {
+      const all: BulkOrder[] = []
+      for (let page = 1; ; page++) {
+        const r = await listBulkOrders({ type, status, q, page, pageSize: BULK_LIMIT.PAGE_SIZE_MAX, archived: true })
+        all.push(...r.data)
+        if (page * r.meta.pageSize >= r.meta.total) break
+      }
+      const cell = (v: string | number | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`
+      const head = ['PO number', 'Type', 'Brand', 'Status', 'Ordered by', 'Receiver', 'City', 'Units', 'Created', 'Decision note']
+      const lines = all.map((o) => [o.poNumber, BULK_TYPE_LABEL[o.type], o.brand, BULK_STATUS_LABEL[o.status] ?? o.status, o.orderedBy, o.receiverName, o.location.address.city, o.totalUnits, o.createdAt.slice(0, 10), o.decisionNote].map(cell).join(','))
+      const blob = new Blob([[head.map(cell).join(','), ...lines].join('\r\n')], { type: 'text/csv;charset=utf-8' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `bulk-orders-archive-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } finally {
+      setExporting(false)
+    }
+  }
   const total = list.data?.pages[0]?.meta.total ?? 0
 
   return (
@@ -77,10 +105,10 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
         )} />
 
       {!approvals && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label={BULK_TEXT.STAT_TOTAL} value={counts[0].data} tone="bg-primary" />
+        <Stat label={BULK_TEXT.STAT_ACTIVE} value={counts[0].data} tone="bg-primary" />
         <Stat label={BULK_TEXT.STAT_PENDING} value={counts[1].data} tone="bg-warn" />
-        <Stat label={BULK_TEXT.STAT_APPROVED} value={counts[2].data} tone="bg-ok" />
-        <Stat label={BULK_TEXT.STAT_REJECTED} value={counts[3].data} tone="bg-crit" />
+        <Stat label={BULK_TEXT.STAT_PLACED} value={counts[2].data} tone="bg-ok" />
+        <div title={BULK_TEXT.STAT_DISPATCHED_HINT}><Stat label={BULK_TEXT.STAT_DISPATCHED} value={counts[3].data} tone="bg-info" /></div>
       </div>}
 
       <div className="rounded-[var(--radius-card)] border border-line bg-surface">
@@ -96,10 +124,10 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
               ))}
             </div>
           )}
-          {!approvals && <select value={chosenStatus} onChange={(e) => setStatus(e.target.value)} className="rounded-md border border-line bg-surface px-2 py-1.5 text-[12px]">
-            <option value="">{BULK_TEXT.ALL_STATUSES}</option>
-            {Object.values(BULK_STATUS).map((s) => <option key={s} value={s}>{BULK_STATUS_LABEL[s]}</option>)}
-          </select>}
+          {!approvals && <div className="w-48"><GroupedSelect value={chosenStatus} onChange={setStatus} emptyLabel={BULK_TEXT.ALL_STATUSES} placeholder={BULK_TEXT.ALL_STATUSES}
+            groups={[{ label: '', items: Object.values(BULK_STATUS).map((x) => ({ value: x, label: BULK_STATUS_LABEL[x] ?? x })) }]} /></div>}
+          {!approvals && <button onClick={() => setArchived(!archived)} title={BULK_TEXT.ARCHIVE_HINT} className={`rounded-md border px-2.5 py-1.5 text-[12px] ${archived ? 'border-primary bg-primary-soft font-semibold text-primary' : 'border-line text-ink-600'}`}>{BULK_TEXT.ARCHIVE}</button>}
+          {archived && <button disabled={exporting || !total} onClick={() => void exportCsv()} className="rounded-md border border-line px-2.5 py-1.5 text-[12px] text-ink-600 disabled:opacity-50">{exporting ? BULK_TEXT.EXPORTING : BULK_TEXT.EXPORT_CSV}</button>}
           <span className="ml-auto text-[12px] text-ink-600">{list.data ? BULK_TEXT.SHOWING(rows.length, total) : ''}</span>
         </div>
 
@@ -125,13 +153,14 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
               <tbody>
                 {rows.map((o) => (
                   <tr key={o.id} onClick={() => setOpenId(o.id)} className="cursor-pointer border-t border-line text-[13px] hover:bg-alt/50">
-                    <td className="px-3 py-2.5"><div className="font-mono font-semibold text-ink-900">{o.poNumber}</div><div className="text-[11px] text-ink-600">{when(o.createdAt)}</div></td>
+                    <td className="px-3 py-2.5"><div className="font-mono font-semibold text-ink-900">{o.poNumber}{o.editCount > 0 && <span title={BULK_TEXT.EDITED_TAG_TITLE(o.editCount)} className="ml-1.5 rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-semibold text-warn">{BULK_TEXT.EDITED_TAG}</span>}</div><div className="text-[11px] text-ink-600">{when(o.createdAt)}</div></td>
                     <td className="px-3 py-2.5"><div className="font-medium text-ink-900">{o.orderedBy}</div><div className="text-[11px] text-ink-600">{BULK_TYPE_LABEL[o.type]}</div></td>
                     <td className="px-3 py-2.5"><div className="font-medium tnum">{o.totalUnits} {BULK_TEXT.TOTAL_UNITS}</div><div className="text-[11px] text-ink-600">{o.lineCount} SKU{o.lineCount === 1 ? '' : 's'}</div></td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">{day(o.neededBy)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">{o.neededBy ? day(o.neededBy) : "–"}</td>
                     <td className="px-3 py-2.5"><div className="max-w-[220px] truncate">{o.location.label ?? o.location.address.line}</div><div className="text-[11px] text-ink-600">{o.location.address.city} {o.location.address.pincode}</div></td>
-                    <td className="px-3 py-2.5 text-right tnum">{bulkHidesMoney(o.type) ? '–' : rupees(o.totalValue)}</td>
-                    <td className="px-3 py-2.5"><Badge tone={BULK_STATUS_TONE[o.status] ?? 'neutral'}>{BULK_STATUS_LABEL[o.status] ?? o.status}</Badge></td>
+                    <td className="px-3 py-2.5 text-right tnum">{bulkHidesMoney(o.type) ? <span className="text-ink-600">{BULK_TEXT.FREE_ORDER}</span> : rupees(o.totalValue)}</td>
+                    <td className="px-3 py-2.5"><Badge tone={BULK_STATUS_TONE[o.status] ?? 'neutral'}>{BULK_STATUS_LABEL[o.status] ?? o.status}</Badge>
+                      {o.tracking && <div className="mt-0.5 text-[11px] text-ink-600">{[o.tracking.courier, o.tracking.courierStatus, o.tracking.awb].filter(Boolean).join(' · ')}</div>}</td>
                     <td className="px-3 py-2.5 text-ink-400"><ChevronRight className="size-4" /></td>
                   </tr>
                 ))}
@@ -148,11 +177,11 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
 
       {creating && (
         <BulkCreateOrder types={rights.create} onClose={() => setCreating(false)}
-          onCreated={(o) => { setCreating(false); setOpenId(o.id); setToast(BULK_TEXT.SUBMITTED(o.poNumber)) }} />
+          onCreated={(o) => { setCreating(false); setOpenId(o.id); setToast(o.status === BULK_STATUS.DRAFT ? BULK_TEXT.DRAFT_SAVED(o.poNumber) : BULK_TEXT.SUBMITTED(o.poNumber)) }} />
       )}
       {editing && (
-        <BulkCreateOrder types={[editing.type]} initial={editing} onClose={() => setEditing(null)}
-          onCreated={(o) => { setEditing(null); setToast(BULK_TEXT.SAVED(o.poNumber)) }} />
+        <BulkCreateOrder types={[editing.type]} initial={editing} onClose={() => { setOpenId(editing.id); setEditing(null) }}
+          onCreated={(o) => { setEditing(null); setOpenId(o.id); setToast(o.status === BULK_STATUS.DRAFT ? BULK_TEXT.DRAFT_SAVED(o.poNumber) : editing?.status === BULK_STATUS.DRAFT ? BULK_TEXT.SUBMITTED(o.poNumber) : BULK_TEXT.SAVED(o.poNumber)) }} />
       )}
       <BulkOrderDrawer id={openId} rights={rights} onClose={() => setOpenId(null)} onEdit={(o) => setEditing(o)} onToast={setToast} />
       {toast && <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-md bg-ink-900 px-4 py-2 text-[13px] text-white shadow-lg">✓ {toast}</div>}

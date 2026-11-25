@@ -1,16 +1,17 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { TreeSelect } from '../../components/pickers'
+import { GroupedSelect } from '../../components/pickers'
 import { getBulkProcessOptions, hideBulkCustomer, processBulkOrder, type BulkCustomerMatch, type BulkOrderFull } from '../../api/bulkOrders'
-import { BULK_FIXED_PRICE, BULK_PAYMENT, BULK_TEXT } from '../../constants/bulkOrders'
+import { BULK_FIXED_PRICE, BULK_LIMIT, BULK_PAYMENT, BULK_TEXT } from '../../constants/bulkOrders'
 import { rupees } from '../../lib/bulkPrice'
 
 /*
  * Bulk Orders step 3b (2026-11-12, POST_FG PO Processing & Review > Bulk Orders, PO review editors): an APPROVED
  * order -> warehouse + Uniware channel + Uniware customer code (typed: the person creates the customer in Uniware first)
  * -> Create sale order (a normal saved PO: Processed tab, PO Overview; no Verify step). Payment is shown, never blocks.
- * Marketing (2026-11-13): the same panel; every unit at ₹1 (BULK_FIXED_PRICE).
+ * Marketing (2026-11-13): the same panel; every unit at MARKETING_UNIT_PRICE (BULK_FIXED_PRICE; ₹0.01 since v2).
  * Address book (2026-11-13, user: "fill it, but they have to create the sale order by checking"): every processed
  * order saves its delivery address + channel + code (both types). The SAME delivery address seen before -> channel + code
  * FILLED from the newest one, and "Create sale order" waits for the tick "I checked ...". Same GSTIN / name + pincode =
@@ -30,6 +31,7 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
   const key = ['bulk', 'process-options', d.id]
   const opts = useQuery({ queryKey: key, queryFn: () => getBulkProcessOptions(d.id) })
   const customers = useMemo(() => opts.data?.customers ?? [], [opts.data])
+  // starts empty (user 2026-11-25: no default); '— None —' in the list clears it again
   const [facilityCode, setFacility] = useState('')
   // null = not touched: the newest saved code of the same delivery address is used (filled)
   const [picked, setPicked] = useState<Pick | null>(null)
@@ -59,7 +61,15 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
     onError: (e: Error) => setError(errorText(e)),
   })
   const ready = !!facilityCode && !!f.uniwareChannel.trim() && !!f.customerCode.trim() && (!fromSaved || checked)
-  const warehouses = useMemo(() => (opts.data?.facilities ?? []).map((w) => ({ value: w.code, label: w.code, sub: w.name, parent: w.parentCode })), [opts.data])
+  // 2026-11-25: two groups, mother (MWH) and child (D2C / MWH under a mother); search looks through both
+  const warehouses = useMemo(() => {
+    const item = (w: { code: string; name: string | null; parentCode: string | null }) => ({ value: w.code, label: [w.code, w.name, w.parentCode ? `under ${w.parentCode}` : null].filter(Boolean).join(' · ') })
+    const all = opts.data?.facilities ?? []
+    return [
+      { label: BULK_TEXT.WH_MOTHER, items: all.filter((w) => w.group === 'mother').map(item) },
+      { label: BULK_TEXT.WH_CHILD, items: all.filter((w) => w.group === 'child').map(item) },
+    ]
+  }, [opts.data])
   const fixed = BULK_FIXED_PRICE[d.type]
   const unpaid = !!d.payment && d.payment.status !== BULK_PAYMENT.VERIFIED && d.payment.status !== BULK_PAYMENT.NOT_NEEDED
   const type = (k: 'uniwareChannel' | 'customerCode', v: string) => setPicked({ ...f, [k]: v })
@@ -107,10 +117,8 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
       <div className="grid gap-3 md:grid-cols-3">
         <div className="flex flex-col gap-1">
           <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.WAREHOUSE}</span>
-          {/* main (mother) warehouses, their child warehouses folded under them; search looks through all */}
-          <TreeSelect value={facilityCode} onChange={setFacility}
-            options={warehouses} placeholder={opts.isLoading ? BULK_TEXT.LOADING : BULK_TEXT.PICK_WAREHOUSE}
-            searchPlaceholder={BULK_TEXT.SEARCH_WAREHOUSE} noMatch={BULK_TEXT.NO_WAREHOUSE} />
+          {/* 2026-11-25: Mother warehouses (MWH) and Child warehouses, each a group; search looks through both */}
+          <GroupedSelect value={facilityCode} onChange={setFacility} groups={warehouses} emptyLabel={BULK_TEXT.WH_NONE} placeholder={opts.isLoading ? BULK_TEXT.LOADING : BULK_TEXT.PICK_WAREHOUSE} />
         </div>
         <label className="flex flex-col gap-1">
           <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.UNIWARE_CHANNEL}</span>
@@ -121,6 +129,16 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
           <input className={`${input} font-mono`} maxLength={100} value={f.customerCode} onChange={(e) => type('customerCode', e.target.value)} />
         </label>
       </div>
+      {/* 2026-11-25 (user): a big order from a child warehouse = a clear heads-up, never a block */}
+      {d.totalUnits > BULK_LIMIT.MOTHER_WARN_UNITS && opts.data?.facilities.find((w) => w.code === facilityCode)?.group === 'child' && (
+        <div role="alert" className="pf-fade-in flex items-start gap-2.5 rounded-lg border border-warn/40 bg-warn-soft/70 px-3.5 py-2.5">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" />
+          <div>
+            <div className="text-[13px] font-semibold text-ink-900">{BULK_TEXT.WH_CHILD_WARN_TITLE}</div>
+            <div className="text-[12.5px] text-ink-600">{BULK_TEXT.WH_CHILD_WARN(d.totalUnits, facilityCode)}</div>
+          </div>
+        </div>
+      )}
 
       {fromSaved && (
         <div key={from.id} className="pf-fade-in mt-3 rounded-md border border-warn/40 bg-warn-soft/60 px-3 py-2 text-[12px] text-ink-600">

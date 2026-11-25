@@ -347,16 +347,17 @@ const previewFile = async (file: File): Promise<D2cUploadPreview> => {
     if (!sku) errors.push({ field: 'SKU Code', message: `${col(r, 'SKU Code') || '(empty)'} is not an active SKU with an MRP` })
     if (!Number.isInteger(qty) || qty <= 0) errors.push({ field: 'Qty', message: 'must be a whole number above 0' })
     if (!poDate) errors.push({ field: 'PO Date', message: 'must be a date (YYYY-MM-DD or DD-MM-YYYY)' })
-    if (!['P1', 'P2', 'P3'].includes(priority)) errors.push({ field: 'Priority', message: 'must be P1, P2 or P3' })
+    if (priority.length > 20) errors.push({ field: 'Priority', message: 'must be at most 20 characters' })
     if (sku && col(r, 'SKU Name') && col(r, 'SKU Name') !== sku.name) warnings.push({ field: 'SKU Name', message: `differs from the master (${sku.name}): the master name is used` })
     const all = sender && loc ? routesOf(sender.id, loc[0]) : []
     const route = sender && loc ? routeOf(sender.id, loc[0], { channel: col(r, 'Uniware Channel') }) : null
     if (sender && loc && !all.length) errors.push({ field: 'Dispatch Location', message: `no route from ${sender.code} to ${loc[2]}` })
     else if (sender && loc && !route) errors.push({ field: 'Uniware Channel', message: `route has ${all.length} Uniware channels (${all.map((x) => x.uniwareChannelCode).join(', ')}), fill Uniware Channel` })
     if (route?.missingVendor) warnings.push({ field: 'Route', message: 'vendor code missing: the inward PO is blocked until it is filled in Masters' })
-    const key = col(r, 'Group') || `${sender?.code}|${loc?.[0]}|${route?.routeId ?? ''}|${poDate}|${priority}`
+    const poNumber = col(r, 'PO Number') || null
+    const key = col(r, 'Group') || (poNumber ? `n:${poNumber.toLowerCase()}` : `${sender?.code}|${loc?.[0]}|${route?.routeId ?? ''}|${poDate}|${priority}`)
     const g = groups.get(key) ?? {
-      key, group: col(r, 'Group') || null, rows: [], valid: true, senderId: sender?.id ?? null, senderCode: sender?.code ?? null, channel: loc?.[1] ?? channel, locationId: loc?.[0] ?? null,
+      key, group: col(r, 'Group') || null, poNumber, rows: [], valid: true, senderId: sender?.id ?? null, senderCode: sender?.code ?? null, channel: loc?.[1] ?? channel, locationId: loc?.[0] ?? null,
       location: loc?.[2] ?? null, receivingId: loc?.[3] ?? null, receivingCode: loc?.[4] ?? null, prefix: loc?.[5] ?? null, poDate, priority, type,
       expiry: poDate ? addDays(poDate, 15) : null, remarks: null, route: route ? { id: route.routeId, customerCode: 'C', vendorCode: route.missingVendor ? null : 'V', uniwareChannelCode: route.uniwareChannelCode } : null,
       routeChannels: all.map((x) => x.uniwareChannelCode),
@@ -373,7 +374,7 @@ const previewFile = async (file: File): Promise<D2cUploadPreview> => {
     return { row, errors, warnings }
   })
   const transfers = [...groups.values()]
-  for (const t of transfers) if (t.valid && t.prefix && t.poDate) t.referencePreview = peekRef(t.prefix, t.poDate, t.type ?? 'Regular')
+  for (const t of transfers) if (t.valid && t.prefix && t.poDate) t.referencePreview = t.poNumber ?? peekRef(t.prefix, t.poDate, t.type ?? 'Regular')
   const errorCount = rows.reduce((n, r) => n + r.errors.length, 0)
   return wait({ fileName: file.name, rowCount: rows.length, canImport: errorCount === 0 && rows.length > 0, errorCount, warningCount: rows.reduce((n, r) => n + r.warnings.length, 0), rows, transfers }, 500)
 }
@@ -508,7 +509,7 @@ const countersOf = (r: Row): D2cListItem['invoices'] => ({
   inwardPos: r.invoices.filter((i) => ['requested', 'created', 'unknown'].includes(i.inwardPoState ?? '')).length,
   varianceOpen: r.invoices.filter((i) => i.varianceOpen).length,
 })
-const startInwardJob = (ids: string[]): Promise<D2cInwardJob> => {
+const startInwardJob = (ids: string[], _receiveBy?: string): Promise<D2cInwardJob> => {
   ensure()
   const job: D2cInwardJob = { id: `ipo${Date.now()}`, kind: 'inward_po', status: 'running', total: ids.length, done: 0, startedAt: new Date().toISOString(), finishedAt: null, results: [] }
   const todo: { r: Row; i: Row['invoices'][number] }[] = []

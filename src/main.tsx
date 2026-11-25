@@ -10,9 +10,13 @@ import { PATHS } from './constants/pages'
 import { QUERY_CACHE } from './constants/ui'
 import './index.css'
 import { blockNumberStepping } from './lib/numberInputs'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { reloadOnStaleChunks } from './lib/staleChunks'
 
 // Number boxes change only by typing (no wheel / arrow-key stepping).
 blockNumberStepping()
+// After a deploy an old tab reloads once instead of a white screen (2026-11-24).
+reloadOnStaleChunks()
 
 // The frontend data cache (TanStack Query): pages show what they loaded before at once and refresh it quietly.
 const queryClient = new QueryClient({
@@ -23,6 +27,7 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
+    <ErrorBoundary scope="app">
     <QueryClientProvider client={queryClient}>
       {/* BASE_URL is Vite's `base`: /postfg/ in builds, / in dev. */}
       <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
@@ -34,5 +39,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>,
 )

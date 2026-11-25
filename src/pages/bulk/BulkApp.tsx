@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Box, CheckCheck, LogOut, MapPin } from 'lucide-react'
+import { Box, Building2, CheckCheck, LogOut, MapPin } from 'lucide-react'
 import { api, ApiError, apiUrl } from '../../api/client'
 import { listBulkOrders, type BulkRights } from '../../api/bulkOrders'
 import { ACCESS, AUTH_ENDPOINTS, ERROR_CODE, LOGIN_ERROR_FALLBACK, LOGIN_ERROR_MESSAGES, type AccessLevel } from '../../constants/auth'
-import { BULK_ENDPOINT, BULK_PAGE, BULK_STATUS, BULK_TEXT, BULK_TYPES } from '../../constants/bulkOrders'
+import { BulkBell } from './BulkBell'
+import { BULK_ENDPOINT, BULK_PAGE, BULK_STATUS, BULK_TEXT, BULK_TYPE, BULK_TYPES } from '../../constants/bulkOrders'
 import BulkOrders from './BulkOrders'
 import BulkLocations from './BulkLocations'
+import BulkCustomers from './BulkCustomers'
+import { ErrorBoundary } from '../../components/ErrorBoundary'
 import { CAPABILITY } from '../../constants/reviewEdit'
 
 /*
@@ -21,9 +24,10 @@ const rightsOf = (access: Record<string, AccessLevel>, capabilities: Record<stri
   create: BULK_TYPES.filter((t) => access[BULK_PAGE.TYPE[t]] === ACCESS.EDITOR),
   approve: access[BULK_PAGE.APPROVE] === ACCESS.EDITOR,
   verifyPayment: !!capabilities[CAPABILITY.BULK_PAYMENT_VERIFY],
+  paymentDetails: !!capabilities[CAPABILITY.BULK_PAYMENT_DETAILS],
 })
 
-type Page = 'orders' | 'approvals' | 'locations'
+type Page = 'orders' | 'approvals' | 'locations' | 'customers'
 
 function SignIn({ error }: { error?: string }) {
   return (
@@ -94,24 +98,27 @@ export default function BulkApp() {
     { key: 'orders', label: BULK_TEXT.NAV_ORDERS, icon: <Box className="size-4" /> },
     ...(rights.approve ? [{ key: 'approvals' as const, label: BULK_TEXT.NAV_APPROVALS, icon: <CheckCheck className="size-4" />, count: waiting.data }] : []),
     { key: 'locations', label: BULK_TEXT.NAV_LOCATIONS, icon: <MapPin className="size-4" /> },
+    // v2 piece 5a: Institutional customers (people with the Institutional page)
+    ...(rights.view.includes(BULK_TYPE.INSTITUTIONAL) ? [{ key: 'customers' as const, label: BULK_TEXT.NAV_CUSTOMERS, icon: <Building2 className="size-4" /> }] : []),
   ]
-  const titles: Record<Page, string> = { orders: BULK_TEXT.ORDERS_TITLE, approvals: BULK_TEXT.APPROVALS_TITLE, locations: BULK_TEXT.LOCATIONS_TITLE }
+  const titles: Record<Page, string> = { orders: BULK_TEXT.ORDERS_TITLE, approvals: BULK_TEXT.APPROVALS_TITLE, locations: BULK_TEXT.LOCATIONS_TITLE, customers: BULK_TEXT.CUSTOMERS_TITLE }
   const initials = user.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 
   return (
     <div className="flex h-full min-h-0">
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-line bg-surface md:flex">
+      {/* sizes as POST_FG's sidebar (2026-11-25, user: 'sizes too') */}
+      <aside className="hidden w-[248px] shrink-0 flex-col border-r border-line bg-surface md:flex">
         <div className="flex items-center gap-2.5 px-4 py-4">
-          <div className="grid size-9 place-items-center rounded-lg bg-primary text-xs font-bold text-white">PF</div>
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-[13px] font-bold text-white">PF</div>
           <div className="leading-tight">
-            <div className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.BRAND}</div>
-            <div className="text-[11px] text-ink-600">{BULK_TEXT.APP}</div>
+            <div className="font-serif text-[15px] font-medium text-ink-900">{BULK_TEXT.BRAND}</div>
+            <div className="text-[10px] uppercase tracking-widest text-ink-400">{BULK_TEXT.APP}</div>
           </div>
         </div>
         <nav className="flex flex-col gap-0.5 px-2">
           {nav.map((n) => (
             <button key={n.key} onClick={() => setPage(n.key)}
-              className={`flex items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] ${page === n.key ? 'bg-primary-soft font-semibold text-primary' : 'text-ink-600 hover:bg-alt hover:text-ink-900'}`}>
+              className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[13px] font-medium transition-colors duration-200 ${page === n.key ? 'bg-primary-soft text-primary' : 'text-ink-600 hover:bg-alt hover:text-ink-900'}`}>
               {n.icon}{n.label}
               {!!n.count && <span className="ml-auto rounded-full bg-warn px-1.5 text-[11px] font-semibold text-white">{n.count}</span>}
             </button>
@@ -120,7 +127,7 @@ export default function BulkApp() {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-2.5 md:px-6">
+        <header className="flex items-center justify-between gap-3 border-b border-line bg-surface px-5 py-3">
           <div className="flex gap-1 md:hidden">
             {nav.map((n) => (
               <button key={n.key} onClick={() => setPage(n.key)} className={`rounded-md px-2.5 py-1.5 text-[12px] ${page === n.key ? 'bg-primary-soft font-semibold text-primary' : 'text-ink-600'}`}>{n.label}</button>
@@ -135,11 +142,12 @@ export default function BulkApp() {
                 <span className="block text-[11px] text-ink-600">{roleLabel}</span>
               </span>
             </div>
+            <BulkBell />
             <button onClick={() => void signOut()} title={BULK_TEXT.SIGN_OUT} className="rounded-md p-1.5 text-ink-400 hover:bg-alt hover:text-ink-900"><LogOut className="size-4" /></button>
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">
-          {page === 'locations' ? <BulkLocations rights={rights} /> : <BulkOrders key={page} rights={rights} mode={page} />}
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 lg:p-6">
+          <ErrorBoundary key={page}><div className="pf-fade-in">{page === 'locations' ? <BulkLocations rights={rights} /> : page === 'customers' ? <BulkCustomers rights={rights} /> : <BulkOrders key={page} rights={rights} mode={page} />}</div></ErrorBoundary>
         </div>
       </main>
     </div>

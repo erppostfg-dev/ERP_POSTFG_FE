@@ -3,21 +3,27 @@
  * what the server will save. MRP x (100 - discount %) = price in paise, rounded half up.
  */
 
+import { BULK_DISCOUNT_BELOW, BULK_LINE_TOTAL_MIN, BULK_TEXT } from '../constants/bulkOrders'
+
 export const priceAfterDiscount = (mrp: number, discountPct: number): number =>
   Math.round(Number((mrp * (100 - discountPct)).toFixed(6))) / 100
 
 export const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100
 
-/** Unit price: a type's fixed price (Marketing ₹1, constants BULK_FIXED_PRICE) or MRP less discount %. */
+/** Unit price: a type's fixed price (Marketing / Head office, constants BULK_FIXED_PRICE) or MRP less discount %. */
 export const unitPrice = (mrp: number, discountPct: number, fixed?: number): number => fixed ?? priceAfterDiscount(mrp, discountPct)
 
 export const lineTotal = (mrp: number, discountPct: number, qty: number, fixed?: number): number => round2(unitPrice(mrp, discountPct, fixed) * qty)
 
-/** A discount the server accepts: 0-100, at most 2 decimals. */
-export const validDiscount = (d: number): boolean => Number.isFinite(d) && d >= 0 && d <= 100 && round2(d) === d
+/** A discount the server accepts: 0 to below 100 (v2: 100% refused), at most 2 decimals. */
+export const validDiscount = (d: number): boolean => Number.isFinite(d) && d >= 0 && d < BULK_DISCOUNT_BELOW && round2(d) === d
+
+/** A priced line (no fixed price) under ₹1 (v2, backend LINE_TOTAL_MIN): the server refuses it. */
+export const lineTooSmall = (total: number, fixed?: number): boolean => fixed === undefined && total < BULK_LINE_TOTAL_MIN
 
 const INR = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
-export const rupees = (n: number): string => INR.format(n)
+/** Money as ₹; null (no amount: a free Marketing / Head office order in the portal) = '–'. */
+export const rupees = (n: number | null): string => (n === null ? '–' : INR.format(n))
 
 /** "+91 98765-43210" -> "9876543210"; null when not 10 digits (as the backend). */
 export const normalPhone = (v: string): string | null => {
@@ -27,3 +33,20 @@ export const normalPhone = (v: string): string | null => {
   else if (d.length === 11 && d.startsWith('0')) d = d.slice(1)
   return /^\d{10}$/.test(d) ? d : null
 }
+
+/**
+ * v2 1c (2026-11-23, backend approvalNeed): why an order needs approval (empty = it goes straight to our team): more
+ * units than the type's threshold (null = never by size), or a delivery mode in the rule (Porter).
+ */
+/** 2026-11-25: the same address as the backend sees it (bulk-orders.service sameAddress): pincode + line letters / digits. */
+export const sameAddress = (a: { line: string; pincode: string }, b: { line: string; pincode: string }) =>
+  a.pincode.trim() === b.pincode.trim() && a.line.toLowerCase().replace(/[^a-z0-9]+/g, '') === b.line.toLowerCase().replace(/[^a-z0-9]+/g, '')
+
+export const approvalWhy = (rule: { overUnits: number | null; modes: string[] } | undefined, units: number, mode: string | null): string[] => {
+  if (!rule) return []
+  const why: string[] = []
+  if (rule.overUnits !== null && units > rule.overUnits) why.push(BULK_TEXT.WHY_UNITS(units, rule.overUnits))
+  if (mode && rule.modes.includes(mode)) why.push(BULK_TEXT.WHY_MODE(mode))
+  return why
+}
+

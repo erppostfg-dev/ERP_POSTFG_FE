@@ -5,6 +5,8 @@ import BulkApp from './pages/bulk/BulkApp'
 import { QUERY_CACHE } from './constants/ui'
 import './index.css'
 import { blockNumberStepping } from './lib/numberInputs'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { reloadOnStaleChunks } from './lib/staleChunks'
 
 /*
  * The Bulk Orders portal's own entry (2026-11-11): bulk.html -> here. Built and served apart from POST_FG
@@ -13,6 +15,7 @@ import { blockNumberStepping } from './lib/numberInputs'
  */
 
 blockNumberStepping()
+reloadOnStaleChunks()
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,8 +25,10 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BulkApp />
-    </QueryClientProvider>
+    <ErrorBoundary scope="app">
+      <QueryClientProvider client={queryClient}>
+        <BulkApp />
+      </QueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>,
 )

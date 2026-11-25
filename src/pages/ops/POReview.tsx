@@ -16,7 +16,8 @@ import { downloadReviewLineItems } from '../../lib/lineItemsExport'
 import {
   ADDRESS_REMARK, BULK_ENDED_TEXT, ENDED_TEXT, LINE_ITEMS, ISSUE_FIELD, ISSUE_LABELS, ISSUE_STATUS, LINE_ITEMS_TEXT, LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_REVIEW_MAX_PAGE_SIZE, PO_STATUS, FILE_VIEWER_TEXT, RECHECK_TEXT, REJECT_ONLY_ISSUES, REVIEW_ERROR, REVIEW_TEXT, SOURCE_LABELS, SUBMISSION_RETURNED, PRICE_ISSUES,
 } from '../../constants/poReview'
-import { PRICE_CHECK_TEXT, PRICE_CHOICE, TOTAL_TOLERANCE, type PriceChoice } from '../../constants/priceDifferences'
+import { gstOnPo } from '../../lib/gstOnPo'
+import { LINE_TOLERANCE, PRICE_CHECK_TEXT, PRICE_CHOICE, TOTAL_TOLERANCE, type PriceChoice } from '../../constants/priceDifferences'
 import { PriceCheck, type PriceRow } from './PriceCheck'
 import { ACCESS } from '../../constants/auth'
 import { PATHS, URL_PARAM } from '../../constants/pages'
@@ -33,6 +34,10 @@ import { foundTip, useFindOnPo } from '../../lib/useFindOnPo'
 import type { ValueKind } from '../../lib/valueTerms'
 import { VERIFY_TEXT } from '../../constants/poVerify'
 import { CAPABILITY, REVIEW_EDIT_TEXT, editRules, fieldOpen, type LineField } from '../../constants/reviewEdit'
+import type { OutsideFinding } from '../../api/uniwareOutside'
+import { OutsideBadge, OutsideBulkBar, OutsideStrip } from './UniwareOutside'
+import { useOutsideGuard } from './useOutsideGuard'
+import { inUniwareOf, outsideFilterDef } from '../../lib/uniwareOutside'
 
 /*
  * In Review: POs that failed validation (GET /po-review?status=needs_review), oldest first, and the review panel
@@ -51,6 +56,9 @@ type ReviewRow = {
   reopened: PoReviewItem['reopened']
   /** The issue types as text, for the download's Issues column (2026-11-03). */
   issuesText: string
+  /** 2026-11-25: already in Uniware under another code (punched outside POST_FG); inUniware Yes / No for the filter. */
+  outside: OutsideFinding | null
+  inUniware: string
 }
 
 const RCOLS: [string, keyof ReviewRow, ColKind][] = [
@@ -70,6 +78,7 @@ const toRow = (r: PoReviewItem): ReviewRow => ({
   processedIso: r.processedAt ?? '',
   reopened: r.reopened ?? null,
   issuesText: [...(r.reopened ? [ENDED_TEXT.TAG] : []), ...r.issueTypes.map((t) => ISSUE_LABELS[t] ?? t)].join(' | '),
+  outside: r.uniwareOutside ?? null, inUniware: inUniwareOf(r.uniwareOutside),
 })
 
 const distinct = (values: string[]) => [...new Set(values.filter(Boolean))].sort()
@@ -134,6 +143,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
     { key: 'poDate', label: LIST_FILTER.PO_DATE, type: 'dateRange', fromKey: 'poDateFrom', toKey: 'poDateTo' },
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows.map((r) => r.source)) },
     { key: 'issue', label: 'Issue', type: 'multi', options: distinct(rows.flatMap((r) => r.issueTypes.map(label))) },
+    outsideFilterDef,
     { key: SORT_FILTER_KEY, label: LIST_FILTER.SORT, type: 'sort', options: [{ value: LIST_SORT.CHANNEL, label: LIST_FILTER.SORT_CHANNEL }], placeholder: LIST_FILTER.SORT_DEFAULT_REVIEW },
     // the PO Date / Processed At header sort: only its chip here
     { key: DATE_SORT_KEY, label: LIST_FILTER.DATE_SORT, type: 'sort', options: LIST_FILTER.DATE_SORT_OPTIONS, inPanel: false },
@@ -205,6 +215,8 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
             <RefreshCw className={`size-4 ${rechecking ? 'animate-spin' : ''}`} />{rechecking ? RECHECK_TEXT.BUSY : RECHECK_TEXT.BUTTON}
           </button>
         ) : undefined} />
+      <OutsideStrip kind="review" filters={s.filters} setFilters={s.setFilters} canEdit={canEditList} liveTick={liveTick} />
+      <OutsideBulkBar findings={picked.flatMap((r) => (r.outside ? [r.outside] : []))} canEdit={canEditList} onDone={(m) => { setNotice(m); setSelected(new Set()); setReload((n) => n + 1) }} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {state.error ? (
@@ -225,6 +237,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
           trailing={[
             { label: 'Issues', render: (r) => (
               <span className="flex flex-wrap gap-1">
+                {r.outside && <OutsideBadge f={r.outside} poNumber={r.poNumber} canEdit={canEditList} onDone={(m) => { setNotice(m); setReload((n) => n + 1) }} />}
                 {r.reopened && (
                   <span title={`Rejected before: ${r.reopened.rejectedReason ?? '—'} · reopened: ${r.reopened.remark}${r.reopened.times > 1 ? ` (${r.reopened.times} times)` : ''}`}>
                     <Badge tone="warn">{ENDED_TEXT.TAG}{r.reopened.times > 1 ? ` ×${r.reopened.times}` : ''}</Badge>
@@ -287,11 +300,15 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   const [edits, setEdits] = useState<Record<string, LineEdit>>({})
   const [locationId, setLocationId] = useState('')
   const [accepted, setAccepted] = useState<Set<string>>(new Set())
+  // a PO total difference that only the price check choices bring up (no total issue to accept): acceptTotal (2026-11-23)
+  const [acceptTotal, setAcceptTotal] = useState(false)
   const [remark, setRemark] = useState('')
   const [rejecting, setRejecting] = useState(false)
   const [rejectRemark, setRejectRemark] = useState('')
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<{ message: string; stillOpen?: StillOpen['openIssues'] }>()
+  // 2026-11-25: Submit first checks Uniware (already punched outside POST_FG? warn, never block)
+  const outsideGuard = useOutsideGuard()
   // price check (2026-10-30): lineNo -> ours / channel for its MRP and price together (ours to start); lines whose master takes the PO's values
   const [choices, setChoices] = useState<Record<string, PriceChoice>>({})
   const [master, setMaster] = useState<Set<string>>(new Set())
@@ -352,6 +369,11 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   const totalLeft = Math.abs(left) > Math.max(TOTAL_TOLERANCE.MIN, (chosenTotal * TOTAL_TOLERANCE.PERCENT) / 100) ? left : null
   const totalIssue = open.find((i) => i.field === ISSUE_FIELD.PO_VALUE)
   const totalNeedsRemark = !!totalIssue && accepted.has(totalIssue.issueId) && !remark.trim()
+  // no total issue on the PO, but the total is off after the choices (or the backend said so on Submit): bug ND226208
+  const totalRefused = !!actionError?.stillOpen?.some((i) => i.type === 'TOTAL_MISMATCH' && i.lineNo === null)
+  const newTotalOff = !totalIssue && ((priceRows.length > 0 && totalLeft !== null) || totalRefused)
+  const newTotalNeedsAccept = newTotalOff && !acceptTotal
+  const newTotalNeedsRemark = newTotalOff && acceptTotal && !remark.trim()
   // an accepted Address Mismatch (2026-11-06) needs a remark too: why ship from another warehouse than the PO is billed to
   const addressIssue = open.find((i) => i.type === 'ADDRESS_MISMATCH')
   const addressNeedsRemark = !!addressIssue && accepted.has(addressIssue.issueId) && !remark.trim()
@@ -407,7 +429,8 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   const blockers = data
     ? [
         ...(unresolved.length ? [`${unresolved.length} issue${unresolved.length > 1 ? 's' : ''} to resolve`] : []),
-        ...(totalNeedsRemark ? [PRICE_CHECK_TEXT.TOTAL_REMARK] : []),
+        ...(totalNeedsRemark || newTotalNeedsRemark ? [PRICE_CHECK_TEXT.TOTAL_REMARK] : []),
+        ...(newTotalNeedsAccept ? [PRICE_CHECK_TEXT.TOTAL_ACCEPT_NEEDED] : []),
         ...(addressNeedsRemark ? [ADDRESS_REMARK] : []),
         ...checks.filter((c) => !c.ok).map((c) => c.label),
       ]
@@ -447,14 +470,17 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
       ...(picked ? { location: { detailsChannelId: picked.detailsChannelId } } : {}),
       lines,
       accept: [...accepted].map((issueId) => ({ issueId, remark: remark.trim() || undefined })),
+      ...(newTotalOff && acceptTotal ? { acceptTotal: true } : {}),
       remark: remark.trim() || undefined,
     }
-    setBusy(true)
-    setActionError(undefined)
-    submitPo(uploadId, body)
-      .then(() => onDone(REVIEW_TEXT.SUBMITTED(data.po.poNumber || poNumber)))
-      .catch(fail)
-      .finally(() => setBusy(false))
+    void outsideGuard.guard([uploadId], 'submit', async () => {
+      setBusy(true)
+      setActionError(undefined)
+      await submitPo(uploadId, body)
+        .then(() => onDone(REVIEW_TEXT.SUBMITTED(data.po.poNumber || poNumber)))
+        .catch(fail)
+        .finally(() => setBusy(false))
+    })
   }
 
   const reread = () => {
@@ -510,18 +536,25 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   const numInput = (l: PoReviewLine, k: 'qty' | 'mrp' | 'rate', ours?: Num | number | null) => {
     const e = edits[lineKey(l)]
     const v = e?.[k] ?? ''
-    const off = ours !== undefined && ours !== null && differs(numOrEmpty(v), ours)
+    // red only beyond the per-SKU tolerance the checks use (Rs 1 for MRP / rate; qty must match); paise = a grey note
+    const allowed = k === 'mrp' ? LINE_TOLERANCE.MRP : k === 'rate' ? LINE_TOLERANCE.PRICE : 0
+    const gap = ours !== undefined && ours !== null && differs(numOrEmpty(v), ours) ? Math.round((Number(v) - Number(ours)) * 100) / 100 : 0
+    const off = Math.abs(gap) > allowed + 0.001
+    const small = gap !== 0 && !off
     const key = `l:${lineKey(l)}:${k}`
     const po = onPo(l, k)
+    const gst = k === 'rate' ? gstOnPo(l.printed, l.poUnitPrice) : null
     return (
       <>
         <input type="number" step="any" min={0} value={v} disabled={!editable(l, k)} title={lockTip(l, k)} onChange={(ev) => setEdits({ ...edits, [lineKey(l)]: { ...e, [k]: ev.target.value } })}
           className={`tnum h-8 w-24 rounded-md border px-2 ${off ? 'border-crit/60 bg-crit-soft' : 'border-line'} disabled:cursor-not-allowed disabled:bg-alt disabled:text-ink-600`} />
+        {small && <div className="mt-0.5 text-[11px] text-ink-400">{PRICE_CHECK_TEXT.WITHIN_TOLERANCE(`${gap > 0 ? '+' : ''}${gap.toFixed(2)}`)}</div>}
         {po.length > 0 && (
           <div className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-400">
             {REVIEW_TEXT.ON_PO}
             <FindValue text={String(po[0])} className="tnum" found={finder.found.get(key)} active={finder.active === key} copied={finder.copied === key}
               onFind={() => finder.ask(key, po, 'number')} onCopy={() => finder.copy(key, String(po[0]))} />
+            {gst !== null && <span className="tnum" title={REVIEW_TEXT.PLUS_GST_TIP}>{REVIEW_TEXT.PLUS_GST(gst, Number(l.poUnitPrice).toFixed(2))}</span>}
           </div>
         )}
         {ours !== undefined && ours !== null && ours !== '' && <div className={`mt-0.5 text-[11px] ${off ? 'text-crit' : 'text-ink-400'}`}>ours {ours}</div>}
@@ -652,7 +685,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
                 <PriceCheck rows={priceRows} choices={choices} canEdit={canEdit} master={master}
                   onChoose={(lineNos, choice) => setChoices((cur) => ({ ...cur, ...Object.fromEntries(lineNos.map((k) => [k, choice])) }))}
                   onMaster={(lineNo, on) => setMaster((cur) => { const next = new Set(cur); if (on) next.add(lineNo); else next.delete(lineNo); return next })}
-                  totals={{ po: money(printedTotal), chosen: money(chosenTotal), explained: Math.abs(explained) >= 0.01 ? money(explained) : null, left: totalLeft === null ? null : money(totalLeft) }} />
+                  totals={{ po: money(printedTotal), chosen: money(chosenTotal), explained: Math.abs(explained) >= 0.01 ? money(explained) : null, left: totalLeft === null ? null : money(totalLeft), leftIsNew: !totalIssue }} />
               </>
             )}
 
@@ -706,6 +739,12 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
               Lines total <span className="tnum font-semibold text-ink-900">{money(linesTotal)}</span>
               {' · '}at our rates <span className={`tnum font-semibold ${differs(linesTotal, ourTotal) ? 'text-crit' : 'text-ink-900'}`}>{money(ourTotal)}</span>
             </div>
+            {newTotalOff && (
+              <label className="mt-2 flex items-start gap-2 rounded-[var(--radius)] border border-crit/30 bg-crit-soft/50 px-3 py-2 text-[12.5px] text-ink-900">
+                <input type="checkbox" className="mt-0.5" checked={acceptTotal} disabled={!canEdit} onChange={(e) => setAcceptTotal(e.target.checked)} />
+                <span><b>{PRICE_CHECK_TEXT.TOTAL_ACCEPT}</b><span className="block text-[11.5px] text-ink-600">{PRICE_CHECK_TEXT.TOTAL_ACCEPT_HINT(totalLeft === null ? '' : money(totalLeft))}</span></span>
+              </label>
+            )}
 
             {data.warnings.length > 0 && (
               <>
@@ -777,6 +816,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
               <>
                 <span title={BULK_ENDED_TEXT.REREAD_HINT}><Button onClick={reread} disabled={busy || gone}>{BULK_ENDED_TEXT.REREAD_ONE}</Button></span>
                 <Button onClick={() => setRejecting(true)} disabled={busy || gone}>{REVIEW_TEXT.REJECT}</Button>
+                {outsideGuard.dialog}
                 <span title={blockers.length ? `Before submitting: ${blockers.join(' · ')}` : undefined}>
                   <Button variant="primary" onClick={submit} disabled={busy || gone || blockers.length > 0}>
                     {busy ? 'Submitting…' : blockers.length ? `${blockers.length} thing${blockers.length > 1 ? 's' : ''} left to fill` : REVIEW_TEXT.SUBMIT}

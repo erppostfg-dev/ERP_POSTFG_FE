@@ -6,6 +6,21 @@
 
 export const BULK_ENDPOINT = {
   ORDERS: '/bulk-orders',
+  /** v2 piece 2: an uploaded receivers file checked (nothing saved). */
+  RECEIVERS_CHECK: '/bulk-orders/receivers/check',
+  /** 2026-11-24: duplicate warning before Submit. */
+  DUPLICATE_CHECK: '/bulk-orders/duplicate-check',
+  /** 2026-11-24: buyer organisations (admin). */
+  ORGS: '/bulk-orders/settings/orgs',
+  /** 2026-11-25: the head office address (admin). */
+  HEAD_OFFICE: '/bulk-orders/settings/head-office',
+  ORG: (id: string) => `/bulk-orders/settings/orgs/${encodeURIComponent(id)}`,
+  /** v2 piece 5a: Institutional customers. */
+  CUSTOMERS: '/bulk-orders/customers',
+  CUSTOMER: (id: string) => `/bulk-orders/customers/${encodeURIComponent(id)}`,
+  CUSTOMER_ADDRESSES: (id: string) => `/bulk-orders/customers/${encodeURIComponent(id)}/addresses`,
+  CUSTOMER_GSTIN: (id: string) => `/bulk-orders/customers/${encodeURIComponent(id)}/gstin`,
+  CUSTOMER_ADDRESS: (id: string, addressId: string) => `/bulk-orders/customers/${encodeURIComponent(id)}/addresses/${encodeURIComponent(addressId)}`,
   ORDER: (id: string) => `/bulk-orders/${encodeURIComponent(id)}`,
   CANCEL: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/cancel`,
   APPROVE: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/approve`,
@@ -14,12 +29,18 @@ export const BULK_ENDPOINT = {
   DOCUMENT: (id: string, docId: string) => `/bulk-orders/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}`,
   PAYMENT: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/payment`,
   SETTINGS: '/bulk-orders/settings',
+  /** v2 piece 3: email switches (admin) + the requester's reminder. */
+  NOTIFY_SETTINGS: '/bulk-orders/settings/notifications',
+  REMIND: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/remind`,
   SETTING: (type: string) => `/bulk-orders/settings/${encodeURIComponent(type)}`,
   SKUS: '/bulk-orders/skus',
   LOCATIONS: '/bulk-orders/locations',
   /** Our team's read-only view in POST_FG (PO Processing & Review > Bulk Orders, step 3a). */
   TEAM: '/po-review/bulk-orders',
   TEAM_ORDER: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}`,
+  /** 2026-11-24: stock of the order's SKUs at the mother warehouses (approvers / our team). */
+  STOCK: (id: string) => `/bulk-orders/${encodeURIComponent(id)}/stock`,
+  TEAM_STOCK: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/stock`,
   TEAM_DOCUMENTS: (id: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/documents`,
   TEAM_DOCUMENT: (id: string, docId: string) => `/po-review/bulk-orders/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}`,
   /** Step 3b (2026-11-12): warehouses + matching saved customers; create the sale order (PO review editor). */
@@ -31,62 +52,86 @@ export const BULK_ENDPOINT = {
   GOOGLE: '/auth/google?app=bulk',
 } as const
 
-export const BULK_TYPE = { MARKETING: 'marketing', INSTITUTIONAL: 'institutional' } as const
+/** Head office (Bulk Orders Portal v2, 2026-11-23): works exactly like Marketing (backend MARKETING_LIKE_TYPES). */
+export const BULK_TYPE = { MARKETING: 'marketing', HEAD_OFFICE: 'head_office', INSTITUTIONAL: 'institutional' } as const
 export type BulkType = (typeof BULK_TYPE)[keyof typeof BULK_TYPE]
-export const BULK_TYPES: BulkType[] = [BULK_TYPE.MARKETING, BULK_TYPE.INSTITUTIONAL]
-export const BULK_TYPE_LABEL: Record<BulkType, string> = { marketing: 'Marketing', institutional: 'Institutional' }
+export const BULK_TYPES: BulkType[] = [BULK_TYPE.MARKETING, BULK_TYPE.HEAD_OFFICE, BULK_TYPE.INSTITUTIONAL]
+export const BULK_TYPE_LABEL: Record<BulkType, string> = { marketing: 'Marketing', head_office: 'Head office', institutional: 'Institutional' }
+/** Types that behave like Marketing: delivery mode, no amounts on the portal, no institution details (backend isMarketingLike). */
+export const isMarketingLike = (type: string): boolean => type === BULK_TYPE.MARKETING || type === BULK_TYPE.HEAD_OFFICE
 
 /** Backend page keys (POST_FG constants/auth.ts PAGES). */
 export const BULK_PAGE = {
-  TYPE: { marketing: '/bulk-orders/marketing', institutional: '/bulk-orders/institutional' } as Record<BulkType, string>,
+  /** Head office = the Marketing page (the same people, user 2026-11-23). */
+  TYPE: { marketing: '/bulk-orders/marketing', head_office: '/bulk-orders/marketing', institutional: '/bulk-orders/institutional' } as Record<BulkType, string>,
   APPROVE: '/bulk-orders/approve',
 } as const
 
-export const BULK_STATUS = { PENDING: 'pending_approval', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled', PROCESSING: 'processing' } as const
+/** v2 1c (2026-11-23): SUBMITTED = no approval needed, with our team; READY = list filter approved + submitted (team tab). */
+export const BULK_STATUS = { DISPATCHED: 'dispatched', DELIVERED: 'delivered', DRAFT: 'draft', PENDING: 'pending_approval', SUBMITTED: 'submitted', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled', PROCESSING: 'processing' } as const
+/** v2 1g: list filter "active" (submitted + pending + approved; backend BULK_LIST_ACTIVE). */
+export const BULK_LIST_ACTIVE = 'active'
+export const BULK_LIST_READY = 'ready'
+/** Statuses the requester may still edit / cancel (backend BULK_EDITABLE_STATUSES). */
+export const BULK_EDITABLE: string[] = [BULK_STATUS.PENDING, BULK_STATUS.SUBMITTED, BULK_STATUS.DRAFT]
+/** Statuses our team may turn into a sale order (backend BULK_PROCESSABLE_STATUSES). */
+export const BULK_PROCESSABLE: string[] = [BULK_STATUS.APPROVED, BULK_STATUS.SUBMITTED]
 export type BulkStatus = (typeof BULK_STATUS)[keyof typeof BULK_STATUS]
-export const BULK_STATUS_LABEL: Record<string, string> = { pending_approval: 'Pending approval', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', processing: 'Processing' }
-export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = { pending_approval: 'warn', approved: 'ok', rejected: 'crit', cancelled: 'neutral', processing: 'info' }
+/** v2 1g: "processing" (our team made the sale order) reads "Order placed". */
+export const BULK_STATUS_LABEL: Record<string, string> = { dispatched: 'Dispatched', delivered: 'Delivered', draft: 'Draft', pending_approval: 'Pending approval', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', processing: 'Order placed' }
+export const BULK_STATUS_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = { dispatched: 'info', delivered: 'ok', draft: 'neutral', pending_approval: 'warn', submitted: 'ok', approved: 'ok', rejected: 'crit', cancelled: 'neutral', processing: 'info' }
 /** Institutional requester checks (same as the backend BULK_INSTITUTION). */
 export const BULK_INSTITUTION_RE = {
   GSTIN: /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/,
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
 } as const
 /** Order types our team can process into a sale order now (backend BULK_SALE.TYPES; Marketing since 2026-11-13). */
-export const BULK_PROCESS_TYPES: BulkType[] = [BULK_TYPE.INSTITUTIONAL, BULK_TYPE.MARKETING]
+export const BULK_PROCESS_TYPES: BulkType[] = [BULK_TYPE.INSTITUTIONAL, BULK_TYPE.MARKETING, BULK_TYPE.HEAD_OFFICE]
 /**
- * Fixed price per unit by type (backend BULK_ORDERS.FIXED_UNIT_PRICE; user 2026-11-13, Marketing: every unit ₹1, no
- * discount, "don't show the amount to them"): the PORTAL shows no MRP / discount / price / totals for these types (only
- * SKU + qty); our team in POST_FG sees the ₹1 prices.
+ * Every unit of a Marketing / Head office order in Uniware (backend MARKETING_UNIT_PRICE; v2 2026-11-23: ₹0.01, was ₹1,
+ * a constant until Uniware confirms it).
  */
-export const BULK_FIXED_PRICE: Partial<Record<BulkType, number>> = { [BULK_TYPE.MARKETING]: 1 }
+export const MARKETING_UNIT_PRICE = 0.01
+/**
+ * Fixed price per unit by type (backend BULK_ORDERS.FIXED_UNIT_PRICE; user 2026-11-13, "don't show the amount to them"):
+ * the PORTAL shows no MRP / discount / price / totals for these types (only SKU + qty and "Free order", v2 2026-11-23);
+ * our team in POST_FG sees the real price.
+ */
+export const BULK_FIXED_PRICE: Partial<Record<BulkType, number>> = { [BULK_TYPE.MARKETING]: MARKETING_UNIT_PRICE, [BULK_TYPE.HEAD_OFFICE]: MARKETING_UNIT_PRICE }
+/** v2 (2026-11-23, backend BULK_ORDERS.DISCOUNT_MAX / LINE_TOTAL_MIN): discount below 100%, every priced line at least ₹1. */
+export const BULK_DISCOUNT_BELOW = 100
+export const BULK_LINE_TOTAL_MIN = 1
 /** The portal hides every amount on orders of this type. */
 export const bulkHidesMoney = (type: string): boolean => BULK_FIXED_PRICE[type as BulkType] !== undefined
 
 /** Timeline words per event (backend BULK_EVENT). */
 export const BULK_EVENT_LABEL: Record<string, string> = {
   created: 'Created', edited: 'Edited', cancelled: 'Cancelled', approved: 'Approved', rejected: 'Rejected', document_added: 'Document uploaded', payment: 'Payment',
-  processed: 'Sale order created', sent_back: 'Sale order sent back',
+  processed: 'Sale order created', sent_back: 'Sale order sent back', submitted: 'Submitted', tracking: 'Courier update (Uniware)', reminded: 'Reminder sent to our team',
 }
 
 /**
  * Payment check (backend BULK_PAYMENT_STATUS, 2026-11-12): only orders whose type has it ON (Settings); never blocks
  * approval or processing; people with "Bulk Orders: verify payments" verify / refuses the proof or marks it not needed.
  */
-export const BULK_PAYMENT = { AWAITING: 'awaiting_proof', UPLOADED: 'proof_uploaded', VERIFIED: 'verified', REFUSED: 'refused', NOT_NEEDED: 'not_needed' } as const
+/** v2 piece 5b (2026-11-24, PRD): Unbilled -> Invoiced -> Payment submitted -> Paid (a refused proof = back to Invoiced). */
+export const BULK_PAYMENT = { AWAITING: 'unbilled', INVOICED: 'invoiced', UPLOADED: 'payment_submitted', VERIFIED: 'paid', NOT_NEEDED: 'not_needed' } as const
 export const BULK_PAYMENT_LABEL: Record<string, string> = {
-  awaiting_proof: 'Awaiting proof', proof_uploaded: 'Proof uploaded · to check', verified: 'Payment verified', refused: 'Proof refused', not_needed: 'Not needed',
+  unbilled: 'Unbilled', invoiced: 'Invoiced', payment_submitted: 'Payment submitted · to check', paid: 'Paid', not_needed: 'Not needed',
 }
 export const BULK_PAYMENT_TONE: Record<string, 'warn' | 'ok' | 'crit' | 'neutral' | 'info'> = {
-  awaiting_proof: 'neutral', proof_uploaded: 'warn', verified: 'ok', refused: 'crit', not_needed: 'info',
+  unbilled: 'neutral', invoiced: 'info', payment_submitted: 'warn', paid: 'ok', not_needed: 'neutral',
 }
-export const BULK_PAYMENT_ACTION = { VERIFY: 'verify', REFUSE: 'refuse', NOT_NEEDED: 'not_needed' } as const
+export const BULK_PAYMENT_ACTION = { VERIFY: 'verify', REFUSE: 'refuse', NOT_NEEDED: 'not_needed', SET_DETAILS: 'set_details' } as const
+/** 2026-11-24 (user: 'put 3'): proof screenshots per payment (backend BULK_ORDERS.PAYMENT_PROOFS_MAX). */
+export const BULK_PAYMENT_PROOFS_MAX = 3
 export type BulkPaymentAction = (typeof BULK_PAYMENT_ACTION)[keyof typeof BULK_PAYMENT_ACTION]
 
 /** Documents on an order (backend BULK_DOC_KIND); PDF / PNG / JPG up to 10 MB. */
-export const BULK_DOC_KIND = { PROFORMA: 'proforma_invoice', INVOICE: 'invoice', PAYMENT_PROOF: 'payment_proof' } as const
+export const BULK_DOC_KIND = { PROFORMA: 'proforma_invoice', INVOICE: 'invoice', PAYMENT_PROOF: 'payment_proof', PAYMENT_QR: 'payment_qr' } as const
 /** A document's content type -> the file viewer's type (the name may have no extension). */
 export const BULK_DOC_EXT: Record<string, string> = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg' }
-export const BULK_DOC_KIND_LABEL: Record<string, string> = { proforma_invoice: 'Proforma invoice', invoice: 'Invoice', payment_proof: 'Proof of payment' }
+export const BULK_DOC_KIND_LABEL: Record<string, string> = { proforma_invoice: 'Proforma invoice', invoice: 'Invoice', payment_proof: 'Proof of payment', payment_qr: 'Payment QR' }
 export const BULK_DOC_ACCEPT = '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg'
 export const BULK_DOC_MAX_BYTES = 10 * 1024 * 1024
 
@@ -94,21 +139,33 @@ export const BULK_DOC_MAX_BYTES = 10 * 1024 * 1024
  * The status timeline's steps (design figma-make-bulk-orders Timeline). Today the backend reaches Submitted + Approved;
  * Processing comes with step 3b, Ready to Dispatch / Dispatched / Delivered with the Uniware status of its sale order.
  */
-export const BULK_STEPS = ['Submitted', 'Approved', 'Processing', 'Ready to Dispatch', 'Dispatched', 'Delivered'] as const
+/** v2 1g: "Ready to Dispatch" removed; Dispatched / Delivered come from courier tracking (later piece). */
+export const BULK_STEPS = ['Submitted', 'Approved', 'Order placed', 'Dispatched', 'Delivered'] as const
 /** How far an order status is on BULK_STEPS (index of the last step done). */
-export const BULK_STEP_OF: Record<string, number> = { pending_approval: 0, approved: 1, processing: 2 }
+export const BULK_STEP_OF: Record<string, number> = { draft: -1, pending_approval: 0, submitted: 1, approved: 1, processing: 2, dispatched: 3, delivered: 4 }
 
 /** The design's markers (figma-make-bulk-orders): mode for Marketing only. */
-export const BULK_MODES = ['Porter', 'Courier', 'Self pickup'] as const
-export const BULK_PRIORITIES = ['Standard', 'Fast-track'] as const
+/** v2 1d (2026-11-23): Porter / Regular, Normal / Fast-track (backend BULK_DELIVERY_MODES / BULK_PRIORITIES). */
+export const BULK_MODES = ['Porter', 'Regular'] as const
+export const BULK_PRIORITIES = ['Normal', 'Fast-track'] as const
+export const BULK_FAST_TRACK = 'Fast-track'
+/** v2 1d: Purpose is asked on Marketing orders only (not Head office / Institutional). */
+export const BULK_PURPOSE_TYPES: string[] = ['marketing']
 
 export const BULK_LIMIT = {
   PAGE_SIZE: 50,
+  /** The server allows up to 200 a page (backend BULK_ORDERS.PAGE_SIZE_MAX): CSV export reads with it. */
+  PAGE_SIZE_MAX: 200,
   SKU_QUERY_MIN: 2,
   /** Wait after the last key before the SKU search is sent (ms): one search per word typed, not per letter. Each text's
    *  answer is kept (STALE_MS), and an older search still on its way is cancelled (2026-11-11). */
   SKU_DEBOUNCE_MS: 350,
   LINES_MAX: 200,
+  /** 2026-11-25 (user): a bigger order than this from a CHILD warehouse gets an 'are you sure?' note (never blocks). */
+  MOTHER_WARN_UNITS: 100,
+  /** v2 piece 2 (backend BULK_ORDERS.RECEIVERS_MAX / RECEIVER_LINES_MAX). */
+  RECEIVERS_MAX: 50,
+  RECEIVER_LINES_MAX: 500,
 } as const
 
 export const BULK_TEXT = {
@@ -116,6 +173,62 @@ export const BULK_TEXT = {
   BRAND: 'Post FG',
   NAV_ORDERS: 'Orders',
   NAV_LOCATIONS: 'Saved locations',
+  // v2 piece 5a: Institutional customers
+  NAV_CUSTOMERS: 'Customers',
+  FIX_RED: 'Fix the fields in red, then press Next.',
+  // 2026-11-25: our team's Bulk Orders tab: two views + a Filters panel (like Processed / In Review)
+  VIEW_TO_PLACE: 'To place',
+  VIEW_ALL: 'All orders',
+  F_TYPE: 'Type',
+  F_STATUS: 'Status',
+  F_PAYMENT: 'Payment',
+  F_WAITING: 'Waiting more than (days)',
+  F_WAITING_HINT: 'e.g. 3',
+  F_ANY: 'Any',
+  WH_MOTHER: 'Mother warehouses (MWH)',
+  WH_CHILD: 'Child warehouses',
+  WH_CHILD_WARN_TITLE: 'Big order from a child warehouse: are you sure?',
+  WH_CHILD_WARN: (units: number, wh: string) => `This order has ${units} units. Orders above 100 units usually ship from a mother warehouse (MWH); ${wh} is a child warehouse. You can still create the sale order.`,
+  WH_NONE: '— None —',
+  ORGS_TITLE: 'Buyer organisations',
+  ORGS_SUB: 'Outside companies that order in the portal. Their people see only their own orders and customers; our people see everything. Add the people in Users & Roles first (with the Bulk Orders: Institutional role), then their emails here.',
+  ORG_NAME: 'Organisation name',
+  ORG_EMAILS: 'People (emails, comma separated)',
+  ORG_ADD: 'Add organisation',
+  ORG_NO_PEOPLE: 'No people yet',
+  STOCK_LINE: (parts: string) => `Stock on hand: ${parts}`,
+  STOCK_NONE: 'Stock: not in the stock report (a combo counts as its items)',
+  STOCK_AS_OF: (day: string) => `Stock from the in-transit report of ${day} (mother warehouses, on hand).`,
+  // 2026-11-24 quick wins
+  DUPLICATE_WARN: (list: string) => `Looks like a repeat of your recent order ${list} (same SKUs to the same pincode). Submit only if you need it again.`,
+  WAITING_MORE_THAN: 'Waiting more than',
+  WAITING_DAYS: 'days',
+  EXPORT_EXCEL: 'Excel',
+  CUSTOMERS_TITLE: 'Customers',
+  CUSTOMERS_SUB: 'The companies Institutional orders are placed for. Pick one in a new order: its billing details, addresses and discount fill in.',
+  CUSTOMER_ADD: 'Add a customer',
+  CUSTOMER_EDIT: 'Change',
+  CUSTOMER_SAVE: 'Save customer',
+  CUSTOMER_SEARCH: 'Search company, GSTIN, contact',
+  CUSTOMER_NONE: 'No customers yet.',
+  CUSTOMER_OFF: 'Switched off',
+  CUSTOMER_SWITCH_OFF: 'Switch off',
+  CUSTOMER_SWITCH_ON: 'Switch on',
+  COMPANY_NAME: 'Company name',
+  CONTACT_NAME: 'Contact person',
+  CONTACT_PHONE: 'Contact number',
+  DEFAULT_DISCOUNT: 'Default discount %',
+  BILLING_ADDRESS: 'Billing address',
+  SHIP_ADDRESSES: 'Shipping addresses',
+  SHIP_ADD: 'Add a shipping address',
+  SHIP_LABEL: 'Name (e.g. Main campus)',
+  GSTIN_UNVERIFIED: 'GSTIN unverified',
+  GSTIN_VERIFIED: 'GSTIN verified',
+  ORDER_CUSTOMER: 'Customer',
+  ORDER_CUSTOMER_TYPED: 'Type the institution details',
+  ORDER_SHIP_PICK: 'Ship to (from the customer)',
+  ORDER_SHIP_PICK_NONE: 'Pick an address…',
+  ORDER_CUSTOMER_HINT: 'Billing details come from the customer. Its default discount fills the lines that have none.',
   NAV_APPROVALS: 'Approvals',
   APPROVALS_TITLE: 'Approval queue',
   APPROVALS_SUB: "Orders waiting for approval. Open one to change quantities or discounts, then approve or reject. Prices use today's MRP.",
@@ -124,7 +237,8 @@ export const BULK_TEXT = {
   ORDERS_SUB: 'Create, submit and track bulk orders. Prices are our MRP less your discount; an approver checks every order.',
   LOCATIONS_TITLE: 'Saved locations',
   LOCATIONS_SUB: 'Delivery addresses saved from the order form. Pick one in a new order instead of typing it again.',
-  CREATE: 'Create order',
+  /** PRD v2: the order is placed later by our team, so the portal asks for it. */
+  CREATE: 'Create order request',
   SIGN_IN_TITLE: 'Bulk orders portal',
   SIGN_IN_SUB: 'Marketing and institutional bulk orders for mCaffeine.',
   SIGN_IN: 'Sign in with Google',
@@ -138,8 +252,51 @@ export const BULK_TEXT = {
   ALL_STATUSES: 'All statuses',
   ALL_TYPES: 'All',
   STAT_TOTAL: 'All orders',
+  /** v2 1g worklist cards. */
+  STAT_ACTIVE: 'Active',
+  STAT_PLACED: 'Order placed',
+  STAT_DISPATCHED: 'Dispatched',
+  STAT_DISPATCHED_HINT: 'Set by Uniware when the shipment leaves the warehouse',
+  /** v2 piece 4: courier tracking (from Uniware). */
+  TRACKING: 'Courier tracking',
+  /** v2 piece 3: bell, remind, email switches. */
+  BELL: 'Notifications',
+  BELL_EMPTY: 'Nothing new.',
+  REMIND: 'Remind our team',
+  REMIND_AT: (t: string) => `Remind possible from ${t}`,
+  REMIND_HINT: 'Sends a reminder to our team (bell + email) to place this order.',
+  REMINDED: (po: string) => `Reminder sent for ${po}`,
+  NOTIFY_TITLE: 'Notifications (email)',
+  NOTIFY_SUB: 'The bell always shows these. These switches only control the emails.',
+  NOTIFY_EMAILS: 'Send emails',
+  NOTIFY_APPROVAL: 'Approval needed (to the approvers)',
+  NOTIFY_DECISION: 'Approved / rejected (to the requester)',
+  NOTIFY_REMIND: 'Remind (to our COPT team)',
+  NOTIFY_PAYMENT: 'Payment (to the requester: details added, payment verified / refused)',
+  AWB: 'AWB',
+  COURIER: 'Courier',
+  COURIER_STATUS: 'Courier status',
+  DISPATCHED_ON: 'Dispatched',
+  DELIVERED_ON: 'Delivered',
+  INVOICE: 'Invoice',
+  TRACK_LINK: 'Track',
+  TRACKING_UPDATED: (t: string) => `Updated from Uniware ${t}`,
+  COL_COURIER: 'Courier',
+  SAVE_DRAFT: 'Save as draft',
+  DRAFT_SAVED: (po: string) => `Draft ${po} saved: open it from the list to continue`,
+  CONTINUE_DRAFT: 'Continue',
+  DISCARD_DRAFT: 'Discard draft',
+  ARCHIVE: 'Archive',
+  ARCHIVE_HINT: 'Rejected / cancelled orders older than 30 days',
+  EXPORT_CSV: 'Export CSV',
+  EXPORTING: 'Exporting...',
   STAT_PENDING: 'Pending approval',
   STAT_APPROVED: 'Approved',
+  STAT_SUBMITTED: 'Submitted (no approval)',
+  /** v2 1c timeline: why the order needs approval / moved. */
+  EVENT_APPROVAL: (why: string) => `Needs approval: ${why}`,
+  EVENT_NO_APPROVAL: 'No approval needed',
+  EVENT_STATUS: (from: string, to: string) => `${from} → ${to}`,
   STAT_REJECTED: 'Rejected',
   LOAD_MORE: 'Load more',
   SHOWING: (n: number, total: number) => `${n} of ${total}`,
@@ -147,11 +304,44 @@ export const BULK_TEXT = {
   STEPS: ['Order items', 'Delivery details', 'Review & submit'],
   ITEMS_TITLE: 'What would you like to order?',
   ITEMS_SUB: 'Search our SKUs by code, name or EAN. The MRP fills in; add your discount % per SKU.',
+  /** v2 1f: one brand per order (the SKU master's brand). */
+  BRAND_LABEL: 'Brand',
+  BRAND_PICK: 'Select the brand',
+  BRAND_HINT: 'One brand per order. Only SKUs of this brand can be added.',
+  BRAND_FIRST: 'Select the brand first',
+  BRAND_CHANGED: 'Brand changed: the SKUs of the other brand were removed.',
+  BRAND_NONE: 'No brands yet: the SKU master has no brand filled in. Ask the masters team.',
   ITEMS_SUB_QTY_ONLY: 'Search our SKUs by code, name or EAN and type the quantity of each.',
   SKU_SEARCH: 'Search SKU code, name or EAN',
   SKU_NONE: 'No active SKU with an MRP matches',
   SKU_TYPE_MORE: 'Type at least 2 characters of the SKU code, name or EAN',
   ADD_LINE: 'Add another SKU',
+  // v2 piece 2: several receivers (Marketing / Head office)
+  RECEIVERS_TITLE: 'Receivers',
+  RECEIVERS_SUB: 'One receiver, or several: each gets their own shipment (one sale order each). Quantities from step 1 are filled in for every new receiver.',
+  RECEIVER_N: (n: number) => `Receiver ${n}`,
+  ADD_RECEIVER: 'Add another receiver',
+  REMOVE_RECEIVER: 'Remove this receiver',
+  COPY_QTY_ALL: 'Copy the step 1 quantities to every receiver',
+  RECEIVER_QTY_HINT: 'Leave a SKU empty or 0 if this receiver does not get it.',
+  ERR_RECEIVER_NO_SKU: 'Give this receiver at least one SKU',
+  ERR_QTY_WHOLE: 'Whole numbers only',
+  UPLOAD_RECEIVERS: 'Upload receivers (Excel / CSV)',
+  UPLOAD_TEMPLATE: 'Download the template',
+  UPLOAD_HINT: 'One row per receiver and SKU: Receiver name, Receiver number, Address, City, State, Pincode, SKU code, Qty. The upload replaces the receivers below.',
+  UPLOAD_BRAND_FIRST: 'Pick the brand in step 1 first',
+  UPLOAD_READING: 'Checking the file…',
+  UPLOAD_MISSING: (cols: string) => `Columns not found in row 1: ${cols}`,
+  UPLOAD_DONE: (n: number, rows: number) => `${n} receiver(s) loaded from ${rows} row(s).`,
+  UPLOAD_BAD: (n: number) => `${n} row problem(s): fix them in the file and upload again, or fix the receivers below.`,
+  UPLOAD_ERRORS_FILE: 'Download the problems',
+  UPLOAD_ROW: (row: number) => (row ? `Row ${row}` : 'File'),
+  DRAWER_RECEIVERS: 'Receivers',
+  RECEIVER_TAG: (n: number) => `R${n}`,
+  RECEIVER_ADDED: (n: number, name: string) => `Receiver ${n} added: ${name}`,
+  RECEIVER_REMOVED: (n: number, name: string) => `Receiver ${n} removed: ${name}`,
+  RECEIVER_CHANGED: (n: number) => `Receiver ${n}:`,
+  RECEIVER_UNITS: (n: number) => `${n} units`,
   DELIVERY_TITLE: 'Delivery & receiving details',
   DELIVERY_SUB: 'Where and when this order is needed. Our team decides the warehouse after approval.',
   ORDERED_BY: 'Ordered by',
@@ -169,9 +359,38 @@ export const BULK_TEXT = {
   SAVE_AS_HINT: 'e.g. Andheri store. Saved addresses can be picked in later orders.',
   MODE: 'Order mode',
   PRIORITY: 'Priority',
-  NOTE: 'Note for the approver (optional)',
+  NOTE: 'Special instructions (optional)',
+  NOTE_HINT: 'Shown to our team when they place the order',
+  NEEDED_BY_OPTIONAL: 'Needed by (optional for Normal)',
+  FAST_TRACK_REMARKS: 'Why is it urgent?',
+  PURPOSE: 'Purpose (optional)',
+  PURPOSE_HINT: 'e.g. influencer seeding, an event name',
+  ERR_REQUIRED: 'Required',
+  ERR_PHONE: 'A 10-digit phone number (+91, 0, spaces are fine)',
+  ERR_PIN: 'A 6-digit pincode',
+  ERR_DATE_PAST: 'Today or later',
+  ERR_NEEDED_BY_FAST: 'Required for Fast-track',
+  ERR_REMARKS: 'Required for Fast-track: say why it is urgent',
+  REVIEW_FIX: 'Fix these before you submit:',
+  ERR_FIELD: (label: string, why: string) => `${label}: ${why}`,
   REVIEW_TITLE: 'Review & submit',
-  REVIEW_SUB: 'The order goes to an approver. The approver may change quantities or discounts before approving.',
+  REVIEW_SUB: 'Check the order before you submit it.',
+  /** v2 1c: what happens on Submit (from the approval rules of the type). */
+  NEEDS_APPROVAL: (why: string) => `Needs approval: ${why}. The approver may change quantities or discounts before approving.`,
+  NO_APPROVAL: 'No approval needed: the order goes straight to our team.',
+  WHY_UNITS: (units: number, over: number) => `${units} units (over ${over})`,
+  WHY_MODE: (mode: string) => `${mode} delivery`,
+  /** 2026-11-25 (user): Head office orders go to the head office; any other address needs approval (backend approvalNeed). */
+  WHY_NOT_HEAD_OFFICE: (city: string) => `delivery to an address other than the head office (${city})`,
+  HO_USE: 'Use the head office address',
+  HO_OFF_NOTE: (city: string) => `Not the head office address (${city}): this order will need approval by the bulk approvers.`,
+  HO_TITLE: 'Head office address',
+  HO_SUB: 'Head office orders are delivered here by default (filled in on the order form). Any other address on a Head office order needs approval by the bulk approvers.',
+  HO_NOT_SET: 'Not set yet: Head office orders have no default address and no extra approval.',
+  HO_SAVE: 'Save address',
+  HO_SAVED: 'Saved',
+  STEP_NO_APPROVAL: 'No approval needed',
+  TEAM_READY: 'To process',
   BACK: 'Back',
   NEXT: 'Next',
   SUBMIT: 'Submit for approval',
@@ -189,6 +408,10 @@ export const BULK_TEXT = {
   TOTAL_UNITS: 'units',
   TOTAL_MRP: 'At MRP',
   TOTAL_VALUE: 'Order value',
+  /** v2 (2026-11-23): shown instead of amounts on Marketing / Head office orders. */
+  FREE_ORDER: 'Free order',
+  LINE_UNDER_MIN: (min: string) => `Each line must come to at least ${min}: lower the discount or raise the qty`,
+  DISCOUNT_RULE: 'Discount below 100%',
   // list / drawer
   COL_PO: 'PO number',
   COL_BUYER: 'Ordered by / type',
@@ -259,13 +482,26 @@ export const BULK_TEXT = {
   PAYMENT_NOT_NEEDED: 'Payment not needed',
   /** Payment card + documents (2026-11-13, BulkDocumentsSection). */
   DOCUMENTS_ONLY: 'Documents',
-  PAY_AWAITING: 'Waiting for the proof of payment',
-  PAY_AWAITING_SUB: 'Upload it below when it comes. It never holds the order.',
-  PAY_UPLOADED: 'Proof uploaded · waiting to be checked',
+  PAY_AWAITING: 'Unbilled · waiting for the invoice',
+  PAY_AWAITING_SUB: 'Finance uploads the invoice and the payment link here. It never holds the order.',
+  PAY_INVOICED: 'Invoiced · waiting for the payment',
+  PAY_INVOICED_SUB: 'Pay with the link, then upload the proof of payment (PDF / JPG / PNG with the UTR / reference no.).',
+  PAY_UPLOADED: 'Payment submitted · waiting to be checked',
   PAY_UPLOADED_SUB: 'Open the proof to check it against the order.',
-  PAY_VERIFIED: 'Payment verified',
-  PAY_REFUSED: 'Proof refused',
-  PAY_REFUSED_SUB: 'Upload a new proof below.',
+  PAY_VERIFIED: 'Paid',
+  PAY_NOW: 'Pay now',
+  PAY_LINK: 'Payment link (https://…)',
+  PAY_LINK_SAVE: 'Save payment details',
+  PAY_LINK_HINT: 'Paste the https:// link: the buyer sees a Pay now button.',
+  PAY_DETAILS_TITLE: 'Pay with',
+  PAY_DETAILS_EDIT: 'Payment details (any of: link, QR, bank details)',
+  PAY_BANK: 'Bank details (account, IFSC, UPI …)',
+  PAY_QR_HINT: 'To add a QR code, upload it below as “Payment QR”.',
+  PAY_COPY: 'Copy',
+  PAY_COPIED: 'Copied',
+  PAY_PROOF_HINT: (n: number) => `Up to ${n} screenshots / files for one payment (UTR / reference visible).`,
+  GSTIN_VERIFY: 'Verify GSTIN',
+  GSTIN_UNVERIFY: 'Mark unverified',
   PAY_NOT_NEEDED: 'Payment not needed',
   PAY_BY: (name: string, at: string) => `by ${name} · ${at}`,
   REVIEW_VERIFY: 'Review & verify',
@@ -277,6 +513,10 @@ export const BULK_TEXT = {
   // POST_FG Users & Roles -> Settings -> Bulk Orders (central admin)
   SETTINGS_SUB: 'Bulk Orders portal, per order type. A change applies to orders created after it.',
   PAYMENT_CHECK: 'Proof of payment check',
+  APPROVAL_OVER: 'Approval needed above',
+  APPROVAL_OVER_UNITS: 'units',
+  APPROVAL_NEVER: 'Never by size',
+  APPROVAL_HINT: 'An order with MORE units than this needs approval; Porter delivery always does (Marketing, Head office). Empty = never by size. Applies to orders created or edited after the change.',
   PAYMENT_CHECK_HINT: 'ON: new orders get a payment status (awaiting proof); people with "Bulk Orders: verify payments" (admin, developer, or a role it is on for) verify the proof. Never blocks the order.',
   CHANGED_BY: (name: string, at: string) => `Changed by ${name} · ${at}`,
   STATUS_TIMELINE: 'Status timeline',
@@ -284,6 +524,16 @@ export const BULK_TEXT = {
   CHANGED: (what: string, from: string, to: string) => `${what} ${from} → ${to}`,
   REMOVED: 'removed',
   EDITED_FIELDS: (n: number) => `${n} detail${n === 1 ? '' : 's'} changed`,
+  /** v2 1e: edits need a remark; the history shows old -> new. */
+  EDIT_REMARK: 'Why are you changing this order?',
+  EDIT_REMARK_HINT: 'Required. Kept in the order history with the changes.',
+  EDITED_TAG: 'Edited',
+  EDITED_TAG_TITLE: (n: number) => `Changed ${n} time${n === 1 ? '' : 's'} after it was submitted: see History`,
+  EDITED_BANNER: (n: number) => `This order was changed ${n} time${n === 1 ? '' : 's'} after it was submitted. The changes are in History below.`,
+  CHANGE_FROM_TO: (label: string, from: string, to: string) => `${label}: ${from} → ${to}`,
+  LINE_ADDED: (code: string, qty: number) => `${code}: added (${qty})`,
+  LINE_REMOVED: (code: string) => `${code}: removed`,
+  EMPTY_VALUE: '(empty)',
   // Institutional requester details (2026-11-12, required where marked)
   INSTITUTION_TITLE: 'Institution (billing)',
   INSTITUTION_SUB: 'Used for the invoice and the customer in Uniware.',
@@ -323,3 +573,12 @@ export const BULK_TEXT = {
   FIXED_PRICE_NOTE: (price: string) => `Every unit goes to Uniware at ${price} (no discount). Type the Uniware channel (e.g. JIVA) and its customer code.`,
   PAYMENT_PENDING_NOTE: 'Payment not verified yet: you can still create the sale order; check payment before dispatch.',
 } as const
+
+/** v2 1e: names of the order fields in the history (backend field keys -> words). */
+export const BULK_FIELD_LABEL: Record<string, string> = {
+  orderedBy: 'Ordered by', receiverName: 'Receiver', receiverPhone: 'Receiver phone', neededBy: 'Needed by',
+  deliveryMode: 'Order mode', priority: 'Priority', note: 'Special instructions', fastTrackRemarks: 'Why urgent', purpose: 'Purpose',
+  locationId: 'Saved location', locationLabel: 'Location name', addressLine: 'Address', city: 'City', state: 'State', pincode: 'Pincode',
+  institutionName: 'Institution', gstin: 'GSTIN', contactEmail: 'Contact email',
+  billingAddressLine: 'Billing address', billingCity: 'Billing city', billingState: 'Billing state', billingPincode: 'Billing pincode',
+}
