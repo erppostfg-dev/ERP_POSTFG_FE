@@ -99,7 +99,7 @@ export function SubTabs<T extends string>({ value, onChange, tabs }: { value: T;
 
 // Right contextual drawer (~520px)
 /** Time of the drawer's slide in / out (ms); the same as .pf-drawer-* in index.css. */
-const DRAWER_MS = 250
+const DRAWER_MS = 300
 
 /**
  * A panel sliding in from the right over a fading backdrop; ✕, a backdrop click and Esc slide it out first, then call
