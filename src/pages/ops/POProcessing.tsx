@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { OutsideFinding } from '../../api/uniwareOutside'
 import { OutsideBadge, OutsideBulkBar, OutsideStrip } from './UniwareOutside'
+import { useOutsideGuard } from './useOutsideGuard'
 import { inUniwareOf, outsideFilterDef } from '../../lib/uniwareOutside'
 import { useChannelOptions } from '../../lib/channels'
 import { AlertTriangle, ArrowRight, Eye, FileUp, Webhook, Zap, Mail } from 'lucide-react'
@@ -307,17 +308,23 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       setBulkBusy(false)
     }
   }
+  // 2026-11-25: download / mark first check Uniware (already punched outside POST_FG? warn: skip them or go ahead)
+  const outsideGuard = useOutsideGuard()
   const bulk = async (what: 'csv' | 'mark') => {
-    setBulkBusy(true)
-    try {
-      // One ticked PO: its own file named after the sale order; several: one combined CSV.
-      if (what === 'csv') { await (picked.length === 1 ? downloadOneCsv(picked[0].id) : downloadCombinedCsv(picked.map((r) => r.id))); done(UNIWARE_TEXT.DOWNLOADED(picked.length)) }
-      else { await markUniwareUploaded(markable.map((r) => r.id)); done(UNIWARE_TEXT.MARKED(markable.length)) }
-    } catch (e) {
-      fail(e instanceof ApiError ? e.message : String(e))
-    } finally {
-      setBulkBusy(false)
-    }
+    const ids = (what === 'csv' ? picked : markable).map((r) => r.id)
+    await outsideGuard.guard(ids, what === 'csv' ? 'download' : 'mark', async (use) => {
+      if (!use.length) return
+      setBulkBusy(true)
+      try {
+        // One PO: its own file named after the sale order; several: one combined CSV.
+        if (what === 'csv') { await (use.length === 1 ? downloadOneCsv(use[0]) : downloadCombinedCsv(use)); done(UNIWARE_TEXT.DOWNLOADED(use.length)) }
+        else { await markUniwareUploaded(use); done(UNIWARE_TEXT.MARKED(use.length)) }
+      } catch (e) {
+        fail(e instanceof ApiError ? e.message : String(e))
+      } finally {
+        setBulkBusy(false)
+      }
+    })
   }
   // One Download button (user, 2026-10-26): the main click is the POs (this table) as Excel, the ticked ones or, with
   // none ticked, every PO shown (search + filters); the arrow gives CSV and the POs' line items. Read only.
@@ -395,6 +402,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
         selectedCount={picked.length} onClearSelection={() => setSelected(new Set())} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       <OutsideStrip kind="processed" filters={s.filters} setFilters={s.setFilters} canEdit={canEdit} liveTick={liveTick} />
+      {outsideGuard.dialog}
       <OutsideBulkBar findings={picked.flatMap((r) => (r.outside ? [r.outside] : []))} canEdit={canEdit} onDone={(m) => { setSelected(new Set()); done(m) }} />
       {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {/* What still has to go to Uniware: click to show only those. */}

@@ -3,6 +3,7 @@ import { AlertTriangle, Check, Clock, Loader2, Upload } from 'lucide-react'
 import { Badge } from '../../components/ui'
 import { apiUrl, ApiError } from '../../api/client'
 import { markUniwareUploaded, type UniwareCreateState } from '../../api/poReview'
+import { useOutsideGuard } from './useOutsideGuard'
 import { UNIWARE_AGE, UNIWARE_CREATE_STATUS, UNIWARE_CREATE_TEXT, UNIWARE_ENDPOINT, UNIWARE_STATE, UNIWARE_TEXT, type UniwareState } from '../../constants/poReview'
 import { istDateTime } from '../../lib/time'
 
@@ -64,8 +65,10 @@ export function UniwareCell({ h, canEdit, onDone, onError, create }: {
 }) {
   const [busy, setBusy] = useState<'mark' | 'undo' | null>(null)
   const st = stateOf(h)
+  // 2026-11-25: Mark uploaded first checks Uniware (warn, never block)
+  const outsideGuard = useOutsideGuard()
   const days = daysWaiting(h)
-  const run = async (what: 'mark' | 'undo') => {
+  const doRun = async (what: 'mark' | 'undo') => {
     setBusy(what)
     try {
       await markUniwareUploaded([h.id], what === 'undo')
@@ -76,6 +79,7 @@ export function UniwareCell({ h, canEdit, onDone, onError, create }: {
       setBusy(null)
     }
   }
+  const run = (what: 'mark' | 'undo') => (what === 'undo' ? doRun(what) : outsideGuard.guard([h.id], 'mark', async (use) => { if (use.length) await doRun(what) }))
   const spin = <Loader2 className="size-3.5 animate-spin" />
 
   if (st === UNIWARE_STATE.UPLOADED) {
@@ -99,6 +103,7 @@ export function UniwareCell({ h, canEdit, onDone, onError, create }: {
         <Badge tone={st === UNIWARE_STATE.DOWNLOADED ? 'info' : 'neutral'}>{st === UNIWARE_STATE.DOWNLOADED ? UNIWARE_TEXT.WAITING_UPLOAD : UNIWARE_TEXT.NOT_DOWNLOADED}</Badge>
       </span>
       <span title={UNIWARE_TEXT.AGE_HINT}><Badge tone={ageTone(days)}><Clock className="size-3" />{dayText(days)}</Badge></span>
+      {outsideGuard.dialog}
       {canEdit && st === UNIWARE_STATE.DOWNLOADED && (
         <button type="button" onClick={() => void run('mark')} disabled={!!busy}
           className="pf-press inline-flex h-7 items-center gap-1.5 rounded-md bg-ok px-2.5 text-[12px] font-semibold text-white transition-opacity duration-150 hover:opacity-90 disabled:opacity-60">

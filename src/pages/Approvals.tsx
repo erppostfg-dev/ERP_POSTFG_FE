@@ -21,6 +21,7 @@ import { istDateTime } from '../lib/time'
 import { PATHS, URL_PARAM } from '../constants/pages'
 import { oneOf, useUrlParam } from '../lib/urlState'
 import { fmtDate, type ColKind } from '../lib/ops'
+import { useOutsideGuard } from './ops/useOutsideGuard'
 import MarginApprovals from './MarginApprovals'
 
 /*
@@ -238,11 +239,17 @@ function BulkDialog({ action, items, onClose, onDone }: { action: 'approve' | 'r
   const tooMany = items.length > APPROVAL_BULK.MAX
   const approve = action === 'approve'
   const ready = !busy && !tooMany && items.length > 0 && (approve ? !master.length || confirmed : remark.trim().length > 0)
-  const go = async () => {
+  // 2026-11-25: bulk Approve first checks Uniware (warn: skip the ones already punched outside, or approve all)
+  const outsideGuard = useOutsideGuard()
+  const go = () => (approve
+    ? outsideGuard.guard(items.map((i) => i.uploadId), 'approve', (use) => doGo(items.filter((i) => use.includes(i.uploadId))))
+    : doGo(items))
+  const doGo = async (list: ApprovalItem[]) => {
+    if (!list.length) return
     setBusy(true)
     setError('')
     try {
-      const ids = items.map((i) => i.id)
+      const ids = list.map((i) => i.id)
       const out = approve
         ? await bulkApprove(ids, { remark: remark.trim() || undefined, confirmMasterUpdates: master.length > 0 && confirmed })
         : await bulkReject(ids, remark.trim())
@@ -286,6 +293,7 @@ function BulkDialog({ action, items, onClose, onDone }: { action: 'approve' | 'r
       <textarea value={remark} onChange={(e) => setRemark(e.target.value.slice(0, PO_REVIEW_REMARK_MAX))} rows={3}
         placeholder={approve ? APPROVAL_TEXT.APPROVE_REMARK : APPROVAL_TEXT.REJECT_PROMPT} className={`${inputCls} h-auto py-2`} />
       {error && <p className="mt-2 text-[12.5px] text-crit">{error}</p>}
+      {outsideGuard.dialog}
     </Modal>
   )
 }
@@ -342,10 +350,12 @@ function ApprovalDrawer({ id, canDecide, onClose, onDone }: {
       .finally(() => setBusy(false))
   }
   const po = a?.review.po.poNumber || a?.poNumber || ''
-  const approve = () => act(async () => {
+  // 2026-11-25: Approve (makes the sale order) first checks Uniware: already punched outside POST_FG? warn, never block
+  const outsideGuard = useOutsideGuard()
+  const approve = () => void outsideGuard.guard(a ? [a.uploadId] : [], 'approve', async () => act(async () => {
     const r = await approveSubmission(id, remark.trim() || undefined)
     return { tone: 'ok', text: APPROVAL_TEXT.APPROVED(po, r.saleOrderCode) }
-  })
+  }))
   const reject = () => act(async () => {
     await rejectSubmission(id, remark.trim())
     return { tone: 'ok', text: APPROVAL_TEXT.REJECTED(po) }
@@ -382,6 +392,7 @@ function ApprovalDrawer({ id, canDecide, onClose, onDone }: {
       {d.isPending ? <p className="text-[12.5px] text-ink-400">Loading the PO…</p>
         : d.isError ? <p className="text-[12.5px] text-crit">{d.error instanceof ApiError ? d.error.message : String(d.error)}</p>
         : a && <ApprovalBody a={a} />}
+      {outsideGuard.dialog}
     </Drawer>
   )
 }

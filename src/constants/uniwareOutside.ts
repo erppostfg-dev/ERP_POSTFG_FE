@@ -10,10 +10,14 @@ export const UNIWARE_OUTSIDE_ENDPOINT = {
   RESOLVE: (id: string) => `/po-review/uniware-outside/${encodeURIComponent(id)}/resolve`,
   LIVE: (id: string) => `/po-review/uniware-outside/${encodeURIComponent(id)}/live`,
   BULK_RESOLVE: '/po-review/uniware-outside/bulk-resolve',
+  PRECHECK: '/po-review/uniware-outside/precheck',
+  ACK: '/po-review/uniware-outside/ack',
 } as const
 
 export type OutsideKind = 'review' | 'rejected' | 'processed'
 export type OutsideAction = 'reject' | 'use_code' | 'acknowledge' | 'dismiss'
+/** The actions checked against Uniware first (2026-11-25: warn, never block). */
+export type GuardAction = 'download' | 'mark' | 'submit' | 'approve'
 
 /** The filter key on the three tabs (rows carry inUniware Yes / No). */
 export const OUTSIDE_FILTER_KEY = 'inUniware'
@@ -77,3 +81,29 @@ export const OUTSIDE_TEXT = {
   BULK_RESULT: (done: number, skipped: number) => `${done} done${skipped ? `, ${skipped} skipped` : ''}.`,
   BULK_MAX: 200,
 } as const
+
+/** The warning before an action (pages/ops/useOutsideGuard.tsx). */
+export const GUARD_TEXT = {
+  MAX: 500,
+  TITLE: (n: number, of: number) => (of > 1 ? `${n} of ${of} POs are already in Uniware` : 'This PO is already in Uniware'),
+  SUB: {
+    download: 'Their sale order was made outside POST_FG. Uploading this CSV would punch them twice.',
+    mark: 'Uniware already has them under another code. Marking them uploaded keeps our code, not Uniware\'s.',
+    submit: 'It was punched in Uniware outside POST_FG. Approving it would make a second sale order.',
+    approve: 'It was punched in Uniware outside POST_FG. Approving makes a second sale order (erp_ code).',
+  } as Record<GuardAction, string>,
+  EXPLAIN: 'Uniware already has a sale order for these POs under another code (punched outside POST_FG). You can still go ahead: it is your call.',
+  NOT_CHECKED: 'Uniware could not be read just now: this list is from the last check.',
+  REASON: 'Reason for going ahead (optional, kept in the log)',
+  CANCEL: 'Cancel',
+  SKIP: (n: number) => `Skip these ${n}`,
+  ANYWAY: {
+    download: (n: number) => (n > 1 ? `Download all ${n}` : 'Download anyway'),
+    mark: (n: number) => (n > 1 ? `Mark all ${n}` : 'Mark anyway'),
+    submit: () => 'Submit anyway',
+    approve: (n: number) => (n > 1 ? `Approve all ${n}` : 'Approve anyway'),
+  } as Record<GuardAction, (n: number) => string>,
+  /** Where skipping the flagged ones and going on with the rest makes sense. */
+  SKIPPABLE: ['download', 'mark', 'approve'] as readonly GuardAction[],
+} as const
+

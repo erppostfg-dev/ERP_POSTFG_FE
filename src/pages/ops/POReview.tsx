@@ -36,6 +36,7 @@ import { VERIFY_TEXT } from '../../constants/poVerify'
 import { CAPABILITY, REVIEW_EDIT_TEXT, editRules, fieldOpen, type LineField } from '../../constants/reviewEdit'
 import type { OutsideFinding } from '../../api/uniwareOutside'
 import { OutsideBadge, OutsideBulkBar, OutsideStrip } from './UniwareOutside'
+import { useOutsideGuard } from './useOutsideGuard'
 import { inUniwareOf, outsideFilterDef } from '../../lib/uniwareOutside'
 
 /*
@@ -306,6 +307,8 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   const [rejectRemark, setRejectRemark] = useState('')
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<{ message: string; stillOpen?: StillOpen['openIssues'] }>()
+  // 2026-11-25: Submit first checks Uniware (already punched outside POST_FG? warn, never block)
+  const outsideGuard = useOutsideGuard()
   // price check (2026-10-30): lineNo -> ours / channel for its MRP and price together (ours to start); lines whose master takes the PO's values
   const [choices, setChoices] = useState<Record<string, PriceChoice>>({})
   const [master, setMaster] = useState<Set<string>>(new Set())
@@ -470,12 +473,14 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
       ...(newTotalOff && acceptTotal ? { acceptTotal: true } : {}),
       remark: remark.trim() || undefined,
     }
-    setBusy(true)
-    setActionError(undefined)
-    submitPo(uploadId, body)
-      .then(() => onDone(REVIEW_TEXT.SUBMITTED(data.po.poNumber || poNumber)))
-      .catch(fail)
-      .finally(() => setBusy(false))
+    void outsideGuard.guard([uploadId], 'submit', async () => {
+      setBusy(true)
+      setActionError(undefined)
+      await submitPo(uploadId, body)
+        .then(() => onDone(REVIEW_TEXT.SUBMITTED(data.po.poNumber || poNumber)))
+        .catch(fail)
+        .finally(() => setBusy(false))
+    })
   }
 
   const reread = () => {
@@ -811,6 +816,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
               <>
                 <span title={BULK_ENDED_TEXT.REREAD_HINT}><Button onClick={reread} disabled={busy || gone}>{BULK_ENDED_TEXT.REREAD_ONE}</Button></span>
                 <Button onClick={() => setRejecting(true)} disabled={busy || gone}>{REVIEW_TEXT.REJECT}</Button>
+                {outsideGuard.dialog}
                 <span title={blockers.length ? `Before submitting: ${blockers.join(' · ')}` : undefined}>
                   <Button variant="primary" onClick={submit} disabled={busy || gone || blockers.length > 0}>
                     {busy ? 'Submitting…' : blockers.length ? `${blockers.length} thing${blockers.length > 1 ? 's' : ''} left to fill` : REVIEW_TEXT.SUBMIT}
