@@ -2,6 +2,7 @@ import { api, apiUrl, ApiError } from './client'
 import { ERROR_CODE } from '../constants/auth'
 import { LINE_ITEMS, PO_REVIEW_ENDPOINT, PO_REVIEW_MAX_PAGE_SIZE, PO_REVIEW_MAX_PAGES, UNIWARE_ENDPOINT, type UniwareCreateStatus } from '../constants/poReview'
 import type { PriceChoice } from '../constants/priceDifferences'
+import type { OutsideFinding } from './uniwareOutside'
 
 /* GET /po-review: one row per PO upload (API contract "PO review"). */
 
@@ -41,6 +42,8 @@ export type PoReviewItem = {
   verify?: { state: string; required: boolean; by: string | null; at: string | null; remark: string | null } | null
   /** Reopened after a rejection (2026-11-03): the latest reopen and the rejection it undid; null = never. */
   reopened?: { at: string; remark: string; rejectedReason: string | null; rejectedFrom: string | null; times: number } | null
+  /** 2026-11-25: a Uniware order punched outside POST_FG for this PO (In Review / Rejected / Processed not uploaded); null = none. */
+  uniwareOutside?: OutsideFinding | null
 }
 
 export type PoReviewListParams = {

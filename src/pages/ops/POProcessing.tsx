@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { OutsideFinding } from '../../api/uniwareOutside'
+import { OutsideBadge, OutsideStrip } from './UniwareOutside'
+import { inUniwareOf, outsideFilterDef } from '../../lib/uniwareOutside'
 import { useChannelOptions } from '../../lib/channels'
 import { AlertTriangle, ArrowRight, Eye, FileUp, Webhook, Zap, Mail } from 'lucide-react'
 import { Badge, PageTitle, SubTabs } from '../../components/ui'
@@ -105,6 +108,8 @@ type ProcessedRow = {
   handoff: Handoff; uniware: string; waitingDays: number
   /** Verification before Uniware (2026-10-22): state from GET /po-verify and its label (filter + export). */
   verify?: VerifyStateItem; check: string
+  /** 2026-11-25: already in Uniware under another code (punched outside POST_FG); inUniware Yes / No for the filter. */
+  outside: OutsideFinding | null; inUniware: string
 }
 
 const PCOLS: [string, keyof ProcessedRow, ColKind][] = [
@@ -131,6 +136,7 @@ const toRow = (r: PoReviewItem): ProcessedRow => ({
   id: r.uploadId, poNumber: r.poNumber ?? '', channel: r.channel ?? '', brand: r.brand ?? '', poDate: r.poDate ?? '', processedAt: istDateTime(r.completedAt), processedIso: r.completedAt ?? '',
   lines: r.lines, units: r.units, value: r.poValue, saleOrder: r.saleOrderCode ?? '', source: SOURCE_LABELS[r.source] ?? r.source, file: r.fileName, sourceKey: r.source, subject: r.subject,
   check: '',
+  outside: r.uniwareOutside ?? null, inUniware: inUniwareOf(r.uniwareOutside),
 })
 
 const distinct = (rows: ProcessedRow[], k: keyof ProcessedRow) => [...new Set(rows.map((r) => String(r[k] ?? '')).filter(Boolean))].sort()
@@ -242,6 +248,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows, 'source') },
     { key: 'uniware', label: 'Uniware', type: 'multi', options: Object.values(UNIWARE_STATE_LABEL) },
     ...(verify.required ? [{ key: 'check', label: VERIFY_TEXT.COLUMN, type: 'multi' as const, options: Object.values(CHECK_LABEL) }] : []),
+    outsideFilterDef,
   ]
   const unverifiedPicked = picked.filter(toVerify).length
   const toVerifyCount = rows.filter(toVerify).length
@@ -387,6 +394,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
         ) : undefined}
         selectedCount={picked.length} onClearSelection={() => setSelected(new Set())} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
+      <OutsideStrip kind="processed" filters={s.filters} setFilters={s.setFilters} canEdit={canEdit} liveTick={liveTick} />
       {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {/* What still has to go to Uniware: click to show only those. */}
       {(pending > 0 || waiting > 0 || toVerifyCount > 0) && (
@@ -468,7 +476,12 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
               sortValue: (r: ProcessedRow) => (r.verify?.state === VERIFY_STATE.TO_VERIFY ? 1 : 0),
             }] : []),
             {
-              label: UNIWARE_TEXT.COLUMN, render: (r) => <UniwareCell h={r.handoff} canEdit={canEdit} onDone={done} onError={fail} create={creates.byId.get(r.id)} />,
+              label: UNIWARE_TEXT.COLUMN, render: (r) => (
+                <span className="flex flex-col items-start gap-1">
+                  <UniwareCell h={r.handoff} canEdit={canEdit} onDone={done} onError={fail} create={creates.byId.get(r.id)} />
+                  {r.outside && <OutsideBadge f={r.outside} poNumber={r.poNumber} canEdit={canEdit} onDone={done} />}
+                </span>
+              ),
               // ↓ = waiting longest first (not downloaded before downloaded on the same day), POs already in Uniware last.
               sortValue: (r) => (stateOf(r.handoff) === UNIWARE_STATE.UPLOADED ? -1 : r.waitingDays * 2 + (stateOf(r.handoff) === UNIWARE_STATE.PENDING ? 1 : 0)),
               sortHint: UNIWARE_TEXT.SORT_HINT,

@@ -34,6 +34,9 @@ import { foundTip, useFindOnPo } from '../../lib/useFindOnPo'
 import type { ValueKind } from '../../lib/valueTerms'
 import { VERIFY_TEXT } from '../../constants/poVerify'
 import { CAPABILITY, REVIEW_EDIT_TEXT, editRules, fieldOpen, type LineField } from '../../constants/reviewEdit'
+import type { OutsideFinding } from '../../api/uniwareOutside'
+import { OutsideBadge, OutsideStrip } from './UniwareOutside'
+import { inUniwareOf, outsideFilterDef } from '../../lib/uniwareOutside'
 
 /*
  * In Review: POs that failed validation (GET /po-review?status=needs_review), oldest first, and the review panel
@@ -52,6 +55,9 @@ type ReviewRow = {
   reopened: PoReviewItem['reopened']
   /** The issue types as text, for the download's Issues column (2026-11-03). */
   issuesText: string
+  /** 2026-11-25: already in Uniware under another code (punched outside POST_FG); inUniware Yes / No for the filter. */
+  outside: OutsideFinding | null
+  inUniware: string
 }
 
 const RCOLS: [string, keyof ReviewRow, ColKind][] = [
@@ -71,6 +77,7 @@ const toRow = (r: PoReviewItem): ReviewRow => ({
   processedIso: r.processedAt ?? '',
   reopened: r.reopened ?? null,
   issuesText: [...(r.reopened ? [ENDED_TEXT.TAG] : []), ...r.issueTypes.map((t) => ISSUE_LABELS[t] ?? t)].join(' | '),
+  outside: r.uniwareOutside ?? null, inUniware: inUniwareOf(r.uniwareOutside),
 })
 
 const distinct = (values: string[]) => [...new Set(values.filter(Boolean))].sort()
@@ -135,6 +142,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
     { key: 'poDate', label: LIST_FILTER.PO_DATE, type: 'dateRange', fromKey: 'poDateFrom', toKey: 'poDateTo' },
     { key: 'source', label: 'Source', type: 'multi', options: distinct(rows.map((r) => r.source)) },
     { key: 'issue', label: 'Issue', type: 'multi', options: distinct(rows.flatMap((r) => r.issueTypes.map(label))) },
+    outsideFilterDef,
     { key: SORT_FILTER_KEY, label: LIST_FILTER.SORT, type: 'sort', options: [{ value: LIST_SORT.CHANNEL, label: LIST_FILTER.SORT_CHANNEL }], placeholder: LIST_FILTER.SORT_DEFAULT_REVIEW },
     // the PO Date / Processed At header sort: only its chip here
     { key: DATE_SORT_KEY, label: LIST_FILTER.DATE_SORT, type: 'sort', options: LIST_FILTER.DATE_SORT_OPTIONS, inPanel: false },
@@ -206,6 +214,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
             <RefreshCw className={`size-4 ${rechecking ? 'animate-spin' : ''}`} />{rechecking ? RECHECK_TEXT.BUSY : RECHECK_TEXT.BUTTON}
           </button>
         ) : undefined} />
+      <OutsideStrip kind="review" filters={s.filters} setFilters={s.setFilters} canEdit={canEditList} liveTick={liveTick} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {state.error ? (
@@ -226,6 +235,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
           trailing={[
             { label: 'Issues', render: (r) => (
               <span className="flex flex-wrap gap-1">
+                {r.outside && <OutsideBadge f={r.outside} poNumber={r.poNumber} canEdit={canEditList} onDone={(m) => { setNotice(m); setReload((n) => n + 1) }} />}
                 {r.reopened && (
                   <span title={`Rejected before: ${r.reopened.rejectedReason ?? '—'} · reopened: ${r.reopened.remark}${r.reopened.times > 1 ? ` (${r.reopened.times} times)` : ''}`}>
                     <Badge tone="warn">{ENDED_TEXT.TAG}{r.reopened.times > 1 ? ` ×${r.reopened.times}` : ''}</Badge>

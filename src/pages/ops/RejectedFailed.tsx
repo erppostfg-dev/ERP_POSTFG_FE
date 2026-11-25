@@ -11,6 +11,8 @@ import { inputCls } from '../../components/kit'
 import type { ColKind } from '../../lib/ops'
 import { istDateTime } from '../../lib/time'
 import { FileCell } from './SourceCells'
+import { OutsideBadge, OutsideStrip } from './UniwareOutside'
+import { inUniwareOf, outsideFilterDef } from '../../lib/uniwareOutside'
 
 /*
  * Rejected & Failed (2026-11-02, user: "a section after Price differences with the rejected POs, and OCR failed / all the
@@ -27,6 +29,8 @@ type View = 'rejected' | 'failed'
 type Row = {
   id: string; poNumber: string; channel: string; source: string; file: string; received: string
   tag: string; reason: string; by: string; where: string; at: string; day: string; code: string; attempts: number; item: PoReviewItem
+  /** 2026-11-25: Rejected here but in Uniware (punched outside POST_FG): Yes / No for the filter. */
+  inUniware: string
 }
 
 const toRow = (p: PoReviewItem): Row => {
@@ -41,7 +45,7 @@ const toRow = (p: PoReviewItem): Row => {
     by: r ? r.by ?? r.byEmail ?? '—' : '',
     where: r ? REJECTED_FROM_LABEL[r.from] : '',
     at: istDateTime(at), day: at ? new Date(new Date(at).getTime() + 5.5 * 3_600_000).toISOString().slice(0, 10) : '',
-    code: f?.code ?? '', attempts: f?.ocrAttempts ?? 0, item: p,
+    code: f?.code ?? '', attempts: f?.ocrAttempts ?? 0, item: p, inUniware: inUniwareOf(p.uniwareOutside),
   }
 }
 
@@ -96,7 +100,7 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
   const uniq = (k: 'channel' | 'where' | 'by' | 'tag' | 'source') => [...new Set(rows.map((r) => r[k]).filter(Boolean))].sort()
   const filters: FilterDef[] = view === 'rejected'
     ? [{ key: 'channel', label: 'Channel', type: 'multi', options: uniq('channel') }, { key: 'where', label: 'Rejected in', type: 'multi', options: uniq('where') },
-      { key: 'by', label: 'Rejected by', type: 'multi', options: uniq('by') }, { key: 'dayFrom', label: 'Rejected from', type: 'date' }, { key: 'dayTo', label: 'Rejected to', type: 'date' }]
+      { key: 'by', label: 'Rejected by', type: 'multi', options: uniq('by') }, { key: 'dayFrom', label: 'Rejected from', type: 'date' }, { key: 'dayTo', label: 'Rejected to', type: 'date' }, outsideFilterDef]
     : [{ key: 'channel', label: 'Channel', type: 'multi', options: uniq('channel') }, { key: 'tag', label: 'Why it failed', type: 'multi', options: uniq('tag') },
       { key: 'source', label: 'Source', type: 'multi', options: uniq('source') }, { key: 'dayFrom', label: 'Failed from', type: 'date' }, { key: 'dayTo', label: 'Failed to', type: 'date' }]
   // failed: how many per tag, shown above the table
@@ -137,6 +141,7 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder="Search PO number, channel, reason, file…" filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)}
         activeFilters={s.active} entity={view === 'rejected' ? 'rejected POs' : 'failed POs'} onExport={(ext) => exportRows(`${view}-pos`, ext, COLS[view], s.filtered)} />
       <Reveal open={s.open}><FilterPanel defs={filters} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
+      {view === 'rejected' && <OutsideStrip kind="rejected" filters={s.filters} setFilters={s.setFilters} canEdit={canEdit} liveTick={liveTick} />}
       <FilterChips defs={filters} value={s.filters} onChange={s.setFilters} />
       {canEdit && picked.length > 0 && (
         <div className="pf-tab-in space-y-2 rounded-[var(--radius)] border border-primary/25 bg-primary-soft/30 px-3 py-2 text-[12.5px]">
@@ -174,7 +179,12 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
           <DataGrid cols={COLS[view]} rows={q.isPending ? [] : s.filtered} rowKey={(r) => r.id} pageSize={25} pageSizeKey={`ended-${view}`}
             {...(canEdit ? { selected, onSelectedChange: setSelected } : {})}
             onRowClick={view === 'rejected' ? setOpen : undefined}
-            trailing={[{ label: 'Original file', render: (r) => <FileCell uploadId={r.id} name={r.file} /> }]} />
+            trailing={[
+              ...(view === 'rejected' ? [{ label: 'Uniware', render: (r: Row) => (r.item.uniwareOutside
+                ? <OutsideBadge f={r.item.uniwareOutside} poNumber={r.poNumber} canEdit={canEdit} onDone={(m) => { setNotice(m); void qc.invalidateQueries({ queryKey: ['po-ended'] }) }} />
+                : null) }] : []),
+              { label: 'Original file', render: (r: Row) => <FileCell uploadId={r.id} name={r.file} /> },
+            ]} />
           {q.isPending && <p className="mt-2 text-[12.5px] text-ink-400">Loading…</p>}
           {!q.isPending && !rows.length && (
             <p className="mt-2 flex items-center gap-2 text-[12.5px] text-ink-400"><Ban className="size-4" />{view === 'rejected' ? 'No rejected POs.' : 'No failed POs.'}</p>
