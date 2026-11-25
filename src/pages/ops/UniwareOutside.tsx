@@ -93,45 +93,60 @@ function OutsideDialog({ f, poNumber, canEdit, onClose, onDone }: { f: OutsideFi
     },
     onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
   })
-  const row = (label: string, value: string | null) => (
-    <div className="flex gap-3 py-1 text-[13px]"><span className="w-40 shrink-0 text-ink-600">{label}</span><span className="font-medium text-ink-900">{value ?? '—'}</span></div>
-  )
+  const status = live.data?.status ?? f.status
+  const [pick, setPick] = useState<OutsideAction>(f.actions[0])
+  const needsWhy = pick === 'dismiss' && !remark.trim()
   return (
     <Modal open onClose={onClose} title={T.TITLE} sub={T.SUB(poNumber)}
       footer={closed ? (
         <div className="flex justify-end"><Button variant="primary" onClick={() => onDone(T.LIVE_CLOSED(live.data?.status ?? null))}>{T.CLOSE}</Button></div>
       ) : canEdit ? (
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
           <Button onClick={onClose} disabled={go.isPending}>{T.CANCEL}</Button>
-          {f.actions.map((a) => (
-            <span key={a} title={T.ACTION_HINT[a]}>
-              <Button variant={a === 'dismiss' ? 'default' : 'primary'} disabled={go.isPending || (a === 'dismiss' && !remark.trim())} onClick={() => { setError(''); go.mutate(a) }}>
-                {T.ACTION[a]}
-              </Button>
-            </span>
-          ))}
+          <button type="button" disabled={go.isPending || needsWhy} onClick={() => { setError(''); go.mutate(pick) }}
+            className={`pf-press inline-flex h-9 items-center whitespace-nowrap rounded-[var(--radius)] px-4 text-[13px] font-semibold text-white disabled:opacity-50 ${pick === 'reject' ? 'bg-crit hover:bg-crit/90' : 'bg-primary hover:bg-primary/90'}`}>
+            {T.CONFIRM[pick]}
+          </button>
         </div>
       ) : undefined}>
-      <div className="space-y-3">
-        <div className="divide-y divide-line rounded-[var(--radius)] border border-line px-3 py-1">
-          {row(T.FIELDS.code, f.code)}
-          {row(T.FIELDS.channel, f.channel)}
-          {row(T.FIELDS.status, live.data?.status ?? f.status)}
-          {row(T.FIELDS.created, f.createdAt ? istDateTime(f.createdAt) : null)}
-          {row(T.FIELDS.seen, istDateTime(f.firstSeenAt))}
+      <div className="space-y-4">
+        {/* the Uniware order in two short lines (code · channel · status now; created · found) */}
+        <div className="rounded-[var(--radius)] border border-line bg-alt/40 px-3 py-2.5">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+            <span className="font-mono font-semibold text-ink-900">{f.code}</span>
+            <span className="text-ink-400">·</span><span className="text-ink-600">{f.channel}</span>
+            <span className="text-ink-400">·</span>
+            <span className="rounded-full bg-surface px-2 py-0.5 text-[11.5px] font-semibold text-ink-900 ring-1 ring-line">
+              {live.isPending ? T.LIVE_CHECKING : `${status ?? '—'}${live.data?.checked ? ` (${T.NOW})` : ''}`}
+            </span>
+          </div>
+          <div className="mt-1 text-[12px] text-ink-600">
+            {T.FIELDS.created} {f.createdAt ? istDateTime(f.createdAt) : '—'} · {T.FIELDS.seen} {istDateTime(f.firstSeenAt)}
+          </div>
         </div>
-        {live.isPending && <p className="text-[12.5px] text-ink-400">{T.LIVE_CHECKING}</p>}
         {live.isError && <p className="text-[12.5px] text-warn">{T.LIVE_FAILED(live.error instanceof ApiError ? live.error.message : String(live.error))}</p>}
         {closed && <p className="rounded-[var(--radius)] bg-ok-soft px-3 py-2 text-[12.5px] text-ok">{T.LIVE_CLOSED(live.data?.status ?? null)}</p>}
         {!!live.data?.otherCodes.length && <p className="text-[12.5px] text-ink-600">{T.LIVE_OTHERS(live.data.otherCodes)}</p>}
         {f.more > 0 && <p className="text-[12.5px] text-ink-600">{T.MORE(f.more)}</p>}
         {canEdit && !closed && (
-          <>
-            <ul className="space-y-1 text-[12.5px] text-ink-600">
-              {f.actions.map((a) => <li key={a}><span className="font-semibold text-ink-900">{T.ACTION[a]}:</span> {T.ACTION_HINT[a]}</li>)}
-            </ul>
-            <textarea value={remark} onChange={(e) => setRemark(e.target.value.slice(0, OUTSIDE_REMARK_MAX))} placeholder={T.REMARK} rows={2} className={`${inputCls} w-full`} />
-          </>
+          <div className="space-y-2">
+            <div className="text-[12.5px] font-semibold text-ink-900">{T.QUESTION}</div>
+            {f.actions.map((a) => {
+              const on = pick === a
+              return (
+                <label key={a} className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius)] border px-3 py-2.5 transition-colors ${on ? (a === 'reject' ? 'border-crit bg-crit-soft/40' : 'border-primary bg-primary-soft/40') : 'border-line hover:bg-alt/50'}`}>
+                  <input type="radio" name={`outside-${f.id}`} checked={on} onChange={() => setPick(a)} className="mt-1 accent-[var(--color-primary)]" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words text-[13px] font-semibold text-ink-900">{T.CHOICE[a](f.code)}</span>
+                    <span className="mt-0.5 block text-[12px] leading-snug text-ink-600">{T.CHOICE_HINT[a]}</span>
+                    {a === 'dismiss' && on && (
+                      <textarea autoFocus value={remark} onChange={(e) => setRemark(e.target.value.slice(0, OUTSIDE_REMARK_MAX))} placeholder={T.WHY} rows={2} className={`${inputCls} mt-2 w-full`} />
+                    )}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
         )}
         {error && <p className="text-[12.5px] text-crit">{error}</p>}
       </div>
@@ -165,9 +180,9 @@ export function OutsideBulkBar({ findings, canEdit, onDone }: { findings: Outsid
     <div className="pf-tab-in flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-crit/25 bg-crit-soft/40 px-3 py-2 text-[12.5px]">
       <AlertTriangle className="size-4 text-crit" /><span className="font-medium">{T.BULK_INFO(findings.length)}</span>
       {actions.map((a) => (
-        <span key={a} title={T.ACTION_HINT[a]}>
+        <span key={a} title={T.CHOICE_HINT[a]}>
           <Button variant={a === 'dismiss' ? 'default' : 'primary'} disabled={go.isPending || (a === 'dismiss' && !remark.trim())} onClick={() => go.mutate(a)}>
-            {T.BULK_ACTION(T.ACTION[a], Math.min(findings.length, T.BULK_MAX))}
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">{T.BULK_LABEL[a]}<span className="rounded-full bg-black/10 px-1.5 text-[11px] font-semibold">{Math.min(findings.length, T.BULK_MAX)}</span></span>
           </Button>
         </span>
       ))}
