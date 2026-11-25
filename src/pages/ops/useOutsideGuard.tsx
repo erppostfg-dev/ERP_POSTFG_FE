@@ -73,18 +73,28 @@ export function useOutsideGuard(): { guard: (uploadIds: string[], action: GuardA
           <div className="flex items-start gap-2 rounded-[var(--radius)] bg-crit-soft px-3 py-2 text-[12.5px] text-ink-900">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-crit" /><span>{T.EXPLAIN}</span>
           </div>
-          <ul className="max-h-56 divide-y divide-line overflow-y-auto rounded-[var(--radius)] border border-line">
-            {pending.found.map((f) => (
-              <li key={f.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-2 text-[13px]">
-                <span className="font-mono font-semibold text-ink-900">{f.poNumber ?? '—'}</span>
-                <span className="text-ink-400">→</span>
-                <span className="font-mono text-ink-900">{f.code}</span>
-                <span className="text-[12px] text-ink-600">{f.channel}{f.status ? ` · ${f.status}` : ''}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="max-h-60 overflow-y-auto rounded-[var(--radius)] border border-line">
+            <table className="w-full table-fixed text-left text-[12.5px]">
+              <thead className="sticky top-0 bg-alt text-[11.5px] uppercase tracking-wide text-ink-600">
+                <tr><th className="w-[38%] px-3 py-1.5 font-semibold">{T.COL_PO}</th><th className="w-[38%] px-3 py-1.5 font-semibold">{T.COL_CODE}</th><th className="px-3 py-1.5 font-semibold">{T.COL_STATUS}</th></tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {pending.found.map((f) => (
+                  <tr key={f.id}>
+                    <td className="truncate px-3 py-1.5 font-mono font-semibold text-ink-900" title={f.poNumber ?? ''}>{f.poNumber ?? '—'}</td>
+                    <td className="truncate px-3 py-1.5 font-mono text-ink-900" title={`${f.code} · ${f.channel}`}>{f.code}</td>
+                    <td className="truncate px-3 py-1.5 text-ink-600" title={f.status ?? ''}>{f.status ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {!pending.checked && <p className="text-[12px] text-warn">{T.NOT_CHECKED}</p>}
-          <input value={remark} onChange={(e) => setRemark(e.target.value.slice(0, OUTSIDE_REMARK_MAX))} placeholder={T.REASON} className={`${inputCls} w-full`} />
+          <div className="space-y-1">
+            <label htmlFor="outside-guard-reason" className="text-[12px] font-medium text-ink-600">{T.REASON}</label>
+            <textarea id="outside-guard-reason" value={remark} onChange={(e) => setRemark(e.target.value.slice(0, OUTSIDE_REMARK_MAX))} rows={2}
+              className={`${inputCls} h-auto min-h-[60px] resize-y py-2 leading-snug`} />
+          </div>
         </div>
       </Modal>
     )

@@ -42,7 +42,11 @@ export const OUTSIDE_TEXT = {
   STARTED: 'Checking Uniware: findings show here in a minute.',
   TITLE: 'Already in Uniware',
   SUB: (po: string) => `PO ${po} has a sale order in Uniware that was not made by POST_FG.`,
-  FIELDS: { created: 'Created in Uniware', seen: 'found by POST_FG' },
+  FIELDS: { code: 'Sale order', channel: 'Channel', status: 'Status', created: 'Created', seen: 'Found by POST_FG' },
+  IN_UNIWARE: 'In Uniware',
+  LIVE_SHORT: 'checking…',
+  CHECKED_NOW: 'checked just now',
+  CHECK_FAILED: 'could not check now',
   MORE: (n: number) => `${n} more Uniware code${n === 1 ? '' : 's'} for this PO (shown after this one).`,
   DONE: {
     reject: (po: string, code: string) => `${po} rejected: punched in Uniware as ${code}.`,
@@ -52,14 +56,11 @@ export const OUTSIDE_TEXT = {
   },
   CANCEL: 'Cancel',
   // live read when the dialog opens (2026-11-25: no timer re-checks)
-  LIVE_CHECKING: 'Checking this order in Uniware now…',
   LIVE_CLOSED: (status: string | null) => `This order is ${status ? status.toLowerCase() : 'no longer'} in Uniware: the warning is closed.`,
-  LIVE_FAILED: (msg: string) => `Could not read Uniware now (${msg}); showing what was found earlier.`,
   LIVE_OTHERS: (codes: string[]) => `Uniware also has ${codes.join(', ')} for this PO.`,
   CLOSE: 'Close',
   // 2026-11-25 (user: button texts ran outside the buttons): choices as cards in the dialog, one Confirm
   QUESTION: 'What should POST_FG do?',
-  NOW: 'now',
   CHOICE: {
     use_code: (code: string) => `Use ${code}`,
     reject: () => 'Reject this PO',
@@ -95,6 +96,9 @@ export const GUARD_TEXT = {
   EXPLAIN: 'Uniware already has a sale order for these POs under another code (punched outside POST_FG). You can still go ahead: it is your call.',
   NOT_CHECKED: 'Uniware could not be read just now: this list is from the last check.',
   REASON: 'Reason for going ahead (optional, kept in the log)',
+  COL_PO: 'PO number',
+  COL_CODE: 'Uniware sale order',
+  COL_STATUS: 'Status',
   CANCEL: 'Cancel',
   SKIP: (n: number) => `Skip these ${n}`,
   ANYWAY: {

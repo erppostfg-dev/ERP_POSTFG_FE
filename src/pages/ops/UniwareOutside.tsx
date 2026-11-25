@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { Button, Modal } from '../../components/ui'
+import { Badge, Button, Modal } from '../../components/ui'
 import { inputCls, type FilterValues } from '../../components/kit'
 import { ApiError } from '../../api/client'
 import { bulkResolveOutside, checkOutsideNow, getOutsideLive, getOutsideStatus, resolveOutside, type OutsideFinding } from '../../api/uniwareOutside'
@@ -96,6 +96,14 @@ function OutsideDialog({ f, poNumber, canEdit, onClose, onDone }: { f: OutsideFi
   const status = live.data?.status ?? f.status
   const [pick, setPick] = useState<OutsideAction>(f.actions[0])
   const needsWhy = pick === 'dismiss' && !remark.trim()
+  // one label / value row of the "In Uniware" card; long values wrap inside the card, never out of it
+  const fact = (label: string, value: ReactNode) => (
+    <>
+      <dt className="py-1.5 text-[12px] text-ink-600">{label}</dt>
+      <dd className="min-w-0 break-words py-1.5 text-[13px] text-ink-900">{value}</dd>
+    </>
+  )
+  const liveNote = live.isPending ? T.LIVE_SHORT : live.isError ? T.CHECK_FAILED : live.data?.checked ? T.CHECKED_NOW : null
   return (
     <Modal open onClose={onClose} title={T.TITLE} sub={T.SUB(poNumber)}
       footer={closed ? (
@@ -110,43 +118,51 @@ function OutsideDialog({ f, poNumber, canEdit, onClose, onDone }: { f: OutsideFi
         </div>
       ) : undefined}>
       <div className="space-y-4">
-        {/* the Uniware order in two short lines (code · channel · status now; created · found) */}
-        <div className="rounded-[var(--radius)] border border-line bg-alt/40 px-3 py-2.5">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
-            <span className="font-mono font-semibold text-ink-900">{f.code}</span>
-            <span className="text-ink-400">·</span><span className="text-ink-600">{f.channel}</span>
-            <span className="text-ink-400">·</span>
-            <span className="rounded-full bg-surface px-2 py-0.5 text-[11.5px] font-semibold text-ink-900 ring-1 ring-line">
-              {live.isPending ? T.LIVE_CHECKING : `${status ?? '—'}${live.data?.checked ? ` (${T.NOW})` : ''}`}
-            </span>
+        {/* the Uniware order: a small label / value card (2026-11-25, user: text went out of the box) */}
+        <section className="rounded-[var(--radius)] border border-line">
+          <div className="flex items-center gap-2 border-b border-line bg-alt/50 px-3 py-2">
+            <AlertTriangle className="size-4 shrink-0 text-crit" />
+            <span className="text-[12px] font-semibold uppercase tracking-wide text-ink-600">{T.IN_UNIWARE}</span>
           </div>
-          <div className="mt-1 text-[12px] text-ink-600">
-            {T.FIELDS.created} {f.createdAt ? istDateTime(f.createdAt) : '—'} · {T.FIELDS.seen} {istDateTime(f.firstSeenAt)}
-          </div>
-        </div>
-        {live.isError && <p className="text-[12.5px] text-warn">{T.LIVE_FAILED(live.error instanceof ApiError ? live.error.message : String(live.error))}</p>}
+          <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 px-3 py-1">
+            {fact(T.FIELDS.code, <span className="break-all font-mono font-semibold">{f.code}</span>)}
+            {fact(T.FIELDS.channel, f.channel)}
+            {fact(T.FIELDS.status, (
+              <span className="flex flex-wrap items-center gap-2">
+                <Badge tone={status && /COMPLETE|DISPATCH|DELIVER/i.test(status) ? 'ok' : 'info'}>{status ?? '—'}</Badge>
+                {liveNote && <span className={`text-[11.5px] ${live.isError ? 'text-warn' : 'text-ink-400'}`}>{liveNote}</span>}
+              </span>
+            ))}
+            {fact(T.FIELDS.created, f.createdAt ? istDateTime(f.createdAt) : '—')}
+            {fact(T.FIELDS.seen, istDateTime(f.firstSeenAt))}
+          </dl>
+        </section>
         {closed && <p className="rounded-[var(--radius)] bg-ok-soft px-3 py-2 text-[12.5px] text-ok">{T.LIVE_CLOSED(live.data?.status ?? null)}</p>}
-        {!!live.data?.otherCodes.length && <p className="text-[12.5px] text-ink-600">{T.LIVE_OTHERS(live.data.otherCodes)}</p>}
+        {!!live.data?.otherCodes.length && <p className="break-words text-[12.5px] text-ink-600">{T.LIVE_OTHERS(live.data.otherCodes)}</p>}
         {f.more > 0 && <p className="text-[12.5px] text-ink-600">{T.MORE(f.more)}</p>}
         {canEdit && !closed && (
-          <div className="space-y-2">
-            <div className="text-[12.5px] font-semibold text-ink-900">{T.QUESTION}</div>
+          <section className="space-y-2">
+            <h4 className="text-[13px] font-semibold text-ink-900">{T.QUESTION}</h4>
             {f.actions.map((a) => {
               const on = pick === a
               return (
                 <label key={a} className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius)] border px-3 py-2.5 transition-colors ${on ? (a === 'reject' ? 'border-crit bg-crit-soft/40' : 'border-primary bg-primary-soft/40') : 'border-line hover:bg-alt/50'}`}>
-                  <input type="radio" name={`outside-${f.id}`} checked={on} onChange={() => setPick(a)} className="mt-1 accent-[var(--color-primary)]" />
+                  <input type="radio" name={`outside-${f.id}`} checked={on} onChange={() => setPick(a)} className="mt-1 shrink-0 accent-[var(--color-primary)]" />
                   <span className="min-w-0 flex-1">
-                    <span className="block break-words text-[13px] font-semibold text-ink-900">{T.CHOICE[a](f.code)}</span>
+                    <span className="block break-all text-[13px] font-semibold text-ink-900">{T.CHOICE[a](f.code)}</span>
                     <span className="mt-0.5 block text-[12px] leading-snug text-ink-600">{T.CHOICE_HINT[a]}</span>
-                    {a === 'dismiss' && on && (
-                      <textarea autoFocus value={remark} onChange={(e) => setRemark(e.target.value.slice(0, OUTSIDE_REMARK_MAX))} placeholder={T.WHY} rows={2} className={`${inputCls} mt-2 w-full`} />
-                    )}
                   </span>
                 </label>
               )
             })}
-          </div>
+            {pick === 'dismiss' && (
+              <div className="pf-tab-in space-y-1">
+                <label htmlFor={`outside-why-${f.id}`} className="text-[12px] font-medium text-ink-600">{T.WHY}</label>
+                <textarea id={`outside-why-${f.id}`} autoFocus value={remark} onChange={(e) => setRemark(e.target.value.slice(0, OUTSIDE_REMARK_MAX))} rows={3}
+                  className={`${inputCls} h-auto min-h-[76px] resize-y py-2 leading-snug`} />
+              </div>
+            )}
+          </section>
         )}
         {error && <p className="text-[12.5px] text-crit">{error}</p>}
       </div>
