@@ -35,7 +35,7 @@ import type { ValueKind } from '../../lib/valueTerms'
 import { VERIFY_TEXT } from '../../constants/poVerify'
 import { CAPABILITY, REVIEW_EDIT_TEXT, editRules, fieldOpen, type LineField } from '../../constants/reviewEdit'
 import type { OutsideFinding } from '../../api/uniwareOutside'
-import { OutsideBadge, OutsideStrip } from './UniwareOutside'
+import { OutsideBadge, OutsideBulkBar, OutsideStrip } from './UniwareOutside'
 import { inUniwareOf, outsideFilterDef } from '../../lib/uniwareOutside'
 
 /*
@@ -215,6 +215,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
           </button>
         ) : undefined} />
       <OutsideStrip kind="review" filters={s.filters} setFilters={s.setFilters} canEdit={canEditList} liveTick={liveTick} />
+      <OutsideBulkBar findings={picked.flatMap((r) => (r.outside ? [r.outside] : []))} canEdit={canEditList} onDone={(m) => { setNotice(m); setSelected(new Set()); setReload((n) => n + 1) }} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {state.error ? (

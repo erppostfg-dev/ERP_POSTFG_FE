@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { OutsideFinding } from '../../api/uniwareOutside'
-import { OutsideBadge, OutsideStrip } from './UniwareOutside'
+import { OutsideBadge, OutsideBulkBar, OutsideStrip } from './UniwareOutside'
 import { inUniwareOf, outsideFilterDef } from '../../lib/uniwareOutside'
 import { useChannelOptions } from '../../lib/channels'
 import { AlertTriangle, ArrowRight, Eye, FileUp, Webhook, Zap, Mail } from 'lucide-react'
@@ -395,6 +395,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
         selectedCount={picked.length} onClearSelection={() => setSelected(new Set())} />
       <Reveal open={s.open}><FilterPanel defs={defs} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       <OutsideStrip kind="processed" filters={s.filters} setFilters={s.setFilters} canEdit={canEdit} liveTick={liveTick} />
+      <OutsideBulkBar findings={picked.flatMap((r) => (r.outside ? [r.outside] : []))} canEdit={canEdit} onDone={(m) => { setSelected(new Set()); done(m) }} />
       {!s.open && <FilterChips defs={defs} value={s.filters} onChange={s.setFilters} />}
       {/* What still has to go to Uniware: click to show only those. */}
       {(pending > 0 || waiting > 0 || toVerifyCount > 0) && (

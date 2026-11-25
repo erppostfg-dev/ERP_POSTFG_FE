@@ -26,5 +26,9 @@ export interface OutsideStatus {
 
 export const getOutsideStatus = (signal?: AbortSignal) => api<OutsideStatus>(UNIWARE_OUTSIDE_ENDPOINT.STATUS, { signal })
 export const checkOutsideNow = () => api<OutsideStatus & { state: string }>(UNIWARE_OUTSIDE_ENDPOINT.CHECK, { method: 'POST' })
+export interface OutsideLive { id: string; state: string; status: string | null; closed: boolean; checked: boolean; otherCodes: string[] }
+export const getOutsideLive = (id: string, signal?: AbortSignal) => api<OutsideLive>(UNIWARE_OUTSIDE_ENDPOINT.LIVE(id), { signal })
+export const bulkResolveOutside = (ids: string[], action: OutsideAction, remark: string) =>
+  api<{ id: string; result: 'done' | 'skipped'; reason?: string }[]>(UNIWARE_OUTSIDE_ENDPOINT.BULK_RESOLVE, { method: 'POST', body: JSON.stringify({ ids, action, remark }) })
 export const resolveOutside = (id: string, action: OutsideAction, remark: string) =>
   api<{ id: string; uploadId: string; action: OutsideAction; kind: OutsideKind }>(UNIWARE_OUTSIDE_ENDPOINT.RESOLVE(id), { method: 'POST', body: JSON.stringify({ action, remark }) })

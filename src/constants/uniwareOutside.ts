@@ -8,6 +8,8 @@ export const UNIWARE_OUTSIDE_ENDPOINT = {
   STATUS: '/po-review/uniware-outside',
   CHECK: '/po-review/uniware-outside/check',
   RESOLVE: (id: string) => `/po-review/uniware-outside/${encodeURIComponent(id)}/resolve`,
+  LIVE: (id: string) => `/po-review/uniware-outside/${encodeURIComponent(id)}/live`,
+  BULK_RESOLVE: '/po-review/uniware-outside/bulk-resolve',
 } as const
 
 export type OutsideKind = 'review' | 'rejected' | 'processed'
@@ -58,4 +60,16 @@ export const OUTSIDE_TEXT = {
     dismiss: (po: string) => `${po}: warning dismissed.`,
   },
   CANCEL: 'Cancel',
+  // live read when the dialog opens (2026-11-25: no timer re-checks)
+  LIVE_CHECKING: 'Checking this order in Uniware now…',
+  LIVE_CLOSED: (status: string | null) => `This order is ${status ? status.toLowerCase() : 'no longer'} in Uniware: the warning is closed.`,
+  LIVE_FAILED: (msg: string) => `Could not read Uniware now (${msg}); showing what was found earlier.`,
+  LIVE_OTHERS: (codes: string[]) => `Uniware also has ${codes.join(', ')} for this PO.`,
+  CLOSE: 'Close',
+  // many at once (2026-11-25)
+  BULK_INFO: (n: number) => `${n} ticked PO${n === 1 ? '' : 's'} already in Uniware:`,
+  BULK_ACTION: (label: string, n: number) => `${label} (${n})`,
+  BULK_REMARK: 'Remark (required for Not the same order)',
+  BULK_RESULT: (done: number, skipped: number) => `${done} done${skipped ? `, ${skipped} skipped` : ''}.`,
+  BULK_MAX: 200,
 } as const

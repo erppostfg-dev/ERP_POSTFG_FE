@@ -4,7 +4,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Button, Modal } from '../../components/ui'
 import { inputCls, type FilterValues } from '../../components/kit'
 import { ApiError } from '../../api/client'
-import { checkOutsideNow, getOutsideStatus, resolveOutside, type OutsideFinding } from '../../api/uniwareOutside'
+import { bulkResolveOutside, checkOutsideNow, getOutsideLive, getOutsideStatus, resolveOutside, type OutsideFinding } from '../../api/uniwareOutside'
 import { OUTSIDE_FILTER_KEY, OUTSIDE_REMARK_MAX, OUTSIDE_TEXT as T, OUTSIDE_YES, type OutsideAction, type OutsideKind } from '../../constants/uniwareOutside'
 import { istDateTime } from '../../lib/time'
 
@@ -81,6 +81,9 @@ function OutsideDialog({ f, poNumber, canEdit, onClose, onDone }: { f: OutsideFi
   const qc = useQueryClient()
   const [remark, setRemark] = useState('')
   const [error, setError] = useState('')
+  // 2026-11-25: this one order read in Uniware when the dialog opens (one call; cancelled / gone closes the warning)
+  const live = useQuery({ queryKey: ['uniware-outside-live', f.id], queryFn: ({ signal }) => getOutsideLive(f.id, signal), retry: false, staleTime: 60_000 })
+  const closed = live.data?.closed === true
   const go = useMutation({
     mutationFn: (action: OutsideAction) => resolveOutside(f.id, action, remark.trim()),
     onSuccess: (_r, action) => {
@@ -95,7 +98,9 @@ function OutsideDialog({ f, poNumber, canEdit, onClose, onDone }: { f: OutsideFi
   )
   return (
     <Modal open onClose={onClose} title={T.TITLE} sub={T.SUB(poNumber)}
-      footer={canEdit ? (
+      footer={closed ? (
+        <div className="flex justify-end"><Button variant="primary" onClick={() => onDone(T.LIVE_CLOSED(live.data?.status ?? null))}>{T.CLOSE}</Button></div>
+      ) : canEdit ? (
         <div className="flex flex-wrap justify-end gap-2">
           <Button onClick={onClose} disabled={go.isPending}>{T.CANCEL}</Button>
           {f.actions.map((a) => (
@@ -111,12 +116,16 @@ function OutsideDialog({ f, poNumber, canEdit, onClose, onDone }: { f: OutsideFi
         <div className="divide-y divide-line rounded-[var(--radius)] border border-line px-3 py-1">
           {row(T.FIELDS.code, f.code)}
           {row(T.FIELDS.channel, f.channel)}
-          {row(T.FIELDS.status, f.status)}
+          {row(T.FIELDS.status, live.data?.status ?? f.status)}
           {row(T.FIELDS.created, f.createdAt ? istDateTime(f.createdAt) : null)}
           {row(T.FIELDS.seen, istDateTime(f.firstSeenAt))}
         </div>
+        {live.isPending && <p className="text-[12.5px] text-ink-400">{T.LIVE_CHECKING}</p>}
+        {live.isError && <p className="text-[12.5px] text-warn">{T.LIVE_FAILED(live.error instanceof ApiError ? live.error.message : String(live.error))}</p>}
+        {closed && <p className="rounded-[var(--radius)] bg-ok-soft px-3 py-2 text-[12.5px] text-ok">{T.LIVE_CLOSED(live.data?.status ?? null)}</p>}
+        {!!live.data?.otherCodes.length && <p className="text-[12.5px] text-ink-600">{T.LIVE_OTHERS(live.data.otherCodes)}</p>}
         {f.more > 0 && <p className="text-[12.5px] text-ink-600">{T.MORE(f.more)}</p>}
-        {canEdit && (
+        {canEdit && !closed && (
           <>
             <ul className="space-y-1 text-[12.5px] text-ink-600">
               {f.actions.map((a) => <li key={a}><span className="font-semibold text-ink-900">{T.ACTION[a]}:</span> {T.ACTION_HINT[a]}</li>)}
@@ -129,3 +138,44 @@ function OutsideDialog({ f, poNumber, canEdit, onClose, onDone }: { f: OutsideFi
     </Modal>
   )
 }
+
+/**
+ * Many at once (2026-11-25): shown when ticked rows carry a warning; the actions every ticked one allows (Use Uniware's
+ * code / Reject here / Noted / Not the same order + remark), one call, the result said on the tab.
+ */
+export function OutsideBulkBar({ findings, canEdit, onDone }: { findings: OutsideFinding[]; canEdit: boolean; onDone: (msg: string) => void }) {
+  const qc = useQueryClient()
+  const [remark, setRemark] = useState('')
+  const [error, setError] = useState('')
+  const actions = (['use_code', 'reject', 'acknowledge', 'dismiss'] as OutsideAction[]).filter((a) => findings.length > 0 && findings.every((f) => f.actions.includes(a)))
+  const go = useMutation({
+    mutationFn: (action: OutsideAction) => bulkResolveOutside(findings.slice(0, T.BULK_MAX).map((f) => f.id), action, remark.trim()),
+    onSuccess: (r) => {
+      setRemark('')
+      setError('')
+      void qc.invalidateQueries({ queryKey: STATUS_KEY })
+      void qc.invalidateQueries({ queryKey: ['po-ended'] })
+      const skipped = r.filter((x) => x.result === 'skipped')
+      onDone(T.BULK_RESULT(r.length - skipped.length, skipped.length) + (skipped.length ? ` ${skipped.slice(0, 3).map((x) => x.reason).join('; ')}` : ''))
+    },
+    onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
+  })
+  if (!canEdit || !findings.length) return null
+  return (
+    <div className="pf-tab-in flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-crit/25 bg-crit-soft/40 px-3 py-2 text-[12.5px]">
+      <AlertTriangle className="size-4 text-crit" /><span className="font-medium">{T.BULK_INFO(findings.length)}</span>
+      {actions.map((a) => (
+        <span key={a} title={T.ACTION_HINT[a]}>
+          <Button variant={a === 'dismiss' ? 'default' : 'primary'} disabled={go.isPending || (a === 'dismiss' && !remark.trim())} onClick={() => go.mutate(a)}>
+            {T.BULK_ACTION(T.ACTION[a], Math.min(findings.length, T.BULK_MAX))}
+          </Button>
+        </span>
+      ))}
+      {actions.includes('dismiss') && (
+        <input value={remark} onChange={(e) => setRemark(e.target.value.slice(0, OUTSIDE_REMARK_MAX))} placeholder={T.BULK_REMARK} className={`${inputCls} max-w-xs`} />
+      )}
+      {error && <span className="basis-full text-crit">{error}</span>}
+    </div>
+  )
+}
+

@@ -11,7 +11,7 @@ import { inputCls } from '../../components/kit'
 import type { ColKind } from '../../lib/ops'
 import { istDateTime } from '../../lib/time'
 import { FileCell } from './SourceCells'
-import { OutsideBadge, OutsideStrip } from './UniwareOutside'
+import { OutsideBadge, OutsideBulkBar, OutsideStrip } from './UniwareOutside'
 import { inUniwareOf, outsideFilterDef } from '../../lib/uniwareOutside'
 
 /*
@@ -142,6 +142,10 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
         activeFilters={s.active} entity={view === 'rejected' ? 'rejected POs' : 'failed POs'} onExport={(ext) => exportRows(`${view}-pos`, ext, COLS[view], s.filtered)} />
       <Reveal open={s.open}><FilterPanel defs={filters} value={s.filters} onApply={s.setFilters} onClose={() => s.setOpen(false)} /></Reveal>
       {view === 'rejected' && <OutsideStrip kind="rejected" filters={s.filters} setFilters={s.setFilters} canEdit={canEdit} liveTick={liveTick} />}
+      {view === 'rejected' && (
+        <OutsideBulkBar findings={rows.filter((r) => selected.has(r.id)).flatMap((r) => (r.item.uniwareOutside ? [r.item.uniwareOutside] : []))} canEdit={canEdit}
+          onDone={(m) => { setNotice(m); setSelected(new Set()); void qc.invalidateQueries({ queryKey: ['po-ended'] }) }} />
+      )}
       <FilterChips defs={filters} value={s.filters} onChange={s.setFilters} />
       {canEdit && picked.length > 0 && (
         <div className="pf-tab-in space-y-2 rounded-[var(--radius)] border border-primary/25 bg-primary-soft/30 px-3 py-2 text-[12.5px]">
