@@ -12,6 +12,7 @@ import { Reveal } from '../../components/shell'
 import { DataGrid, FilterPanel, SectionToolbar, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
 import type { ColKind } from '../../lib/ops'
 import { IconBtn, RecentChangesDrawer, RowHistoryDrawer } from './MasterHistory'
+import { RouteUploadDialog } from './RouteUploadDialog'
 
 /*
  * Masters -> Transfer Routes (2026-11-03): every D2C internal transfer route (sending warehouse + transfer location ->
@@ -62,6 +63,7 @@ export default function TransferRoutes() {
   const [editing, setEditing] = useState<TransferRouteItem | null>(null)
   const [historyOf, setHistoryOf] = useState<Row | null>(null)
   const [changesOpen, setChangesOpen] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: routesKey })
@@ -90,7 +92,7 @@ export default function TransferRoutes() {
       ) : (
         <div className="space-y-3">
           <SectionToolbar q={s.q} setQ={s.setQ} placeholder={T.SEARCH} filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
-            entity={T.ENTITY} onExport={(e) => exportRows('transfer-routes', e, EXPORT_COLS, view)}
+            entity={T.ENTITY} onExport={(e) => exportRows('transfer-routes', e, EXPORT_COLS, view)} onUpload={() => setUploadOpen(true)}
             extra={
               <button onClick={() => setVendorMissing(!vendorMissing)} title={T.VENDOR_MISSING_HINT} aria-pressed={vendorMissing}
                 className={`inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border px-3 text-[13px] font-medium transition-colors ${vendorMissing ? 'border-warn/50 bg-warn-soft text-warn' : 'border-line bg-surface text-ink-900 hover:bg-canvas'}`}>
@@ -123,6 +125,7 @@ export default function TransferRoutes() {
       )}
       {editing && <EditRouteDrawer item={editing} onClose={() => setEditing(null)} onSaved={(message) => { setEditing(null); setNotice(message); refresh() }} />}
       {historyOf && <RowHistoryDrawer type={MASTER_LOG_TYPE.routes} row={historyOf} title={titleOf(historyOf)} sub={T.TITLE} onClose={() => setHistoryOf(null)} />}
+      {uploadOpen && <RouteUploadDialog canUpload={canEdit} onClose={() => setUploadOpen(false)} onSaved={(message) => { setUploadOpen(false); setNotice(message); refresh() }} />}
       {changesOpen && <RecentChangesDrawer initialType={MASTER_LOG_TYPE.routes} onClose={() => setChangesOpen(false)} />}
     </div>
   )
