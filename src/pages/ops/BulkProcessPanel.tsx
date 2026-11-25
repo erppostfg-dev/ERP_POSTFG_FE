@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import { GroupedSelect } from '../../components/pickers'
 import { getBulkProcessOptions, hideBulkCustomer, processBulkOrder, type BulkCustomerMatch, type BulkOrderFull } from '../../api/bulkOrders'
@@ -30,7 +31,9 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
   const key = ['bulk', 'process-options', d.id]
   const opts = useQuery({ queryKey: key, queryFn: () => getBulkProcessOptions(d.id) })
   const customers = useMemo(() => opts.data?.customers ?? [], [opts.data])
-  const [facilityCode, setFacility] = useState('')
+  // 2026-11-25: starts on the default warehouse (last used for the type, else the first mother one); null = not changed
+  const [facilityPicked, setFacility] = useState<string | null>(null)
+  const facilityCode = facilityPicked ?? opts.data?.defaultFacility ?? ''
   // null = not touched: the newest saved code of the same delivery address is used (filled)
   const [picked, setPicked] = useState<Pick | null>(null)
   const auto = customers[0]?.matchedBy === 'address' ? customers[0] : null
@@ -117,10 +120,7 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
           <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.WAREHOUSE}</span>
           {/* 2026-11-25: Mother warehouses (MWH) and Child warehouses, each a group; search looks through both */}
           <GroupedSelect value={facilityCode} onChange={setFacility} groups={warehouses} placeholder={opts.isLoading ? BULK_TEXT.LOADING : BULK_TEXT.PICK_WAREHOUSE} />
-          {/* 2026-11-25 (user): a big order from a child warehouse = a heads-up only, never a block */}
-          {d.totalUnits > BULK_LIMIT.MOTHER_WARN_UNITS && opts.data?.facilities.find((w) => w.code === facilityCode)?.group === 'child' && (
-            <span className="pf-fade-in rounded-md bg-warn-soft px-2.5 py-1.5 text-[12px] text-ink-900">{BULK_TEXT.WH_CHILD_WARN(d.totalUnits, facilityCode)}</span>
-          )}
+          {facilityPicked === null && !!facilityCode && <span className="text-[11px] text-ink-400">{BULK_TEXT.WH_DEFAULT_HINT}</span>}
         </div>
         <label className="flex flex-col gap-1">
           <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.UNIWARE_CHANNEL}</span>
@@ -131,6 +131,16 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
           <input className={`${input} font-mono`} maxLength={100} value={f.customerCode} onChange={(e) => type('customerCode', e.target.value)} />
         </label>
       </div>
+      {/* 2026-11-25 (user): a big order from a child warehouse = a clear heads-up, never a block */}
+      {d.totalUnits > BULK_LIMIT.MOTHER_WARN_UNITS && opts.data?.facilities.find((w) => w.code === facilityCode)?.group === 'child' && (
+        <div role="alert" className="pf-fade-in flex items-start gap-2.5 rounded-lg border border-warn/40 bg-warn-soft/70 px-3.5 py-2.5">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" />
+          <div>
+            <div className="text-[13px] font-semibold text-ink-900">{BULK_TEXT.WH_CHILD_WARN_TITLE}</div>
+            <div className="text-[12.5px] text-ink-600">{BULK_TEXT.WH_CHILD_WARN(d.totalUnits, facilityCode)}</div>
+          </div>
+        </div>
+      )}
 
       {fromSaved && (
         <div key={from.id} className="pf-fade-in mt-3 rounded-md border border-warn/40 bg-warn-soft/60 px-3 py-2 text-[12px] text-ink-600">
