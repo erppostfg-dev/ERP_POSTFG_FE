@@ -20,6 +20,10 @@ export const MASTERS_ENDPOINT = {
   /** D2C internal transfer routes (2026-11-03): GET the grid; PATCH one route's codes / on-off (admin / developer). */
   TRANSFER_ROUTES: '/masters/transfer-routes',
   TRANSFER_ROUTE: (id: number | string) => `/masters/transfer-routes/${encodeURIComponent(String(id))}`,
+  /** Bulk upload (2026-11-25): the template (.csv), preview, import (all or nothing). */
+  TRANSFER_ROUTES_TEMPLATE: '/masters/transfer-routes/template',
+  TRANSFER_ROUTES_PREVIEW: '/masters/transfer-routes/upload/preview',
+  TRANSFER_ROUTES_IMPORT: '/masters/transfer-routes/upload/import',
 } as const
 
 /*
@@ -167,9 +171,28 @@ export const TRANSFER_ROUTE_TEXT = {
   PREFIX_HINT: "The location's PO prefix: every route to this location uses it",
   ADMIN_ONLY: 'Only admin / developer or an Editor of Warehouses (Users & Roles) can edit the transfer routes',
   SAVED: (n: number) => `Transfer route saved (${n} field${n === 1 ? '' : 's'}). It is in the row's History.`,
+  // bulk upload (2026-11-25)
+  UPLOAD_TITLE: 'Upload transfer routes',
+  UPLOAD_SUB: 'Add new routes or change the codes of existing ones from a .csv file',
+  UPLOAD_HELP: [
+    'Download the template: its example row is a real route with its current values.',
+    'A row updates the route with the same Sender + Channel + Location + Uniware Channel. If the sheet has one row for a Sender + Location that has only one route, that route takes the new Uniware Channel. Otherwise the row adds a new route.',
+    'An empty cell keeps the current value (to clear a code, use Edit on the row). Active: Yes or No; empty keeps it (a new route is Yes).',
+    "A new route's Channel + Location must already be a transfer location (receiving warehouse set in Channel Locations).",
+    'Nothing is saved while any row has a problem.',
+  ],
+  UPLOAD_EDITOR_ONLY: 'Only admin / developer or an Editor of Warehouses can upload routes. You can still download the template.',
+  UPLOAD_DONE: (a: number, u: number, s: number) => `Upload saved: ${a} route${a === 1 ? '' : 's'} added, ${u} changed, ${s} unchanged. Every change is in the rows' History.`,
+  UPLOAD_SWITCHED_ON: (codes: string[]) => `Allowed internal transfers for: ${codes.join(', ')}`,
 } as const
 /** The route's own editable fields (PATCH /masters/transfer-routes/:id); the PO prefix goes to the location. */
 export const TRANSFER_ROUTE_CODE_KEYS = ['uniwareChannelCode', 'customerCode', 'vendorCode'] as const
+/** Transfer routes upload (2026-11-25): biggest file the backend takes (ROUTE_UPLOAD.MAX_BYTES). */
+export const ROUTE_UPLOAD_MAX_BYTES = 2 * 1024 * 1024
+/** How the preview names a changed field. */
+export const ROUTE_FIELD_LABEL: Record<string, string> = {
+  uniwareChannelCode: 'Uniware channel', customerCode: 'Customer code', customerName: 'Customer name', vendorCode: 'Vendor code', isActive: 'Active',
+}
 export const TRANSFER_PREFIX_KEY = 'transferPoPrefix'
 /** Longest code / PO prefix the backend takes (D2C_UNIWARE_CODE_MAX, D2C_PO_PREFIX_MAX). */
 export const TRANSFER_CODE_MAX = 100
