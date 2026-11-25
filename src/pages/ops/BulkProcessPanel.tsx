@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '../../api/client'
-import { TreeSelect } from '../../components/pickers'
+import { GroupedSelect } from '../../components/pickers'
 import { getBulkProcessOptions, hideBulkCustomer, processBulkOrder, type BulkCustomerMatch, type BulkOrderFull } from '../../api/bulkOrders'
 import { BULK_FIXED_PRICE, BULK_PAYMENT, BULK_TEXT } from '../../constants/bulkOrders'
 import { rupees } from '../../lib/bulkPrice'
@@ -59,7 +59,15 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
     onError: (e: Error) => setError(errorText(e)),
   })
   const ready = !!facilityCode && !!f.uniwareChannel.trim() && !!f.customerCode.trim() && (!fromSaved || checked)
-  const warehouses = useMemo(() => (opts.data?.facilities ?? []).map((w) => ({ value: w.code, label: w.code, sub: w.name, parent: w.parentCode })), [opts.data])
+  // 2026-11-25: two groups, mother (MWH) and child (D2C / MWH under a mother); search looks through both
+  const warehouses = useMemo(() => {
+    const item = (w: { code: string; name: string | null; parentCode: string | null }) => ({ value: w.code, label: [w.code, w.name, w.parentCode ? `under ${w.parentCode}` : null].filter(Boolean).join(' · ') })
+    const all = opts.data?.facilities ?? []
+    return [
+      { label: BULK_TEXT.WH_MOTHER, items: all.filter((w) => w.group === 'mother').map(item) },
+      { label: BULK_TEXT.WH_CHILD, items: all.filter((w) => w.group === 'child').map(item) },
+    ]
+  }, [opts.data])
   const fixed = BULK_FIXED_PRICE[d.type]
   const unpaid = !!d.payment && d.payment.status !== BULK_PAYMENT.VERIFIED && d.payment.status !== BULK_PAYMENT.NOT_NEEDED
   const type = (k: 'uniwareChannel' | 'customerCode', v: string) => setPicked({ ...f, [k]: v })
@@ -107,10 +115,8 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
       <div className="grid gap-3 md:grid-cols-3">
         <div className="flex flex-col gap-1">
           <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.WAREHOUSE}</span>
-          {/* main (mother) warehouses, their child warehouses folded under them; search looks through all */}
-          <TreeSelect value={facilityCode} onChange={setFacility}
-            options={warehouses} placeholder={opts.isLoading ? BULK_TEXT.LOADING : BULK_TEXT.PICK_WAREHOUSE}
-            searchPlaceholder={BULK_TEXT.SEARCH_WAREHOUSE} noMatch={BULK_TEXT.NO_WAREHOUSE} />
+          {/* 2026-11-25: Mother warehouses (MWH) and Child warehouses, each a group; search looks through both */}
+          <GroupedSelect value={facilityCode} onChange={setFacility} groups={warehouses} placeholder={opts.isLoading ? BULK_TEXT.LOADING : BULK_TEXT.PICK_WAREHOUSE} />
         </div>
         <label className="flex flex-col gap-1">
           <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.UNIWARE_CHANNEL}</span>

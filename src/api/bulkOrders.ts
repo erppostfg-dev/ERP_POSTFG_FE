@@ -94,7 +94,7 @@ export interface BulkCustomerMatch {
 }
 export interface BulkProcessOptions {
   /** Active warehouses; parentCode = its main (mother) warehouse, null = a main one. */
-  facilities: { code: string; name: string | null; parentCode: string | null }[]
+  facilities: { code: string; name: string | null; /** 2026-11-25: mother (MWH) or child (D2C / MWH under a mother) */ group: 'mother' | 'child'; parentCode: string | null }[]
   customers: BulkCustomerMatch[]
 }
 export interface BulkProcessInput { facilityCode: string; uniwareChannel: string; customerCode: string }

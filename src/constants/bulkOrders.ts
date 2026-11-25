@@ -171,6 +171,8 @@ export const BULK_TEXT = {
   NAV_LOCATIONS: 'Saved locations',
   // v2 piece 5a: Institutional customers
   NAV_CUSTOMERS: 'Customers',
+  WH_MOTHER: 'Mother warehouses (MWH)',
+  WH_CHILD: 'Child warehouses',
   ORGS_TITLE: 'Buyer organisations',
   ORGS_SUB: 'Outside companies that order in the portal. Their people see only their own orders and customers; our people see everything. Add the people in Users & Roles first (with the Bulk Orders: Institutional role), then their emails here.',
   ORG_NAME: 'Organisation name',
