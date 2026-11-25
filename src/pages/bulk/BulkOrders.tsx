@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { GroupedSelect } from '../../components/pickers'
 import { useInfiniteQuery, useQueries } from '@tanstack/react-query'
 import { ChevronRight, Plus, Search } from 'lucide-react'
 import { listBulkOrders, type BulkOrder, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
@@ -123,10 +124,8 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
               ))}
             </div>
           )}
-          {!approvals && <select value={chosenStatus} onChange={(e) => setStatus(e.target.value)} className="rounded-md border border-line bg-surface px-2 py-1.5 text-[12px]">
-            <option value="">{BULK_TEXT.ALL_STATUSES}</option>
-            {Object.values(BULK_STATUS).map((s) => <option key={s} value={s}>{BULK_STATUS_LABEL[s]}</option>)}
-          </select>}
+          {!approvals && <div className="w-48"><GroupedSelect value={chosenStatus} onChange={setStatus} emptyLabel={BULK_TEXT.ALL_STATUSES} placeholder={BULK_TEXT.ALL_STATUSES}
+            groups={[{ label: '', items: Object.values(BULK_STATUS).map((x) => ({ value: x, label: BULK_STATUS_LABEL[x] ?? x })) }]} /></div>}
           {!approvals && <button onClick={() => setArchived(!archived)} title={BULK_TEXT.ARCHIVE_HINT} className={`rounded-md border px-2.5 py-1.5 text-[12px] ${archived ? 'border-primary bg-primary-soft font-semibold text-primary' : 'border-line text-ink-600'}`}>{BULK_TEXT.ARCHIVE}</button>}
           {archived && <button disabled={exporting || !total} onClick={() => void exportCsv()} className="rounded-md border border-line px-2.5 py-1.5 text-[12px] text-ink-600 disabled:opacity-50">{exporting ? BULK_TEXT.EXPORTING : BULK_TEXT.EXPORT_CSV}</button>}
           <span className="ml-auto text-[12px] text-ink-600">{list.data ? BULK_TEXT.SHOWING(rows.length, total) : ''}</span>

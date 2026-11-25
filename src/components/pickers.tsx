@@ -322,9 +322,9 @@ export function GroupedSelect({ value, groups, onChange, placeholder = '—', em
                       <span className="flex-1">{g.label}</span>
                       <span className="rounded-full bg-alt px-1.5 text-[10px] text-ink-400">{g.items.length}</span>
                     </button>
-                  ) : (
+                  ) : g.label ? (
                     <div className="px-2 pb-0.5 pt-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">{g.label}</div>
-                  )}
+                  ) : null}
                   {/* Height animates from 0 to its content: grid rows 0fr -> 1fr. */}
                   <div className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
                     <div className="overflow-hidden">{items}</div>

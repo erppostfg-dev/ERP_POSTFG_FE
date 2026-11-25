@@ -5,6 +5,7 @@ import { Download, Plus, Search, Trash2, Upload } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import { bulkDuplicateCheck, checkBulkReceivers, createBulkOrder, listBulkLocations, listInstCustomers, listBulkOrders, updateBulkOrder, searchBulkSkus, type BulkLocation, type BulkOrderFull, type BulkOrderInput, type BulkReceiverInput, type BulkReceiverRow, type BulkReceiversChecked, type BulkSku } from '../../api/bulkOrders'
 import { Modal } from '../../components/ui'
+import { GroupedSelect } from '../../components/pickers'
 import { BULK_INSTITUTION_RE, BULK_STATUS, bulkHidesMoney, isMarketingLike, BULK_LINE_TOTAL_MIN, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, BULK_FAST_TRACK, BULK_PURPOSE_TYPES, type BulkType } from '../../constants/bulkOrders'
 import { formProblems } from '../../lib/bulkForm'
 import { readGrid, receiverErrorsCsv, receiverQty, receiverTemplateCsv, rowsFromGrid } from '../../lib/bulkReceivers'
@@ -38,6 +39,11 @@ let nextKey = 1
 const emptyLine = (): Line => ({ key: nextKey++, sku: null, qty: '1', discount: '0' })
 
 const input = 'w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-primary'
+
+/** POST_FG's animated dropdown (2026-11-25, user: 'smoothness for the dropdowns'), one list, a search box on top. */
+function Pick({ value, options, onChange, placeholder, emptyLabel }: { value: string; options: { value: string; label: string }[]; onChange: (v: string) => void; placeholder?: string; emptyLabel?: string }) {
+  return <GroupedSelect value={value} groups={[{ label: '', items: options }]} onChange={onChange} placeholder={placeholder} emptyLabel={emptyLabel} />
+}
 
 /** v2 1d: field names for the Review step's list of problems. */
 const FIELD_LABEL = {
@@ -105,10 +111,7 @@ function ReceiverCard({ n, r, skus, locations, onChange, onRemove }: {
         <Field label={BULK_TEXT.RECEIVER_NAME} error={r.name.trim() ? undefined : BULK_TEXT.ERR_REQUIRED}><input className={input} value={r.name} onChange={(e) => onChange({ name: e.target.value })} /></Field>
         <Field label={BULK_TEXT.RECEIVER_PHONE} error={!r.phone.trim() ? BULK_TEXT.ERR_REQUIRED : phoneBad ? BULK_TEXT.ERR_PHONE : undefined}><input className={`${input} ${phoneBad ? 'border-crit' : ''}`} placeholder="+91 98765 43210" value={r.phone} onChange={(e) => onChange({ phone: e.target.value })} /></Field>
         <Field label={BULK_TEXT.LOCATION} wide>
-          <select className={input} value={r.where} onChange={(e) => onChange({ where: e.target.value })}>
-            <option value="new">{BULK_TEXT.NEW_ADDRESS}</option>
-            {locations?.map((l) => <option key={l.id} value={l.id}>{l.label} · {l.address.city} {l.address.pincode}</option>)}
-          </select>
+          <Pick value={r.where} onChange={(v) => onChange({ where: v || 'new' })} options={[{ value: 'new', label: BULK_TEXT.NEW_ADDRESS }, ...(locations ?? []).map((l) => ({ value: l.id, label: `${l.label} · ${l.address.city} ${l.address.pincode}` }))]} />
         </Field>
         {r.where === 'new' && (
           <>
@@ -484,15 +487,12 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       )}
 
       {step === 1 && (
-        <div>
+        <div key="step1" className="pf-fade-in">
           <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.ITEMS_TITLE}</h3>
           <p className="mb-3 text-[12px] text-ink-600">{noMoney ? BULK_TEXT.ITEMS_SUB_QTY_ONLY : BULK_TEXT.ITEMS_SUB}</p>
           <div className="mb-3 flex flex-wrap items-center gap-2 text-[12px]">
             <span className="font-medium text-ink-600">{BULK_TEXT.BRAND_LABEL}</span>
-            <select className={`${input} w-56`} value={brand} onChange={(e) => pickBrand(e.target.value)}>
-              <option value="">{BULK_TEXT.BRAND_PICK}</option>
-              {meta.data?.brands.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
+            <div className="w-56"><Pick value={brand} onChange={pickBrand} placeholder={BULK_TEXT.BRAND_PICK} options={(meta.data?.brands ?? []).map((b) => ({ value: b, label: b }))} /></div>
             <span className="text-ink-400">{BULK_TEXT.BRAND_HINT}</span>
             {meta.data && meta.data.brands.length === 0 && <span className="text-crit">{BULK_TEXT.BRAND_NONE}</span>}
             {brandNote && <span className="text-warn">{BULK_TEXT.BRAND_CHANGED}</span>}
@@ -535,7 +535,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       )}
 
       {step === 2 && (
-        <div>
+        <div key="step2" className="pf-fade-in">
           <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.DELIVERY_TITLE}</h3>
           {tried && !deliveryOk && <p className="pf-fade-in mt-2 rounded-md bg-crit-soft px-3 py-2 text-[12.5px] text-crit">{BULK_TEXT.FIX_RED}</p>}
           <p className="mb-3 text-[12px] text-ink-600">{BULK_TEXT.DELIVERY_SUB}</p>
@@ -549,10 +549,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
             <Field label={BULK_TEXT.RECEIVER_NAME} error={err('receiverName')}><input className={`${input} ${err('receiverName') ? 'border-crit' : ''}`} value={form.receiverName} onBlur={leave('receiverName')} onChange={(e) => set({ receiverName: e.target.value })} /></Field>
             <Field label={BULK_TEXT.RECEIVER_PHONE} error={err('receiverPhone')}><input className={`${input} ${err('receiverPhone') ? 'border-crit' : ''}`} placeholder="+91 98765 43210" value={form.receiverPhone} onBlur={leave('receiverPhone')} onChange={(e) => set({ receiverPhone: e.target.value })} /></Field>
             <Field label={BULK_TEXT.LOCATION} wide>
-              <select className={input} value={where} onChange={(e) => setWhere(e.target.value)}>
-                <option value="new">{BULK_TEXT.NEW_ADDRESS}</option>
-                {locations.data?.map((l) => <option key={l.id} value={l.id}>{l.label} · {l.address.city} {l.address.pincode}</option>)}
-              </select>
+              <Pick value={where} onChange={(v) => setWhere(v || 'new')} options={[{ value: 'new', label: BULK_TEXT.NEW_ADDRESS }, ...(locations.data ?? []).map((l) => ({ value: l.id, label: `${l.label} · ${l.address.city} ${l.address.pincode}` }))]} />
             </Field>
             {where === 'new' ? (
               <>
@@ -607,10 +604,8 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
               <p className="mb-3 text-[12px] text-ink-600">{BULK_TEXT.INSTITUTION_SUB}</p>
               <div className="mb-3 grid gap-3 md:grid-cols-2">
                 <Field label={BULK_TEXT.ORDER_CUSTOMER} wide hint={customerId ? BULK_TEXT.ORDER_CUSTOMER_HINT : undefined}>
-                  <select className={input} value={customerId} onChange={(e) => pickCustomer(e.target.value)}>
-                    <option value="">{BULK_TEXT.ORDER_CUSTOMER_TYPED}</option>
-                    {customers.data?.filter((c) => c.active || c.id === customerId).map((c) => <option key={c.id} value={c.id}>{c.companyName}{c.gstin ? ` · ${c.gstin}` : ''}</option>)}
-                  </select>
+                  <Pick value={customerId} onChange={pickCustomer} emptyLabel={BULK_TEXT.ORDER_CUSTOMER_TYPED} placeholder={BULK_TEXT.ORDER_CUSTOMER_TYPED}
+                    options={(customers.data ?? []).filter((c) => c.active || c.id === customerId).map((c) => ({ value: c.id, label: c.gstin ? `${c.companyName} · ${c.gstin}` : c.companyName }))} />
                 </Field>
                 {chosen && (
                   <>
@@ -621,10 +616,8 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
                     </div>
                     {chosen.addresses.some((a) => a.active) && (
                       <Field label={BULK_TEXT.ORDER_SHIP_PICK} wide>
-                        <select className={input} value="" onChange={(e) => { const a = chosen.addresses.find((x) => x.id === e.target.value); if (a) { setWhere('new'); setAddress({ ...a.address }); set({ receiverName: form.receiverName || chosen.contactName, receiverPhone: form.receiverPhone || chosen.contactPhone }) } }}>
-                          <option value="">{BULK_TEXT.ORDER_SHIP_PICK_NONE}</option>
-                          {chosen.addresses.filter((a) => a.active).map((a) => <option key={a.id} value={a.id}>{a.label} · {a.address.city} {a.address.pincode}</option>)}
-                        </select>
+                        <Pick value="" placeholder={BULK_TEXT.ORDER_SHIP_PICK_NONE} onChange={(v) => { const a = chosen.addresses.find((x) => x.id === v); if (a) { setWhere('new'); setAddress({ ...a.address }); set({ receiverName: form.receiverName || chosen.contactName, receiverPhone: form.receiverPhone || chosen.contactPhone }) } }}
+                          options={chosen.addresses.filter((a) => a.active).map((a) => ({ value: a.id, label: `${a.label} · ${a.address.city} ${a.address.pincode}` }))} />
                       </Field>
                     )}
                   </>
@@ -652,7 +645,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       )}
 
       {step === 3 && (
-        <div>
+        <div key="step3" className="pf-fade-in">
           <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.REVIEW_TITLE}</h3>
           <p className="mb-2 text-[12px] text-ink-600">{BULK_TEXT.REVIEW_SUB}</p>
           {needsRemark && (

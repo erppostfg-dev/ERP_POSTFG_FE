@@ -146,7 +146,7 @@ export default function BulkApp() {
           </div>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">
-          <ErrorBoundary key={page}>{page === 'locations' ? <BulkLocations rights={rights} /> : page === 'customers' ? <BulkCustomers rights={rights} /> : <BulkOrders key={page} rights={rights} mode={page} />}</ErrorBoundary>
+          <ErrorBoundary key={page}><div className="pf-fade-in">{page === 'locations' ? <BulkLocations rights={rights} /> : page === 'customers' ? <BulkCustomers rights={rights} /> : <BulkOrders key={page} rights={rights} mode={page} />}</div></ErrorBoundary>
         </div>
       </main>
     </div>
