@@ -197,7 +197,8 @@ export interface BulkOrderInput {
   customerId?: string
 }
 
-export interface BulkListQuery { type?: BulkType | ''; status?: string; payment?: string; q?: string; page?: number; pageSize?: number; archived?: boolean; /** our team: ready orders waiting more than N days */ waitingDays?: number }
+/** type / status / payment: one value or several comma separated (the team's Filters panel, 2026-11-25). */
+export interface BulkListQuery { type?: string; status?: string; payment?: string; q?: string; page?: number; pageSize?: number; archived?: boolean; /** our team: ready orders waiting more than N days */ waitingDays?: number }
 
 const qs = (o: Record<string, string | number | undefined>) => {
   const p = new URLSearchParams()

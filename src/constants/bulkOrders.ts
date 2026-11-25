@@ -171,6 +171,15 @@ export const BULK_TEXT = {
   NAV_LOCATIONS: 'Saved locations',
   // v2 piece 5a: Institutional customers
   NAV_CUSTOMERS: 'Customers',
+  // 2026-11-25: our team's Bulk Orders tab: two views + a Filters panel (like Processed / In Review)
+  VIEW_TO_PLACE: 'To place',
+  VIEW_ALL: 'All orders',
+  F_TYPE: 'Type',
+  F_STATUS: 'Status',
+  F_PAYMENT: 'Payment',
+  F_WAITING: 'Waiting more than (days)',
+  F_WAITING_HINT: 'e.g. 3',
+  F_ANY: 'Any',
   WH_MOTHER: 'Mother warehouses (MWH)',
   WH_CHILD: 'Child warehouses',
   ORGS_TITLE: 'Buyer organisations',
