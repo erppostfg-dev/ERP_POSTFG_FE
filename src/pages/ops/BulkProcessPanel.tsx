@@ -31,9 +31,8 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
   const key = ['bulk', 'process-options', d.id]
   const opts = useQuery({ queryKey: key, queryFn: () => getBulkProcessOptions(d.id) })
   const customers = useMemo(() => opts.data?.customers ?? [], [opts.data])
-  // 2026-11-25: starts on the default warehouse (last used for the type, else the first mother one); null = not changed
-  const [facilityPicked, setFacility] = useState<string | null>(null)
-  const facilityCode = facilityPicked ?? opts.data?.defaultFacility ?? ''
+  // starts empty (user 2026-11-25: no default); '— None —' in the list clears it again
+  const [facilityCode, setFacility] = useState('')
   // null = not touched: the newest saved code of the same delivery address is used (filled)
   const [picked, setPicked] = useState<Pick | null>(null)
   const auto = customers[0]?.matchedBy === 'address' ? customers[0] : null
@@ -119,8 +118,7 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
         <div className="flex flex-col gap-1">
           <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.WAREHOUSE}</span>
           {/* 2026-11-25: Mother warehouses (MWH) and Child warehouses, each a group; search looks through both */}
-          <GroupedSelect value={facilityCode} onChange={setFacility} groups={warehouses} placeholder={opts.isLoading ? BULK_TEXT.LOADING : BULK_TEXT.PICK_WAREHOUSE} />
-          {facilityPicked === null && !!facilityCode && <span className="text-[11px] text-ink-400">{BULK_TEXT.WH_DEFAULT_HINT}</span>}
+          <GroupedSelect value={facilityCode} onChange={setFacility} groups={warehouses} emptyLabel={BULK_TEXT.WH_NONE} placeholder={opts.isLoading ? BULK_TEXT.LOADING : BULK_TEXT.PICK_WAREHOUSE} />
         </div>
         <label className="flex flex-col gap-1">
           <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.UNIWARE_CHANNEL}</span>

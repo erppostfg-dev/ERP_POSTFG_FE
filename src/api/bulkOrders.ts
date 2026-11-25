@@ -93,8 +93,6 @@ export interface BulkCustomerMatch {
   usedCount: number; lastUsedAt: string; matchedBy: 'address' | 'gstin' | 'name'
 }
 export interface BulkProcessOptions {
-  /** 2026-11-25: picked to start with: the last bulk order of the type's warehouse, else the first mother one. */
-  defaultFacility: string | null
   /** Active warehouses; parentCode = its main (mother) warehouse, null = a main one. */
   facilities: { code: string; name: string | null; /** 2026-11-25: mother (MWH) or child (D2C / MWH under a mother) */ group: 'mother' | 'child'; parentCode: string | null }[]
   customers: BulkCustomerMatch[]

@@ -187,7 +187,7 @@ export const BULK_TEXT = {
   WH_CHILD: 'Child warehouses',
   WH_CHILD_WARN_TITLE: 'Big order from a child warehouse: are you sure?',
   WH_CHILD_WARN: (units: number, wh: string) => `This order has ${units} units. Orders above 100 units usually ship from a mother warehouse (MWH); ${wh} is a child warehouse. You can still create the sale order.`,
-  WH_DEFAULT_HINT: 'Picked for you (last used for this type): change it if needed.',
+  WH_NONE: '— None —',
   ORGS_TITLE: 'Buyer organisations',
   ORGS_SUB: 'Outside companies that order in the portal. Their people see only their own orders and customers; our people see everything. Add the people in Users & Roles first (with the Bulk Orders: Institutional role), then their emails here.',
   ORG_NAME: 'Organisation name',
