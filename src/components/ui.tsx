@@ -277,11 +277,12 @@ export function Modal({
   const [leaving, setLeaving] = useState(false)
   const closeRef = useRef(onClose)
   closeRef.current = onClose
+  const closing = useRef(false)
   const close = useCallback(() => {
-    setLeaving((was) => {
-      if (!was) setTimeout(() => { setLeaving(false); closeRef.current() }, MODAL_MS)
-      return true
-    })
+    if (closing.current) return
+    closing.current = true
+    setLeaving(true)
+    setTimeout(() => { closing.current = false; setLeaving(false); closeRef.current() }, MODAL_MS)
   }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
