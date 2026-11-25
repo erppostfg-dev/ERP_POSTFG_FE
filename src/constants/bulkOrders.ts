@@ -159,6 +159,8 @@ export const BULK_LIMIT = {
    *  answer is kept (STALE_MS), and an older search still on its way is cancelled (2026-11-11). */
   SKU_DEBOUNCE_MS: 350,
   LINES_MAX: 200,
+  /** 2026-11-25 (user): a bigger order than this from a CHILD warehouse gets an 'are you sure?' note (never blocks). */
+  MOTHER_WARN_UNITS: 100,
   /** v2 piece 2 (backend BULK_ORDERS.RECEIVERS_MAX / RECEIVER_LINES_MAX). */
   RECEIVERS_MAX: 50,
   RECEIVER_LINES_MAX: 500,
@@ -182,6 +184,7 @@ export const BULK_TEXT = {
   F_ANY: 'Any',
   WH_MOTHER: 'Mother warehouses (MWH)',
   WH_CHILD: 'Child warehouses',
+  WH_CHILD_WARN: (units: number, wh: string) => `Are you sure? This order has ${units} units: orders above 100 units usually ship from a mother warehouse (MWH), and ${wh} is a child warehouse. You can still continue.`,
   ORGS_TITLE: 'Buyer organisations',
   ORGS_SUB: 'Outside companies that order in the portal. Their people see only their own orders and customers; our people see everything. Add the people in Users & Roles first (with the Bulk Orders: Institutional role), then their emails here.',
   ORG_NAME: 'Organisation name',

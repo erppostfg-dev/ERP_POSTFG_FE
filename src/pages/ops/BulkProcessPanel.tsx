@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '../../api/client'
 import { GroupedSelect } from '../../components/pickers'
 import { getBulkProcessOptions, hideBulkCustomer, processBulkOrder, type BulkCustomerMatch, type BulkOrderFull } from '../../api/bulkOrders'
-import { BULK_FIXED_PRICE, BULK_PAYMENT, BULK_TEXT } from '../../constants/bulkOrders'
+import { BULK_FIXED_PRICE, BULK_LIMIT, BULK_PAYMENT, BULK_TEXT } from '../../constants/bulkOrders'
 import { rupees } from '../../lib/bulkPrice'
 
 /*
@@ -117,6 +117,10 @@ export function BulkProcessPanel({ d, onDone }: { d: BulkOrderFull; onDone: (r: 
           <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.WAREHOUSE}</span>
           {/* 2026-11-25: Mother warehouses (MWH) and Child warehouses, each a group; search looks through both */}
           <GroupedSelect value={facilityCode} onChange={setFacility} groups={warehouses} placeholder={opts.isLoading ? BULK_TEXT.LOADING : BULK_TEXT.PICK_WAREHOUSE} />
+          {/* 2026-11-25 (user): a big order from a child warehouse = a heads-up only, never a block */}
+          {d.totalUnits > BULK_LIMIT.MOTHER_WARN_UNITS && opts.data?.facilities.find((w) => w.code === facilityCode)?.group === 'child' && (
+            <span className="pf-fade-in rounded-md bg-warn-soft px-2.5 py-1.5 text-[12px] text-ink-900">{BULK_TEXT.WH_CHILD_WARN(d.totalUnits, facilityCode)}</span>
+          )}
         </div>
         <label className="flex flex-col gap-1">
           <span className="text-[12px] font-medium text-ink-600">{BULK_TEXT.UNIWARE_CHANNEL}</span>
