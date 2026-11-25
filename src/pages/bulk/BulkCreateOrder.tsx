@@ -221,6 +221,10 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   // v2 1e: an edit says why (required, kept in the history)
   const [editRemark, setEditRemark] = useState('')
   const leave = (k: string) => () => setTouched((t) => (t.has(k) ? t : new Set(t).add(k)))
+  // 2026-11-25 (user): errors right at the field (red + message) once it was left, or all of them after Next
+  const [tried, setTried] = useState(false)
+  const req = (k: string, v: string) => ((touched.has(k) || tried) && !v.trim() ? BULK_TEXT.ERR_REQUIRED : undefined)
+  const red = (e: string | undefined) => (e ? 'border-crit' : '')
   const [where, setWhere] = useState<string>(initial?.location.id ?? 'new') // 'new' or a saved location id
   const [address, setAddress] = useState(initial && !initial.location.id ? { ...initial.location.address } : { line: '', city: '', state: '', pincode: '' })
   const [saveAs, setSaveAs] = useState('')
@@ -348,7 +352,8 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const instOk = !isInst || (customerId ? !!chosen?.active : !!inst.name.trim() && !gstinBad && !emailBad && billingOk)
   const problems = formProblems(form, todayIst())
   const pinBad = where === 'new' && !/^[1-9]\d{5}$/.test(address.pincode.trim())
-  const err = (k: keyof typeof problems) => (touched.has(k) || step === 3 ? problems[k] : undefined)
+  const err = (k: keyof typeof problems) => (touched.has(k) || tried || step === 3 ? problems[k] : undefined)
+  const pinErr = (pin: string, k: string) => (pin.trim() && !/^[1-9]\d{5}$/.test(pin.trim()) ? BULK_TEXT.ERR_PIN : req(k, pin))
   const deliveryOk = Object.keys(problems).length === 0 && addressOk && instOk && receiversOk
   /** Every remaining problem, for the Review step (labels + why). */
   const allProblems = [
@@ -452,7 +457,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       {(!initial || isDraft) && <button onClick={saveDraft} disabled={save.isPending} className="rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold disabled:opacity-50">{BULK_TEXT.SAVE_DRAFT}</button>}
       {step < 3 ? (
         // v2 1d: from the delivery step the Review step opens even with errors (it lists them); Submit waits for none
-        <button onClick={() => setStep(step + 1)} disabled={step === 1 && !itemsOk} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{BULK_TEXT.NEXT}</button>
+        <button onClick={() => { if (step === 2 && !deliveryOk) { setTried(true); return } setStep(step + 1) }} disabled={step === 1 && !itemsOk} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{BULK_TEXT.NEXT}</button>
       ) : (
         <button onClick={submit} disabled={save.isPending || !itemsOk || !deliveryOk || (needsRemark && !editRemark.trim())} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50">{save.isPending ? BULK_TEXT.SUBMITTING : initial ? BULK_TEXT.SAVE_CHANGES : BULK_TEXT.SUBMIT}</button>
       )}
@@ -532,6 +537,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       {step === 2 && (
         <div>
           <h3 className="text-[14px] font-semibold text-ink-900">{BULK_TEXT.DELIVERY_TITLE}</h3>
+          {tried && !deliveryOk && <p className="pf-fade-in mt-2 rounded-md bg-crit-soft px-3 py-2 text-[12.5px] text-crit">{BULK_TEXT.FIX_RED}</p>}
           <p className="mb-3 text-[12px] text-ink-600">{BULK_TEXT.DELIVERY_SUB}</p>
           <div className="grid gap-3 md:grid-cols-2">
             <Field label={BULK_TEXT.ORDERED_BY} hint={BULK_TEXT.ORDERED_BY_HINT[type]} error={err('orderedBy')}><input className={`${input} ${err('orderedBy') ? 'border-crit' : ''}`} value={form.orderedBy} onBlur={leave('orderedBy')} onChange={(e) => set({ orderedBy: e.target.value })} /></Field>
@@ -550,10 +556,10 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
             </Field>
             {where === 'new' ? (
               <>
-                <Field label={BULK_TEXT.ADDRESS_LINE} wide><input className={input} value={address.line} onChange={(e) => setAddress({ ...address, line: e.target.value })} /></Field>
-                <Field label={BULK_TEXT.CITY}><input className={input} value={address.city} onChange={(e) => setAddress({ ...address, city: e.target.value })} /></Field>
-                <Field label={BULK_TEXT.STATE}><input className={input} value={address.state} onChange={(e) => setAddress({ ...address, state: e.target.value })} /></Field>
-                <Field label={BULK_TEXT.PINCODE} error={address.pincode && pinBad ? BULK_TEXT.ERR_PIN : undefined}><input inputMode="numeric" maxLength={6} className={`${input} ${address.pincode && !/^[1-9]\d{5}$/.test(address.pincode) ? 'border-crit' : ''}`} value={address.pincode} onChange={(e) => setAddress({ ...address, pincode: e.target.value.trim() })} /></Field>
+                <Field label={BULK_TEXT.ADDRESS_LINE} wide error={req('addr.line', address.line)}><input className={`${input} ${red(req('addr.line', address.line))}`} value={address.line} onBlur={leave('addr.line')} onChange={(e) => setAddress({ ...address, line: e.target.value })} /></Field>
+                <Field label={BULK_TEXT.CITY} error={req('addr.city', address.city)}><input className={`${input} ${red(req('addr.city', address.city))}`} value={address.city} onBlur={leave('addr.city')} onChange={(e) => setAddress({ ...address, city: e.target.value })} /></Field>
+                <Field label={BULK_TEXT.STATE} error={req('addr.state', address.state)}><input className={`${input} ${red(req('addr.state', address.state))}`} value={address.state} onBlur={leave('addr.state')} onChange={(e) => setAddress({ ...address, state: e.target.value })} /></Field>
+                <Field label={BULK_TEXT.PINCODE} error={pinErr(address.pincode, 'addr.pin')}><input inputMode="numeric" maxLength={6} className={`${input} ${red(pinErr(address.pincode, 'addr.pin'))}`} value={address.pincode} onBlur={leave('addr.pin')} onChange={(e) => setAddress({ ...address, pincode: e.target.value.trim() })} /></Field>
                 <Field label={BULK_TEXT.SAVE_AS} hint={BULK_TEXT.SAVE_AS_HINT}><input className={input} value={saveAs} onChange={(e) => setSaveAs(e.target.value)} /></Field>
               </>
             ) : saved && (
@@ -625,18 +631,18 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
                 )}
               </div>
               {!customerId && <div className="grid gap-3 md:grid-cols-2">
-                <Field label={BULK_TEXT.INSTITUTION_NAME} wide><input className={input} maxLength={200} value={inst.name} onChange={(e) => setI({ name: e.target.value })} /></Field>
-                <Field label={BULK_TEXT.GSTIN} hint={gstinBad ? BULK_TEXT.BAD_GSTIN : undefined}><input className={`${input} uppercase ${gstinBad ? 'border-crit' : ''}`} maxLength={15} value={inst.gstin} onChange={(e) => setI({ gstin: e.target.value.trim() })} /></Field>
-                <Field label={BULK_TEXT.CONTACT_EMAIL} hint={emailBad ? BULK_TEXT.BAD_EMAIL : undefined}><input type="email" className={`${input} ${emailBad ? 'border-crit' : ''}`} maxLength={150} value={inst.email} onChange={(e) => setI({ email: e.target.value })} /></Field>
+                <Field label={BULK_TEXT.INSTITUTION_NAME} wide error={req('inst.name', inst.name)}><input className={`${input} ${red(req('inst.name', inst.name))}`} maxLength={200} value={inst.name} onBlur={leave('inst.name')} onChange={(e) => setI({ name: e.target.value })} /></Field>
+                <Field label={BULK_TEXT.GSTIN} error={gstinBad ? BULK_TEXT.BAD_GSTIN : undefined}><input className={`${input} uppercase ${gstinBad ? 'border-crit' : ''}`} maxLength={15} value={inst.gstin} onChange={(e) => setI({ gstin: e.target.value.trim() })} /></Field>
+                <Field label={BULK_TEXT.CONTACT_EMAIL} error={emailBad ? BULK_TEXT.BAD_EMAIL : undefined}><input type="email" className={`${input} ${emailBad ? 'border-crit' : ''}`} maxLength={150} value={inst.email} onChange={(e) => setI({ email: e.target.value })} /></Field>
                 <label className="flex items-center gap-2 text-[13px] text-ink-900 md:col-span-2">
                   <input type="checkbox" checked={inst.same} onChange={(e) => setI({ same: e.target.checked })} />{BULK_TEXT.BILLING_SAME}
                 </label>
                 {!inst.same && (
                   <>
-                    <Field label={BULK_TEXT.BILLING_LINE} wide><input className={input} value={inst.billing.line} onChange={(e) => setI({ billing: { ...inst.billing, line: e.target.value } })} /></Field>
-                    <Field label={BULK_TEXT.CITY}><input className={input} value={inst.billing.city} onChange={(e) => setI({ billing: { ...inst.billing, city: e.target.value } })} /></Field>
-                    <Field label={BULK_TEXT.STATE}><input className={input} value={inst.billing.state} onChange={(e) => setI({ billing: { ...inst.billing, state: e.target.value } })} /></Field>
-                    <Field label={BULK_TEXT.PINCODE}><input inputMode="numeric" maxLength={6} className={`${input} ${inst.billing.pincode && !/^[1-9]\d{5}$/.test(inst.billing.pincode) ? 'border-crit' : ''}`} value={inst.billing.pincode} onChange={(e) => setI({ billing: { ...inst.billing, pincode: e.target.value.trim() } })} /></Field>
+                    <Field label={BULK_TEXT.BILLING_LINE} wide error={req('bill.line', inst.billing.line)}><input className={`${input} ${red(req('bill.line', inst.billing.line))}`} value={inst.billing.line} onBlur={leave('bill.line')} onChange={(e) => setI({ billing: { ...inst.billing, line: e.target.value } })} /></Field>
+                    <Field label={BULK_TEXT.CITY} error={req('bill.city', inst.billing.city)}><input className={`${input} ${red(req('bill.city', inst.billing.city))}`} value={inst.billing.city} onBlur={leave('bill.city')} onChange={(e) => setI({ billing: { ...inst.billing, city: e.target.value } })} /></Field>
+                    <Field label={BULK_TEXT.STATE} error={req('bill.state', inst.billing.state)}><input className={`${input} ${red(req('bill.state', inst.billing.state))}`} value={inst.billing.state} onBlur={leave('bill.state')} onChange={(e) => setI({ billing: { ...inst.billing, state: e.target.value } })} /></Field>
+                    <Field label={BULK_TEXT.PINCODE} error={pinErr(inst.billing.pincode, 'bill.pin')}><input inputMode="numeric" maxLength={6} className={`${input} ${red(pinErr(inst.billing.pincode, 'bill.pin'))}`} value={inst.billing.pincode} onBlur={leave('bill.pin')} onChange={(e) => setI({ billing: { ...inst.billing, pincode: e.target.value.trim() } })} /></Field>
                   </>
                 )}
               </div>}

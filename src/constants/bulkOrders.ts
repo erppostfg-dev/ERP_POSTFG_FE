@@ -173,6 +173,7 @@ export const BULK_TEXT = {
   NAV_LOCATIONS: 'Saved locations',
   // v2 piece 5a: Institutional customers
   NAV_CUSTOMERS: 'Customers',
+  FIX_RED: 'Fix the fields in red, then press Next.',
   // 2026-11-25: our team's Bulk Orders tab: two views + a Filters panel (like Processed / In Review)
   VIEW_TO_PLACE: 'To place',
   VIEW_ALL: 'All orders',
