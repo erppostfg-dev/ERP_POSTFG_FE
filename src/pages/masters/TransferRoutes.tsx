@@ -5,6 +5,8 @@ import { ApiError } from '../../api/client'
 import { editTransferPrefix, editTransferRoute, listTransferRoutesWithMeta, type EditConflict, type TransferRouteChanges, type TransferRouteItem } from '../../api/masters'
 import { EDIT_TEXT, HISTORY_TEXT, MASTER_ADD_ROLES, MASTER_LOG_TYPE, SKU_STATUS, TRANSFER_CODE_MAX, TRANSFER_PREFIX_KEY, TRANSFER_ROUTE_CODE_KEYS, TRANSFER_ROUTE_TEXT as T } from '../../constants/masters'
 import { useAuth } from '../../auth/AuthContext'
+import { ACCESS } from '../../constants/auth'
+import { PATHS } from '../../constants/pages'
 import { Badge, Button, Drawer, PageTitle } from '../../components/ui'
 import { Reveal } from '../../components/shell'
 import { DataGrid, FilterPanel, SectionToolbar, exportRows, inputCls, useSection, type FilterDef } from '../../components/kit'
@@ -54,9 +56,9 @@ export default function TransferRoutes() {
   const missingCount = useMemo(() => s.filtered.filter((r) => r.vendorMissing === 'Yes').length, [s.filtered])
   const view = vendorMissing ? s.filtered.filter((r) => r.vendorMissing === 'Yes') : s.filtered
   const filters = useMemo<FilterDef[]>(() => FILTER_KEYS.map(([key, label]) => ({ key, label, type: 'multi', options: distinct(rows, key) })), [rows])
-  // edit: admin / developer only (the backend's PATCH rule); everyone who sees the page sees History
   const auth = useAuth()
-  const canEdit = auth.status === 'signedIn' && auth.user.roles.some((r) => (MASTER_ADD_ROLES as readonly string[]).includes(r))
+  // admin / developer, or Editor on Warehouses (2026-11-25, as the backend)
+  const canEdit = (auth.status === 'signedIn' && auth.user.roles.some((r) => (MASTER_ADD_ROLES as readonly string[]).includes(r))) || auth.accessFor(PATHS.WAREHOUSES) === ACCESS.EDITOR
   const [editing, setEditing] = useState<TransferRouteItem | null>(null)
   const [historyOf, setHistoryOf] = useState<Row | null>(null)
   const [changesOpen, setChangesOpen] = useState(false)

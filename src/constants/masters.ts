@@ -101,7 +101,7 @@ export const ADD_TEXT = {
   ABOVE_ZERO: 'Must be a number above 0',
   ALL_REQUIRED: 'Every field is required.',
   LEFT: (n: number) => `${n} field${n === 1 ? '' : 's'} still to fill or fix`,
-  ADMIN_ONLY: 'Only admin / developer can add to the masters',
+  ADMIN_ONLY: 'Only admin / developer or an Editor of this Masters page (Users & Roles) can add here',
   RECHECK: (channel: string) => `${channel}'s POs in review are being re-checked against the new mapping.`,
   NEW_CHANNEL: 'A new channel takes POs only after its reader / code is added (ADD_A_CHANNEL.md).',
 } as const
@@ -165,7 +165,7 @@ export const TRANSFER_ROUTE_TEXT = {
   TEST_MODE_HINT: 'This server runs D2C transfers in local test mode: only routes whose sending AND receiving warehouse are test warehouses (TEST_FACILITY) can be used for transfers here.',
   EDIT_TITLE: 'Edit transfer route',
   PREFIX_HINT: "The location's PO prefix: every route to this location uses it",
-  ADMIN_ONLY: 'Only admin / developer can edit the transfer routes',
+  ADMIN_ONLY: 'Only admin / developer or an Editor of Warehouses (Users & Roles) can edit the transfer routes',
   SAVED: (n: number) => `Transfer route saved (${n} field${n === 1 ? '' : 's'}). It is in the row's History.`,
 } as const
 /** The route's own editable fields (PATCH /masters/transfer-routes/:id); the PO prefix goes to the location. */

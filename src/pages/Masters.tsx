@@ -111,6 +111,10 @@ const LOADERS: Record<string, (signal: AbortSignal) => Promise<Row[]>> = {
 }
 /** Masters with an Add form (2026-10-27); Warehouses has no table yet. */
 const ADDABLE: readonly string[] = ['pep', 'channelSku', 'customer', 'chWh'] satisfies AddMaster[]
+/** The page whose access decides who changes each master (2026-11-25: Editor there = Add / Edit / Switch; the backend checks the same). */
+const MASTER_PAGE: Record<string, string> = {
+  pep: PATHS.PEP_SKUS, channelSku: PATHS.CHANNEL_SKUS, customer: PATHS.CHANNEL_CUSTOMERS, chWh: PATHS.CHANNEL_LOCATIONS, pepWh: PATHS.WAREHOUSES, routes: PATHS.WAREHOUSES,
+}
 const distinct = (rows: Row[], k: string) => [...new Set(rows.map((r) => String(r[k] ?? '')).filter(Boolean))].sort()
 
 // ---- Config per master ------------------------------------------------------
@@ -262,10 +266,12 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
   const c = CFG[id]
   const s = useSection<Row>(rows, c.search)
   const [edit, setEdit] = useState<{ row: Row; prev?: string } | null>(null)
-  // Add forms: admin / developer only for now (user, 2026-10-27); the backend checks the role too
+  // Add / Edit / Switch: admin / developer, or Editor on this master's page (Users & Roles; user 2026-11-25; was admin /
+  // developer only since 2026-10-27); the backend checks the same
   const auth = useAuth()
   const queryClient = useQueryClient()
-  const isMasterAdmin = auth.status === 'signedIn' && auth.user.roles.some((r) => (MASTER_ADD_ROLES as readonly string[]).includes(r))
+  const isMasterAdmin = (auth.status === 'signedIn' && auth.user.roles.some((r) => (MASTER_ADD_ROLES as readonly string[]).includes(r)))
+    || (!!MASTER_PAGE[id] && auth.accessFor(MASTER_PAGE[id]) === ACCESS.EDITOR)
   const canAdd = ADDABLE.includes(id) && isMasterAdmin
   const [adding, setAdding] = useState(false)
   const [historyOf, setHistoryOf] = useState<Row | null>(null)
