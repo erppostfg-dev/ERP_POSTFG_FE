@@ -154,6 +154,9 @@ function Timeline({ events, noMoney = false }: { events: BulkOrderEvent[]; noMon
   )
 }
 
+/** Edit: the panel's slide-out (ui.tsx DRAWER_MS) before the edit form opens. */
+const DRAWER_SWAP_MS = 300
+
 export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamCanVerifyPayment, teamCanPaymentDetails, onClose, onEdit, onToast }: {
   id: string | null
   /** Our team's view: may they verify payments (special permission "Bulk Orders: verify payments", 2026-11-13). */
@@ -270,7 +273,8 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
   )
   const btn = 'rounded-md px-3 py-1.5 text-[12px] font-semibold disabled:opacity-50'
 
-  const footer = d && (canDecide || canChange) ? (
+  // 2026-11-25 (user): Edit slides the panel out first (drawerClose), then the edit form opens; never one under the other
+  const footer = d && (canDecide || canChange) ? (drawerClose: () => void) => (
     ask ? (
       <>
         <input autoFocus className="mr-auto min-w-0 flex-1 rounded-md border border-line px-2.5 py-1.5 text-[13px] outline-none focus:border-primary"
@@ -288,7 +292,7 @@ export default function BulkOrderDrawer({ id, rights, load, teamCanUpload, teamC
           </button>
         )}
         {canChange && <button disabled={busy} onClick={() => setAsk('cancel')} className={`${btn} mr-auto text-crit hover:bg-crit-soft`}>{d?.status === BULK_STATUS.DRAFT ? BULK_TEXT.DISCARD_DRAFT : BULK_TEXT.CANCEL_ORDER}</button>}
-        {canChange && <button disabled={busy} onClick={() => d && onEdit?.(d)} className={`${btn} border border-line`}>{d?.status === BULK_STATUS.DRAFT ? BULK_TEXT.CONTINUE_DRAFT : BULK_TEXT.EDIT}</button>}
+        {canChange && <button disabled={busy} onClick={() => { if (!d || !onEdit) return; const o = d; drawerClose(); setTimeout(() => onEdit(o), DRAWER_SWAP_MS) }} className={`${btn} border border-line`}>{d?.status === BULK_STATUS.DRAFT ? BULK_TEXT.CONTINUE_DRAFT : BULK_TEXT.EDIT}</button>}
         {canDecide && <button disabled={busy} onClick={() => setAsk('reject')} className={`${btn} border border-crit text-crit`}>{BULK_TEXT.REJECT}</button>}
         {canDecide && <button disabled={busy || !valid} onClick={() => approve.mutate()} className={`${btn} bg-ok text-white`}>{BULK_TEXT.APPROVE}{valid && !noMoney ? ` · ${rupees(preview)}` : ''}</button>}
       </>

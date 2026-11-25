@@ -180,8 +180,8 @@ export default function BulkOrders({ rights, mode = 'orders' }: { rights: BulkRi
           onCreated={(o) => { setCreating(false); setOpenId(o.id); setToast(o.status === BULK_STATUS.DRAFT ? BULK_TEXT.DRAFT_SAVED(o.poNumber) : BULK_TEXT.SUBMITTED(o.poNumber)) }} />
       )}
       {editing && (
-        <BulkCreateOrder types={[editing.type]} initial={editing} onClose={() => setEditing(null)}
-          onCreated={(o) => { setEditing(null); setToast(o.status === BULK_STATUS.DRAFT ? BULK_TEXT.DRAFT_SAVED(o.poNumber) : editing?.status === BULK_STATUS.DRAFT ? BULK_TEXT.SUBMITTED(o.poNumber) : BULK_TEXT.SAVED(o.poNumber)) }} />
+        <BulkCreateOrder types={[editing.type]} initial={editing} onClose={() => { setOpenId(editing.id); setEditing(null) }}
+          onCreated={(o) => { setEditing(null); setOpenId(o.id); setToast(o.status === BULK_STATUS.DRAFT ? BULK_TEXT.DRAFT_SAVED(o.poNumber) : editing?.status === BULK_STATUS.DRAFT ? BULK_TEXT.SUBMITTED(o.poNumber) : BULK_TEXT.SAVED(o.poNumber)) }} />
       )}
       <BulkOrderDrawer id={openId} rights={rights} onClose={() => setOpenId(null)} onEdit={(o) => setEditing(o)} onToast={setToast} />
       {toast && <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-md bg-ink-900 px-4 py-2 text-[13px] text-white shadow-lg">✓ {toast}</div>}
