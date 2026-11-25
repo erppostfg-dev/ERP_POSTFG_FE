@@ -61,24 +61,21 @@ export const OUTSIDE_TEXT = {
   CLOSE: 'Close',
   // 2026-11-25 (user: button texts ran outside the buttons): choices as cards in the dialog, one Confirm
   QUESTION: 'What should POST_FG do?',
-  CHOICE: {
-    use_code: (code: string) => `Use ${code}`,
-    reject: () => 'Reject this PO',
-    acknowledge: () => 'Mark as noted',
-    dismiss: () => 'Not the same order',
-  } as Record<OutsideAction, (code: string) => string>,
+  // the choice tiles (2026-11-25, user: the part below the card did not look good): short title + 1-2 line note
+  CHOICE: { use_code: 'Use this code', reject: 'Reject this PO', acknowledge: 'Mark as noted', dismiss: 'Not the same order' } as Record<OutsideAction, string>,
   CHOICE_HINT: {
-    use_code: 'The PO takes this code and is marked uploaded; it shows in PO Overview and its Uniware status is followed. Our erp_ code is not used.',
-    reject: 'Rejected here with the reason "Punched in Uniware outside POST_FG". No second sale order is made.',
-    acknowledge: 'The PO stays rejected; the warning closes.',
-    dismiss: 'This Uniware order is a different one. The warning closes; say why.',
-  } as Record<OutsideAction, string>,
+    use_code: (code: string) => `The PO takes ${code} and is marked uploaded. Our erp_ code is not used.`,
+    reject: () => 'Rejected here. No second sale order is made.',
+    acknowledge: () => 'The PO stays rejected. The warning closes.',
+    dismiss: () => 'A different order. The warning closes.',
+  } as Record<OutsideAction, (code: string) => string>,
   CONFIRM: { use_code: 'Use code', reject: 'Reject PO', acknowledge: 'Mark noted', dismiss: 'Close warning' } as Record<OutsideAction, string>,
   WHY: 'Why is it not the same order?',
   BULK_LABEL: { use_code: 'Use Uniware codes', reject: 'Reject POs', acknowledge: 'Mark noted', dismiss: 'Not the same' } as Record<OutsideAction, string>,
   // many at once (2026-11-25)
   BULK_INFO: (n: number) => `${n} ticked PO${n === 1 ? '' : 's'} already in Uniware:`,
   BULK_REMARK: 'Remark (required for Not the same order)',
+  BULK_CODES: 'its Uniware code',
   BULK_RESULT: (done: number, skipped: number) => `${done} done${skipped ? `, ${skipped} skipped` : ''}.`,
   BULK_MAX: 200,
 } as const

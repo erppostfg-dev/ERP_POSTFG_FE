@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { AlertTriangle, Ban, Check, CheckCircle2, Link2, RefreshCw, XCircle, type LucideIcon } from 'lucide-react'
 import { Badge, Button, Modal } from '../../components/ui'
 import { inputCls, type FilterValues } from '../../components/kit'
 import { ApiError } from '../../api/client'
@@ -14,6 +14,9 @@ import { istDateTime } from '../../lib/time'
  */
 
 const STATUS_KEY = ['uniware-outside']
+
+/** The icon of each choice tile. */
+const CHOICE_ICON: Record<OutsideAction, LucideIcon> = { use_code: Link2, reject: XCircle, acknowledge: Check, dismiss: Ban }
 
 const ago = (iso: string | null) => {
   if (!iso) return null
@@ -141,20 +144,29 @@ function OutsideDialog({ f, poNumber, canEdit, onClose, onDone }: { f: OutsideFi
         {!!live.data?.otherCodes.length && <p className="break-words text-[12.5px] text-ink-600">{T.LIVE_OTHERS(live.data.otherCodes)}</p>}
         {f.more > 0 && <p className="text-[12.5px] text-ink-600">{T.MORE(f.more)}</p>}
         {canEdit && !closed && (
-          <section className="space-y-2">
+          <section className="space-y-2.5">
             <h4 className="text-[13px] font-semibold text-ink-900">{T.QUESTION}</h4>
-            {f.actions.map((a) => {
-              const on = pick === a
-              return (
-                <label key={a} className={`flex cursor-pointer items-start gap-3 rounded-[var(--radius)] border px-3 py-2.5 transition-colors ${on ? (a === 'reject' ? 'border-crit bg-crit-soft/40' : 'border-primary bg-primary-soft/40') : 'border-line hover:bg-alt/50'}`}>
-                  <input type="radio" name={`outside-${f.id}`} checked={on} onChange={() => setPick(a)} className="mt-1 shrink-0 accent-[var(--color-primary)]" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block break-all text-[13px] font-semibold text-ink-900">{T.CHOICE[a](f.code)}</span>
-                    <span className="mt-0.5 block text-[12px] leading-snug text-ink-600">{T.CHOICE_HINT[a]}</span>
-                  </span>
-                </label>
-              )
-            })}
+            {/* tiles side by side: icon, short title, a 1-2 line note; the picked one gets a coloured ring + a tick */}
+            <div role="radiogroup" aria-label={T.QUESTION} className="grid gap-2 sm:grid-cols-2">
+              {f.actions.map((a) => {
+                const on = pick === a
+                const Icon = CHOICE_ICON[a]
+                const red = a === 'reject'
+                return (
+                  <button key={a} type="button" role="radio" aria-checked={on} onClick={() => setPick(a)}
+                    className={`relative flex h-full flex-col gap-2 rounded-[var(--radius)] border bg-surface p-3 text-left transition-all duration-150 ${on
+                      ? (red ? 'border-crit ring-2 ring-crit/20' : 'border-primary ring-2 ring-primary/20')
+                      : 'border-line hover:border-ink-400/50 hover:bg-alt/40'}`}>
+                    {on && <CheckCircle2 className={`absolute right-2.5 top-2.5 size-4 ${red ? 'text-crit' : 'text-primary'}`} />}
+                    <span className={`grid size-8 place-items-center rounded-full ${red ? 'bg-crit-soft text-crit' : a === 'dismiss' ? 'bg-alt text-ink-600' : 'bg-primary-soft text-primary'}`}>
+                      <Icon className="size-4" />
+                    </span>
+                    <span className="pr-5 text-[13px] font-semibold text-ink-900">{T.CHOICE[a]}</span>
+                    <span className="text-[12px] leading-snug text-ink-600 [overflow-wrap:anywhere]">{T.CHOICE_HINT[a](f.code)}</span>
+                  </button>
+                )
+              })}
+            </div>
             {pick === 'dismiss' && (
               <div className="pf-tab-in space-y-1">
                 <label htmlFor={`outside-why-${f.id}`} className="text-[12px] font-medium text-ink-600">{T.WHY}</label>
@@ -196,7 +208,7 @@ export function OutsideBulkBar({ findings, canEdit, onDone }: { findings: Outsid
     <div className="pf-tab-in flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-crit/25 bg-crit-soft/40 px-3 py-2 text-[12.5px]">
       <AlertTriangle className="size-4 text-crit" /><span className="font-medium">{T.BULK_INFO(findings.length)}</span>
       {actions.map((a) => (
-        <span key={a} title={T.CHOICE_HINT[a]}>
+        <span key={a} title={T.CHOICE_HINT[a](T.BULK_CODES)}>
           <Button variant={a === 'dismiss' ? 'default' : 'primary'} disabled={go.isPending || (a === 'dismiss' && !remark.trim())} onClick={() => go.mutate(a)}>
             <span className="inline-flex items-center gap-1.5 whitespace-nowrap">{T.BULK_LABEL[a]}<span className="rounded-full bg-black/10 px-1.5 text-[11px] font-semibold">{Math.min(findings.length, T.BULK_MAX)}</span></span>
           </Button>
