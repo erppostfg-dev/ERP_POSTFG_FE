@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { BULK_FIXED_PRICE, BULK_PROCESS_TYPES, bulkHidesMoney, isMarketingLike, MARKETING_UNIT_PRICE } from '../../constants/bulkOrders'
 import { formProblems } from '../bulkForm'
-import { approvalWhy, lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, unitPrice, validDiscount } from '../bulkPrice'
+import { approvalWhy, lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, sameAddress, unitPrice, validDiscount } from '../bulkPrice'
 
 /* Bulk Orders price maths = the backend's (POST_FG test/api/bulk-orders.test.ts uses the same numbers). */
 describe('bulk order prices', () => {
@@ -43,5 +43,14 @@ describe('bulk order prices', () => {
     expect(Object.keys(formProblems({ ...ok, priority: 'Fast-track' }, '2026-11-23')).sort()).toEqual(['fastTrackRemarks', 'neededBy'])
     expect(formProblems({ ...ok, priority: 'Fast-track', neededBy: '2026-11-24', fastTrackRemarks: 'Event Friday' }, '2026-11-23')).toEqual({})
     expect(Object.keys(formProblems({ ...ok, neededBy: '2026-11-22', receiverPhone: '12345', orderedBy: ' ' }, '2026-11-23')).sort()).toEqual(['neededBy', 'orderedBy', 'receiverPhone'])
+  })
+})
+
+describe('sameAddress (2026-11-25: Head office orders to another address need approval)', () => {
+  it('same pincode + same line letters / digits = same; anything else = another address', () => {
+    const ho = { line: 'Boomerang, Chandivali Farm Road, Powai', pincode: '400072' }
+    expect(sameAddress({ line: 'boomerang chandivali farm road powai', pincode: ' 400072' }, ho)).toBe(true)
+    expect(sameAddress({ line: 'Boomerang, Chandivali Farm Road, Powai', pincode: '400076' }, ho)).toBe(false)
+    expect(sameAddress({ line: 'Andheri East', pincode: '400072' }, ho)).toBe(false)
   })
 })

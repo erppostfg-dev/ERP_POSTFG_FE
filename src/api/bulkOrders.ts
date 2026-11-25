@@ -209,8 +209,10 @@ const qs = (o: Record<string, string | number | undefined>) => {
 
 /** v2 1c: the approval rules of a type (list meta): more units than overUnits (null = never) or one of the modes. */
 export interface BulkApprovalRule { overUnits: number | null; modes: string[] }
+/** 2026-11-25: the head office address (admin setting; the default of Head office orders). */
+export interface BulkHeadOffice { receiverName: string; receiverPhone: string; line: string; city: string; state: string; pincode: string }
 export const listBulkOrders = (q: BulkListQuery) =>
-  apiWithMeta<BulkOrder[], { total: number; page: number; pageSize: number; approvalRules: Partial<Record<BulkType, BulkApprovalRule>>; brands: string[] }>(
+  apiWithMeta<BulkOrder[], { total: number; page: number; pageSize: number; approvalRules: Partial<Record<BulkType, BulkApprovalRule>>; brands: string[]; headOffice?: BulkHeadOffice | null }>(
     `${BULK_ENDPOINT.ORDERS}${qs({ type: q.type, status: q.status, q: q.q, page: q.page, pageSize: q.pageSize ?? BULK_LIMIT.PAGE_SIZE, archived: q.archived ? 1 : undefined })}`,
   )
 
@@ -242,6 +244,9 @@ export const getBulkOrderStock = (id: string, team = false) => api<BulkOrderStoc
 
 /** 2026-11-24: a buyer organisation (admin, POST_FG Settings). */
 export interface BulkBuyerOrg { id: string; name: string; active: boolean; members: { userId: number; email: string; name: string | null }[]; createdAt: string; updatedAt: string }
+export const getHeadOffice = () => api<BulkHeadOffice | null>(BULK_ENDPOINT.HEAD_OFFICE)
+export const saveHeadOffice = (b: { receiverName: string; receiverPhone: string; address: BulkAddress }) =>
+  api<BulkHeadOffice | null>(BULK_ENDPOINT.HEAD_OFFICE, { method: 'PUT', body: JSON.stringify(b) })
 export const listBuyerOrgs = () => api<BulkBuyerOrg[]>(BULK_ENDPOINT.ORGS)
 export const addBuyerOrg = (name: string, emails: string[]) => api<BulkBuyerOrg>(BULK_ENDPOINT.ORGS, { method: 'POST', body: JSON.stringify({ name, emails }) })
 export const updateBuyerOrg = (id: string, change: { name?: string; active?: boolean; emails?: string[] }) =>

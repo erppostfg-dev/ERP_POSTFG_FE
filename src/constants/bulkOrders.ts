@@ -12,6 +12,8 @@ export const BULK_ENDPOINT = {
   DUPLICATE_CHECK: '/bulk-orders/duplicate-check',
   /** 2026-11-24: buyer organisations (admin). */
   ORGS: '/bulk-orders/settings/orgs',
+  /** 2026-11-25: the head office address (admin). */
+  HEAD_OFFICE: '/bulk-orders/settings/head-office',
   ORG: (id: string) => `/bulk-orders/settings/orgs/${encodeURIComponent(id)}`,
   /** v2 piece 5a: Institutional customers. */
   CUSTOMERS: '/bulk-orders/customers',
@@ -378,6 +380,15 @@ export const BULK_TEXT = {
   NO_APPROVAL: 'No approval needed: the order goes straight to our team.',
   WHY_UNITS: (units: number, over: number) => `${units} units (over ${over})`,
   WHY_MODE: (mode: string) => `${mode} delivery`,
+  /** 2026-11-25 (user): Head office orders go to the head office; any other address needs approval (backend approvalNeed). */
+  WHY_NOT_HEAD_OFFICE: (city: string) => `delivery to an address other than the head office (${city})`,
+  HO_USE: 'Use the head office address',
+  HO_OFF_NOTE: (city: string) => `Not the head office address (${city}): this order will need approval by the bulk approvers.`,
+  HO_TITLE: 'Head office address',
+  HO_SUB: 'Head office orders are delivered here by default (filled in on the order form). Any other address on a Head office order needs approval by the bulk approvers.',
+  HO_NOT_SET: 'Not set yet: Head office orders have no default address and no extra approval.',
+  HO_SAVE: 'Save address',
+  HO_SAVED: 'Saved',
   STEP_NO_APPROVAL: 'No approval needed',
   TEAM_READY: 'To process',
   BACK: 'Back',

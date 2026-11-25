@@ -9,7 +9,7 @@ import { GroupedSelect } from '../../components/pickers'
 import { BULK_INSTITUTION_RE, BULK_STATUS, bulkHidesMoney, isMarketingLike, BULK_LINE_TOTAL_MIN, BULK_LIMIT, BULK_MODES, BULK_PRIORITIES, BULK_TEXT, BULK_TYPE, BULK_TYPE_LABEL, BULK_FAST_TRACK, BULK_PURPOSE_TYPES, type BulkType } from '../../constants/bulkOrders'
 import { formProblems } from '../../lib/bulkForm'
 import { readGrid, receiverErrorsCsv, receiverQty, receiverTemplateCsv, rowsFromGrid } from '../../lib/bulkReceivers'
-import { approvalWhy, lineTooSmall, lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
+import { approvalWhy, lineTooSmall, sameAddress, lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
 
 /*
  * Create a bulk order (design: figma-make-bulk-orders CreateOrder, 3 steps). The screen works prices out as the server
@@ -95,8 +95,8 @@ function ReceiverQty({ skus, qty, onChange }: { skus: BulkSku[]; qty: Record<str
 }
 
 /** v2 piece 2: receiver 2.. card: name, number, saved location or a new address, its quantities. */
-function ReceiverCard({ n, r, skus, locations, onChange, onRemove }: {
-  n: number; r: Receiver; skus: BulkSku[]; locations: BulkLocation[] | undefined; onChange: (patch: Partial<Receiver>) => void; onRemove: () => void
+function ReceiverCard({ n, r, skus, locations, hoCity, onUseHo, onChange, onRemove }: {
+  n: number; r: Receiver; skus: BulkSku[]; locations: BulkLocation[] | undefined; hoCity: string | null; onUseHo: () => void; onChange: (patch: Partial<Receiver>) => void; onRemove: () => void
 }) {
   const phoneBad = !!r.phone.trim() && !normalPhone(r.phone)
   const units = skus.reduce((t, s) => t + (receiverQty(r.qty[s.pepCode] ?? '') ?? 0), 0)
@@ -113,6 +113,12 @@ function ReceiverCard({ n, r, skus, locations, onChange, onRemove }: {
         <Field label={BULK_TEXT.LOCATION} wide>
           <Pick value={r.where} onChange={(v) => onChange({ where: v || 'new' })} options={[{ value: 'new', label: BULK_TEXT.NEW_ADDRESS }, ...(locations ?? []).map((l) => ({ value: l.id, label: `${l.label} · ${l.address.city} ${l.address.pincode}` }))]} />
         </Field>
+        {hoCity && (
+          <div className="md:col-span-2 -mt-1 flex flex-wrap items-center gap-2">
+            <p className="flex-1 rounded-md bg-warn-soft px-3 py-2 text-[12.5px] text-ink-900">{BULK_TEXT.HO_OFF_NOTE(hoCity)}</p>
+            <button type="button" onClick={onUseHo} className="rounded-md border border-line px-3 py-1.5 text-[12.5px] font-medium text-primary hover:bg-primary-soft">{BULK_TEXT.HO_USE}</button>
+          </div>
+        )}
         {r.where === 'new' && (
           <>
             <Field label={BULK_TEXT.ADDRESS_LINE} wide><input className={input} value={r.address.line} onChange={(e) => onChange({ address: { ...r.address, line: e.target.value } })} /></Field>
@@ -255,6 +261,22 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   // v2 1c / 1f: the approval rules + the brands (both on the list's meta; one small request)
   const meta = useQuery({ queryKey: ['bulk', 'form-meta'], queryFn: () => listBulkOrders({ pageSize: 1 }).then((r) => r.meta) })
   const rules = { data: meta.data?.approvalRules }
+  // 2026-11-25 (user): Head office orders go to the head office (admin setting); another address needs approval
+  const ho = type === BULK_TYPE.HEAD_OFFICE ? meta.data?.headOffice ?? null : null
+  const hoAddress = ho ? { line: ho.line, city: ho.city, state: ho.state, pincode: ho.pincode } : null
+  const fillHeadOffice = () => {
+    if (!ho || !hoAddress) return
+    setWhere('new')
+    setAddress({ ...hoAddress })
+    setForm((f) => ({ ...f, receiverName: f.receiverName || ho.receiverName, receiverPhone: f.receiverPhone || ho.receiverPhone }))
+  }
+  // a new Head office order starts at the head office (an empty address only: nothing typed is overwritten)
+  useEffect(() => {
+    if (!initial && ho && where === 'new' && !address.line && !address.pincode) fillHeadOffice()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per head office / type, not on every keystroke
+  }, [ho, type])
+  const addrOf = (w: string, a: Address) => (w === 'new' ? a : locations.data?.find((l) => l.id === w)?.address ?? null)
+  const offHo = (w: string, a: Address) => { const x = addrOf(w, a); return !!hoAddress && (!x || !sameAddress(x, hoAddress)) }
   const [brand, setBrand] = useState<string>(initial?.brand ?? '')
   const [brandNote, setBrandNote] = useState(false)
   /** v2 1f: a new brand drops the lines of another brand (one brand per order). */
@@ -283,13 +305,14 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
   const qtyNum = (m: Record<string, string>, code: string) => receiverQty(m[code] ?? '')
   const unitsOf = (m: Record<string, string>) => skuList.reduce((t, s) => t + (qtyNum(m, s.pepCode) ?? 0), 0)
   const qtyOk = (m: Record<string, string>) => skuList.every((s) => qtyNum(m, s.pepCode) !== null) && unitsOf(m) > 0
+  const anyOffHo = !!ho && (offHo(where, address) || extra.some((r) => offHo(r.where, r.address)))
   const allUnits = multi ? unitsOf(qty1) + extra.reduce((t, r) => t + unitsOf(r.qty), 0) : totals.units
   const extraOk = (r: Receiver) => !!r.name.trim() && !!normalPhone(r.phone) && addressFilled(r.where, r.address) && qtyOk(r.qty)
   const receiversOk = !multi || (qtyOk(qty1) && extra.every(extraOk))
   const defaultQty = () => Object.fromEntries(parsed.flatMap((l) => (l.sku ? [[l.sku.pepCode, l.qty]] : [])))
   const addReceiver = () => {
     if (!multi) setQty1(defaultQty())
-    setExtra((xs) => [...xs, { key: nextKey++, name: '', phone: '', where: 'new', address: emptyAddress(), saveAs: '', qty: defaultQty() }])
+    setExtra((xs) => [...xs, { key: nextKey++, name: '', phone: '', where: 'new', address: hoAddress ? { ...hoAddress } : emptyAddress(), saveAs: '', qty: defaultQty() }])
   }
   const copyQtyAll = () => {
     const d = defaultQty()
@@ -551,6 +574,12 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
             <Field label={BULK_TEXT.LOCATION} wide>
               <Pick value={where} onChange={(v) => setWhere(v || 'new')} options={[{ value: 'new', label: BULK_TEXT.NEW_ADDRESS }, ...(locations.data ?? []).map((l) => ({ value: l.id, label: `${l.label} · ${l.address.city} ${l.address.pincode}` }))]} />
             </Field>
+            {ho && (
+              <div className="md:col-span-2 -mt-1 flex flex-wrap items-center gap-2">
+                {offHo(where, address) && <p className="flex-1 rounded-md bg-warn-soft px-3 py-2 text-[12.5px] text-ink-900">{BULK_TEXT.HO_OFF_NOTE(ho.city)}</p>}
+                {offHo(where, address) && <button type="button" onClick={fillHeadOffice} className="rounded-md border border-line px-3 py-1.5 text-[12.5px] font-medium text-primary hover:bg-primary-soft">{BULK_TEXT.HO_USE}</button>}
+              </div>
+            )}
             {where === 'new' ? (
               <>
                 <Field label={BULK_TEXT.ADDRESS_LINE} wide error={req('addr.line', address.line)}><input className={`${input} ${red(req('addr.line', address.line))}`} value={address.line} onBlur={leave('addr.line')} onChange={(e) => setAddress({ ...address, line: e.target.value })} /></Field>
@@ -589,7 +618,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
                 </div>
               )}
               {extra.map((r, i) => (
-                <ReceiverCard key={r.key} n={i + 2} r={r} skus={skuList} locations={locations.data} onChange={(patch) => setReceiver(r.key, patch)} onRemove={() => setExtra((xs) => xs.filter((x) => x.key !== r.key))} />
+                <ReceiverCard key={r.key} n={i + 2} r={r} skus={skuList} locations={locations.data} hoCity={ho && offHo(r.where, r.address) ? ho.city : null} onUseHo={() => hoAddress && setReceiver(r.key, { where: 'new', address: { ...hoAddress } })} onChange={(patch) => setReceiver(r.key, patch)} onRemove={() => setExtra((xs) => xs.filter((x) => x.key !== r.key))} />
               ))}
               <div className="mt-3 flex flex-wrap gap-2">
                 <button type="button" disabled={extra.length + 1 >= BULK_LIMIT.RECEIVERS_MAX || !skuList.length} onClick={addReceiver}
@@ -664,6 +693,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
           )}
           {rules.data && (() => {
             const why = approvalWhy(rules.data[type], allUnits, isMarketingLike(type) ? form.mode : null)
+            if (ho && anyOffHo) why.unshift(BULK_TEXT.WHY_NOT_HEAD_OFFICE(ho.city))
             return <p className={`mb-3 rounded-md px-3 py-2 text-[12.5px] ${why.length ? 'bg-warn-soft text-ink-900' : 'bg-ok-soft text-ink-900'}`}>{why.length ? BULK_TEXT.NEEDS_APPROVAL(why.join(', ')) : BULK_TEXT.NO_APPROVAL}</p>
           })()}
           <div className="grid gap-4 text-[13px] md:grid-cols-2">

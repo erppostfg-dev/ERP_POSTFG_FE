@@ -5,6 +5,7 @@ import { getBulkNotifySettings, listBulkSettings, saveBulkNotifySettings, update
 import { BULK_TEXT, BULK_TYPE_LABEL, type BulkType } from '../../constants/bulkOrders'
 import { Toggle } from '../ops/VerifySettings'
 import { BulkBuyerOrgsCard } from './BulkBuyerOrgsCard'
+import { BulkHeadOfficeCard } from './BulkHeadOfficeCard'
 
 /*
  * Users & Roles -> Settings -> Bulk Orders (2026-11-12, user: "keep the admin in POST_FG only, central admin"): per order
@@ -81,6 +82,7 @@ export function BulkOrderSettings() {
     <div className="space-y-3">
       <p className="max-w-3xl text-[12.5px] text-ink-600">{BULK_TEXT.SETTINGS_SUB}</p>
       <NotifyCard />
+      <BulkHeadOfficeCard />
       <BulkBuyerOrgsCard />
       {list.data?.map((s) => (
         <div key={s.type} className="flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">

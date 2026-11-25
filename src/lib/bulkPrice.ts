@@ -38,6 +38,10 @@ export const normalPhone = (v: string): string | null => {
  * v2 1c (2026-11-23, backend approvalNeed): why an order needs approval (empty = it goes straight to our team): more
  * units than the type's threshold (null = never by size), or a delivery mode in the rule (Porter).
  */
+/** 2026-11-25: the same address as the backend sees it (bulk-orders.service sameAddress): pincode + line letters / digits. */
+export const sameAddress = (a: { line: string; pincode: string }, b: { line: string; pincode: string }) =>
+  a.pincode.trim() === b.pincode.trim() && a.line.toLowerCase().replace(/[^a-z0-9]+/g, '') === b.line.toLowerCase().replace(/[^a-z0-9]+/g, '')
+
 export const approvalWhy = (rule: { overUnits: number | null; modes: string[] } | undefined, units: number, mode: string | null): string[] => {
   if (!rule) return []
   const why: string[] = []
