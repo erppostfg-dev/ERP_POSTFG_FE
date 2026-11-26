@@ -91,12 +91,15 @@ jobs:
       - name: Build
         run: npm run build
 
-      # The Bulk Orders portal: a second app of this repo (dist-bulk/, base /), served at the root of
-      # its own domain (CloudFront maps it to the bucket folder bulk-orders/). It calls the API on the
-      # POST_FG address, so it is built with the Environment's VITE_BULK_API_BASE_URL (full URL, e.g.
-      # https://erp.mcaffeine.com/postfg/api/v1); without it, the same VITE_API_BASE_URL as POST_FG.
+      # The Bulk Orders portal: a second app of this repo (dist-bulk/, bucket folder bulk-orders/).
+      # BULK_BASE = the address it is built for: dev at the root of its own domain
+      # (dev.orders.mcaffeine.com, '/'); prod still under POST_FG (erp.mcaffeine.com/postfg/bulk-orders/)
+      # until prod moves to orders.mcaffeine.com, then '/' as dev. It calls the API on the POST_FG
+      # address: the Environment's VITE_BULK_API_BASE_URL (full URL, e.g.
+      # https://dev.erp.mcaffeine.com/postfg/api/v1); without it, the same VITE_API_BASE_URL as POST_FG.
       - name: Build (Bulk Orders portal)
         env:
+          BULK_BASE: ${{ github.ref_name == 'main' && '/postfg/bulk-orders/' || '/' }}
           VITE_API_BASE_URL: ${{ vars.VITE_BULK_API_BASE_URL || vars.VITE_API_BASE_URL }}
         run: npm run build:bulk
 
@@ -132,7 +135,7 @@ jobs:
             --content-type "text/html; charset=utf-8" \
             --cache-control "no-cache"
 
-      # The Bulk Orders portal: same bucket under bulk-orders/ (its domain's root), same order
+      # The Bulk Orders portal: same bucket under bulk-orders/, same order
       # (assets first, index.html last).
       - name: Upload Bulk Orders portal to S3
         run: |
