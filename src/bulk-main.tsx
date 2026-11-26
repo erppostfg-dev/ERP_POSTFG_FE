@@ -7,6 +7,7 @@ import './index.css'
 import { blockNumberStepping } from './lib/numberInputs'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { reloadOnStaleChunks } from './lib/staleChunks'
+import { initTheme } from './lib/theme'
 
 /*
  * The Bulk Orders portal's own entry (2026-11-11): bulk.html -> here. Built and served apart from POST_FG
@@ -16,6 +17,8 @@ import { reloadOnStaleChunks } from './lib/staleChunks'
 
 blockNumberStepping()
 reloadOnStaleChunks()
+// Light / dark mode as this browser chose it (2026-11-26).
+initTheme()
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -16,6 +16,7 @@ import {
   COPY_ERROR, COPY_STATUS_LABEL, PO_RESULT_LABEL, PO_RESULT_TONE, QUEUE_CELL_OPEN_MAX,
 } from '../../constants/manualUpload'
 import { istDateTime } from '../../lib/time'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Manual Upload (user, 2026-10-22): channel + one drop zone + Upload (the files are stored and copied to S3, nothing
@@ -24,7 +25,6 @@ import { istDateTime } from '../../lib/time'
  * or In Review). Cancel before processing, Retry after a failure. Live: the list reloads when anything changes.
  */
 
-const errText = (e: unknown) => (e instanceof ApiError ? e.message : String(e))
 const kb = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
 /** The channels uploaded to lately (newest first), kept in this browser; empty when storage is blocked. */
 const readRecent = (): string[] => {
@@ -79,7 +79,7 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
         // The last channel used is picked again (if it is still on the list).
         setChannel((cur) => cur || (list.some((c) => c.channel === recent[0]) ? recent[0] : ''))
       })
-      .catch((e) => setNote({ tone: 'err', text: errText(e) }))
+      .catch((e) => setNote({ tone: 'err', text: errorText(e) }))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const groups = useMemo(() => {
     const item = (c: UploadChannel) => ({ value: c.channel, label: c.name })
@@ -94,7 +94,7 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
     ]
   }, [channels, recent])
   const reload = useCallback(() => {
-    listManualUploads().then(setRows).catch((e) => setNote({ tone: 'err', text: errText(e) }))
+    listManualUploads().then(setRows).catch((e) => setNote({ tone: 'err', text: errorText(e) }))
   }, [])
   useEffect(reload, [reload, liveTick])
 
@@ -124,7 +124,7 @@ export function ManualUpload({ canEdit, liveTick }: { canEdit: boolean; liveTick
       setNote(text ? { tone: 'ok', text } : null)
       reload()
     } catch (e) {
-      setNote({ tone: 'err', text: errText(e) })
+      setNote({ tone: 'err', text: errorText(e) })
     } finally {
       setBusy(null)
     }

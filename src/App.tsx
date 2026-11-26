@@ -26,6 +26,7 @@ import { APPROVALS_BADGE_REFRESH_MS } from './constants/poReview'
 import { useAuth, type User } from './auth/AuthContext'
 import { FullPageMessage } from './auth/RequireAuth'
 import { ACCESS, ROLE_LABEL, TEAM_LABEL, UI_TEXT } from './constants/auth'
+import { ThemeToggle } from './components/ThemeToggle'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { DummyDataStrip } from './components/DummyData'
 import { HOME_PATH, MASTER_TAB_BY_PATH, NAV_GROUPS, PATHS, RAIL_PAGES, isDummyPage, type NavGroup } from './constants/pages'
@@ -48,7 +49,6 @@ const GROUP_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   [PATHS.FEEDBACK]: MessagesSquare,
 }
 
-const BRANDS = ['All', 'mCaffeine', 'Hyphen'] as const
 
 /** The group a path belongs to, and its item (groups with children). */
 const findRoute = (pathname: string) => {
@@ -80,7 +80,6 @@ export default function App() {
   }
   const queryClient = useQueryClient()
   const [prio, setPrio] = useState<Record<string, number>>(CHANNEL_PRIORITY_DEFAULT)
-  const [brand, setBrand] = useState<(typeof BRANDS)[number]>('All')
 
   // Sidebar shows only what the user may see: access "none" hides a page, and a group with nothing visible hides too.
   const canSee = (path: string) => auth.accessFor(path) !== ACCESS.NONE
@@ -239,12 +238,8 @@ export default function App() {
                 {auth.user.team ? TEAM_LABEL[auth.user.team] ?? auth.user.team : auth.user.roles.map((r) => auth.user.roleLabels?.[r] ?? ROLE_LABEL[r] ?? r).join(' · ')}
               </span>
             )}
-            <div className="hidden items-center gap-1 rounded-md border border-line p-0.5 text-[11px] sm:flex">
-              <span className="px-1.5 text-ink-400">Brand</span>
-              {BRANDS.map((b) => (
-                <button key={b} onClick={() => setBrand(b)} className={`rounded px-2 py-1 font-semibold transition-colors ${brand === b ? 'bg-primary text-white' : 'text-ink-600 hover:text-ink-900'}`}>{b}</button>
-              ))}
-            </div>
+            {/* Light / dark (2026-11-26; replaces the Brand buttons, which changed nothing) */}
+            <ThemeToggle />
             {auth.status === 'signedIn' && <UserMenu user={auth.user} onLogout={auth.logout} />}
           </div>
         </header>

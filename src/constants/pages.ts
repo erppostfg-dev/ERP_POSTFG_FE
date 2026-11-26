@@ -16,7 +16,7 @@ export const PATHS = {
   CHANNEL_CUSTOMERS: '/masters/channel-customers',
   CHANNEL_LOCATIONS: '/masters/channel-locations',
   WAREHOUSES: '/masters/warehouses',
-  /** D2C internal transfer routes (2026-11-03): not a backend page key; its access is the Warehouses page's (PAGE_ACCESS_OF). */
+  /** D2C internal transfer routes (2026-11-03); its own backend page key since 2026-11-26 (Users & Roles > Roles). */
   TRANSFER_ROUTES: '/masters/transfer-routes',
   OPERATIONS: '/operations',
   PO_OVERVIEW: '/operations/po-overview',
@@ -92,13 +92,12 @@ export const MASTER_TAB_BY_PATH: Record<string, string> = {
   [PATHS.TRANSFER_ROUTES]: MASTER_TABS[5],
 }
 
-/**
- * Pages that are not backend page keys: their access is another page's (the backend checks the same page). Transfer
- * routes: GET /masters/transfer-routes needs viewer on /masters/warehouses.
+/*
+ * Every page has its OWN backend page key (2026-11-26, user: "Transfer Routes in Roles, and dynamic: whatever page comes
+ * later must be there"). No page borrows another page's access any more (Transfer Routes used Warehouses'): a page
+ * the backend does not know gets no access (hidden), so a new page shows up only once it is in the backend's PAGES,
+ * and then it is in Users & Roles > Roles by itself.
  */
-export const PAGE_ACCESS_OF: Record<string, string> = {
-  [PATHS.TRANSFER_ROUTES]: PATHS.WAREHOUSES,
-}
 
 export const NAV_GROUPS: NavGroup[] = [
   {

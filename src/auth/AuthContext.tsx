@@ -2,13 +2,13 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import type { ReactNode } from 'react'
 import { api, ApiError } from '../api/client'
 import { ACCESS, AUTH_ENDPOINTS, ERROR_CODE, type AccessLevel } from '../constants/auth'
-import { PAGE_ACCESS_OF } from '../constants/pages'
 import { preview, PREVIEW_ACCESS, PREVIEW_ENABLED, PREVIEW_USER } from '../dev/intransitPreview'
+import { fromAccount } from '../lib/theme'
 
 /* The signed-in user from GET /auth/me; the session itself is the backend's httpOnly cookie. */
 
 /** team = the person's PO Overview team (planning, copt, warehouse, logistics, accounts, viewer), null = none. */
-export type User = { id: string; name: string; email: string; roles: string[]; team: string | null; roleLabels?: Record<string, string> }
+export type User = { id: string; name: string; email: string; roles: string[]; team: string | null; roleLabels?: Record<string, string>; theme?: 'light' | 'dark' | null }
 /** capabilities = special permissions on / off (e.g. po-review:edit-all, 2026-10-22). */
 type Me = { user: User; access: Record<string, AccessLevel>; capabilities?: Record<string, boolean> }
 
@@ -31,7 +31,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     api<Me>(AUTH_ENDPOINTS.ME)
-      .then((me) => setState({ status: 'signedIn', user: me.user, access: me.access, capabilities: me.capabilities ?? {} }))
+      .then((me) => {
+        fromAccount(me.user.theme) // the person's light / dark mode follows them (2026-11-26)
+        setState({ status: 'signedIn', user: me.user, access: me.access, capabilities: me.capabilities ?? {} })
+      })
       .catch((e: unknown) => {
         // DEV-ONLY: In-transit preview without backend / login (src/dev/intransitPreview.ts).
         if (PREVIEW_ENABLED) {
@@ -45,8 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const accessFor = useCallback(
-    // a page that is not a backend page key takes its access from the page the backend checks (PAGE_ACCESS_OF)
-    (path: string): AccessLevel => (state.status === 'signedIn' ? state.access[path] ?? state.access[PAGE_ACCESS_OF[path] ?? ''] ?? ACCESS.NONE : ACCESS.NONE),
+    // every page is a backend page key (2026-11-26): one the backend does not know = no access (never borrowed)
+    (path: string): AccessLevel => (state.status === 'signedIn' ? state.access[path] ?? ACCESS.NONE : ACCESS.NONE),
     [state],
   )
 

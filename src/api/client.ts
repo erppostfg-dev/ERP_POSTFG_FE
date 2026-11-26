@@ -1,20 +1,48 @@
 import { API_BASE_URL, ERROR_CODE } from '../constants/auth'
 import { rememberError } from '../lib/lastError'
+import { messageForStatus, plainMessage } from '../lib/friendlyError'
+import { flushClientErrors, reportClientError } from '../lib/clientErrors'
 
 /*
  * Every backend call goes through here: the session cookie is sent (credentials: 'include'), success bodies are
  * { data }, failures { error: { code, message, details } } and become an ApiError the caller branches on by code.
  */
 
+/*
+ * Every failure becomes an ApiError (2026-11-26, user: "proper messages, not codes and gibberish"). The constructor
+ * cleans the text, so every place that builds one (here and the hand-written fetches in other api files) gives a
+ * person-readable message: our backend's own message when it is plain, else the plain sentence of its kind (a proxy's
+ * HTML 502 page, "Bad Gateway", a stack trace, a code). rawMessage keeps the original for Report a problem / console.
+ */
 export class ApiError extends Error {
+  /** The server's own text, before cleaning; never shown on a page. */
+  public rawMessage: string
   constructor(
     public status: number,
     public code: string,
     message: string,
     public details?: unknown,
+    public requestId?: string,
   ) {
-    super(message)
+    super(status === 0 ? messageForStatus(0) : plainMessage(status, message))
+    this.rawMessage = message
   }
+}
+
+const failure = (res: Response, body: unknown, path: string): ApiError => {
+  const err = (body as { error?: { code?: string; message?: string; details?: unknown; requestId?: string } } | null)?.error
+  const code = err?.code ?? `HTTP_${res.status}`
+  const raw = err?.message ?? res.statusText
+  const requestId = err?.requestId ?? res.headers.get('X-Request-Id') ?? undefined
+  // kept for "Report a problem" (lib/lastError.ts); a signed-out check is not an error the person saw
+  if (res.status !== 401) rememberError({ status: res.status, code, message: raw, requestId, path })
+  // no JSON error body = not our backend's answer (a proxy / gateway page): only the sentence of its kind
+  return new ApiError(res.status, code, err ? raw : '', err?.details, requestId)
+}
+
+const networkFailure = () => {
+  reportClientError({ kind: 'network', message: "Can't reach the server", code: ERROR_CODE.NETWORK, status: 0 })
+  return new ApiError(0, ERROR_CODE.NETWORK, '')
 }
 
 export const apiUrl = (path: string) => `${API_BASE_URL}${path}`
@@ -28,17 +56,13 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
     })
   } catch {
-    throw new ApiError(0, ERROR_CODE.NETWORK, 'Cannot reach the server')
+    throw networkFailure()
   }
   if (res.status === 204) return undefined as T
 
   const body = await res.json().catch(() => null)
-  if (!res.ok) {
-    const err = body?.error
-    // kept for "Report a problem" (lib/lastError.ts); a signed-out check is not an error the person saw
-    if (res.status !== 401) rememberError({ status: res.status, code: err?.code ?? `HTTP_${res.status}`, message: err?.message ?? res.statusText, requestId: err?.requestId ?? res.headers.get('X-Request-Id') ?? undefined, path })
-    throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? res.statusText, err?.details)
-  }
+  if (!res.ok) throw failure(res, body, path)
+  flushClientErrors()
   return body?.data as T
 }
 
@@ -48,14 +72,11 @@ export async function apiForm<T>(path: string, form: FormData): Promise<T> {
   try {
     res = await fetch(apiUrl(path), { method: 'POST', body: form, credentials: 'include', headers: { Accept: 'application/json' } })
   } catch {
-    throw new ApiError(0, ERROR_CODE.NETWORK, 'Cannot reach the server')
+    throw networkFailure()
   }
   const body = await res.json().catch(() => null)
-  if (!res.ok) {
-    const err = body?.error
-    if (res.status !== 401) rememberError({ status: res.status, code: err?.code ?? `HTTP_${res.status}`, message: err?.message ?? res.statusText, requestId: err?.requestId ?? res.headers.get('X-Request-Id') ?? undefined, path })
-    throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? res.statusText, err?.details)
-  }
+  if (!res.ok) throw failure(res, body, path)
+  flushClientErrors()
   return body?.data as T
 }
 
@@ -65,14 +86,10 @@ export async function apiWithMeta<T, M>(path: string, init: RequestInit = {}): P
   try {
     res = await fetch(apiUrl(path), { ...init, credentials: 'include', headers: { Accept: 'application/json', ...init.headers } })
   } catch {
-    throw new ApiError(0, ERROR_CODE.NETWORK, 'Cannot reach the server')
+    throw networkFailure()
   }
   const body = await res.json().catch(() => null)
-  if (!res.ok) {
-    const err = body?.error
-    // kept for "Report a problem" (lib/lastError.ts); a signed-out check is not an error the person saw
-    if (res.status !== 401) rememberError({ status: res.status, code: err?.code ?? `HTTP_${res.status}`, message: err?.message ?? res.statusText, requestId: err?.requestId ?? res.headers.get('X-Request-Id') ?? undefined, path })
-    throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? res.statusText, err?.details)
-  }
+  if (!res.ok) throw failure(res, body, path)
+  flushClientErrors()
   return { data: body?.data as T, meta: body?.meta as M }
 }

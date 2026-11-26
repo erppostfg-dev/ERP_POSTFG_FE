@@ -4,6 +4,7 @@ import { Check, Download, Plus, Trash2 } from 'lucide-react'
 import { Badge, Button, Modal } from '../../components/ui'
 import { addToSplit1, downloadCsvFile, mapVariants, type ComboCheck, type IntransitRun } from '../../api/intransit'
 import { COMBO_FILES, SPLIT1_MAX_QTY } from '../../constants/intransit'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Combos missing from Split1 (user, 2026-10-19): the report's flagged combos with an option to add them to Split1.csv
@@ -43,7 +44,7 @@ export function useMapVariants(onNotice: (tone: 'ok' | 'warn', text: string) => 
         r.skipped.length && `Not mapped: ${r.skipped.map((s) => `${s.variant}: ${s.reason}`).join(', ')}.`,
       ].filter(Boolean).join('\n'))
     } catch (err) {
-      onNotice('warn', err instanceof Error ? err.message : String(err))
+      onNotice('warn', errorText(err))
     } finally {
       setBusy(false)
     }
@@ -68,7 +69,7 @@ export function useAddToSplit1(onNotice: (tone: 'ok' | 'warn', text: string) => 
       return r.added.length > 0
     } catch (err) {
       const d = (err as { details?: { problems?: string[]; unknown?: string[] } }).details
-      onNotice('warn', err instanceof Error ? err.message : String(err) + (d?.problems ? `: ${d.problems.join('; ')}` : ''))
+      onNotice('warn', errorText(err) + (d?.problems ? `: ${d.problems.join('; ')}` : ''))
       return false
     } finally {
       setBusy(false)

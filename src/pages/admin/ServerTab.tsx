@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { AlertTriangle, Check, HardDrive, Play, Search } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge, Button } from '../../components/ui'
-import { ApiError } from '../../api/client'
 import { getServer, runServerCleanup, type CleanupRun } from '../../api/admin'
 import { SERVER_TEXT as T } from '../../constants/admin'
 import { istDateTime } from '../../lib/time'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Admin > Server (2026-11-04, user: "does it fill the server disk?"; shown to developers only): how full the server disk
@@ -27,13 +27,13 @@ export function ServerTab() {
     try {
       qc.setQueryData(['admin', 'server'], await runServerCleanup(apply))
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e))
+      setError(errorText(e))
     } finally {
       setBusy(null)
     }
   }
   const d = q.data
-  if (q.isError) return <p className="text-[12.5px] text-crit">{q.error instanceof ApiError ? q.error.message : String(q.error)}</p>
+  if (q.isError) return <p className="text-[12.5px] text-crit">{errorText(q.error)}</p>
   if (!d) return <p className="text-[12.5px] text-ink-400">Loading…</p>
   const pct = d.disk?.usedPct ?? 0
   const tone = pct >= d.thresholds.errorPct ? 'crit' : pct >= d.thresholds.warnPct ? 'warn' : 'ok'

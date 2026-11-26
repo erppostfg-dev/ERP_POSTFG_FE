@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search } from 'lucide-react'
-import { ApiError } from '../../api/client'
 import {
   addInstCustomer, addInstCustomerAddress, listInstCustomers, setInstCustomerAddressActive, updateInstCustomer, verifyInstCustomerGstin,
   type BulkAddress, type BulkInstCustomer, type BulkInstCustomerInput, type BulkRights,
@@ -9,6 +8,7 @@ import {
 import { PageTitle } from '../../components/ui'
 import { BULK_INSTITUTION_RE, BULK_TEXT, BULK_TYPE } from '../../constants/bulkOrders'
 import { normalPhone } from '../../lib/bulkPrice'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Bulk Orders v2 piece 5a (2026-11-24): Institutional customers. Everyone with the Institutional page sees them; its
@@ -22,7 +22,6 @@ const EMPTY_ADDR: BulkAddress = { line: '', city: '', state: '', pincode: '' }
 const addrOk = (a: BulkAddress) => !!a.line.trim() && !!a.city.trim() && !!a.state.trim() && PIN.test(a.pincode.trim())
 const oneLine = (a: BulkAddress) => `${a.line}, ${a.city}, ${a.state} ${a.pincode}`
 const trimA = (a: BulkAddress): BulkAddress => ({ line: a.line.trim(), city: a.city.trim(), state: a.state.trim(), pincode: a.pincode.trim() })
-const errText = (e: Error) => (e instanceof ApiError && Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message)
 
 interface Form { companyName: string; gstin: string; billing: BulkAddress; contactName: string; contactPhone: string; contactEmail: string; discount: string; shipLabel: string; ship: BulkAddress }
 const blank = (): Form => ({ companyName: '', gstin: '', billing: { ...EMPTY_ADDR }, contactName: '', contactPhone: '', contactEmail: '', discount: '0', shipLabel: '', ship: { ...EMPTY_ADDR } })
@@ -63,7 +62,7 @@ function CustomerForm({ customer, onDone, onCancel }: { customer?: BulkInstCusto
       return customer ? updateInstCustomer(customer.id, { ...body, active: customer.active }) : addInstCustomer(body)
     },
     onSuccess: onDone,
-    onError: (e) => setErr(errText(e)),
+    onError: (e) => setErr(errorText(e)),
   })
   const set = (patch: Partial<Form>) => setF((x) => ({ ...x, ...patch }))
   return (
@@ -101,7 +100,7 @@ function AddShip({ c, onDone }: { c: BulkInstCustomer; onDone: () => void }) {
   const [label, setLabel] = useState('')
   const [a, setA] = useState<BulkAddress>({ ...EMPTY_ADDR })
   const [err, setErr] = useState('')
-  const add = useMutation({ mutationFn: () => addInstCustomerAddress(c.id, label.trim(), trimA(a)), onSuccess: () => { setLabel(''); setA({ ...EMPTY_ADDR }); onDone() }, onError: (e) => setErr(errText(e)) })
+  const add = useMutation({ mutationFn: () => addInstCustomerAddress(c.id, label.trim(), trimA(a)), onSuccess: () => { setLabel(''); setA({ ...EMPTY_ADDR }); onDone() }, onError: (e) => setErr(errorText(e)) })
   return (
     <div className="mt-2 grid gap-2 md:grid-cols-6">
       <input className={`${input} md:col-span-2`} placeholder={BULK_TEXT.SHIP_LABEL} value={label} onChange={(e) => setLabel(e.target.value)} />

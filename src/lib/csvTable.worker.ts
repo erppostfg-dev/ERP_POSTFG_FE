@@ -1,4 +1,5 @@
 import { pageOf, parseTable, type Table } from './csvTableCore'
+import { errorText } from './friendlyError'
 
 /* The table viewer's tables, parsed, paged and searched off the page's thread (the big ones are tens of MB). */
 
@@ -26,6 +27,6 @@ self.onmessage = (e: MessageEvent<Msg>) => {
     }
     self.postMessage({ id: m.id, ...pageOf(t, m.offset, m.limit, m.q) })
   } catch (err) {
-    self.postMessage({ id: m.id, error: err instanceof Error ? err.message : String(err) })
+    self.postMessage({ id: m.id, error: errorText(err) })
   }
 }

@@ -11,13 +11,15 @@ import BulkLocations from './BulkLocations'
 import BulkCustomers from './BulkCustomers'
 import { ErrorBoundary } from '../../components/ErrorBoundary'
 import { CAPABILITY } from '../../constants/reviewEdit'
+import { ThemeToggle } from '../../components/ThemeToggle'
+import { fromAccount } from '../../lib/theme'
 
 /*
  * The Bulk Orders portal (2026-11-11): its own app (src/bulk-main.tsx). Same Google login as POST_FG (the sign-in
  * returns here: /auth/google?app=bulk); what the person may do comes from GET /auth/me's /bulk-orders pages.
  */
 
-type Me = { user: { id: string; name: string; email: string; roleLabels?: Record<string, string>; roles: string[] }; access: Record<string, AccessLevel>; capabilities?: Record<string, boolean> }
+type Me = { user: { id: string; name: string; email: string; roleLabels?: Record<string, string>; roles: string[]; theme?: 'light' | 'dark' | null }; access: Record<string, AccessLevel>; capabilities?: Record<string, boolean> }
 
 const rightsOf = (access: Record<string, AccessLevel>, capabilities: Record<string, boolean> = {}): BulkRights => ({
   view: BULK_TYPES.filter((t) => [ACCESS.VIEWER, ACCESS.EDITOR].includes(access[BULK_PAGE.TYPE[t]] as 'viewer' | 'editor')),
@@ -48,7 +50,7 @@ function SignIn({ error }: { error?: string }) {
 export default function BulkApp() {
   const qc = useQueryClient()
   const urlError = new URLSearchParams(window.location.search).get('error') ?? undefined
-  const me = useQuery({ queryKey: ['bulk', 'me'], queryFn: () => api<Me>(AUTH_ENDPOINTS.ME), retry: false })
+  const me = useQuery({ queryKey: ['bulk', 'me'], queryFn: () => api<Me>(AUTH_ENDPOINTS.ME).then((m) => { fromAccount(m.user.theme); return m }), retry: false })
   const [page, setPage] = useState<Page>('orders')
   const approver = me.data ? rightsOf(me.data.access).approve : false
   // the Approvals badge: how many wait (one count query, refreshed with the lists)
@@ -142,6 +144,7 @@ export default function BulkApp() {
                 <span className="block text-[11px] text-ink-600">{roleLabel}</span>
               </span>
             </div>
+            <ThemeToggle />
             <BulkBell />
             <button onClick={() => void signOut()} title={BULK_TEXT.SIGN_OUT} className="rounded-md p-1.5 text-ink-400 hover:bg-alt hover:text-ink-900"><LogOut className="size-4" /></button>
           </div>

@@ -6,7 +6,6 @@ import { Button, Drawer } from './ui'
 import { Field, inputCls, textareaCls } from './kit'
 import { ImagePicker } from './FeedbackImages'
 import { pastedImages } from '../lib/feedbackImages'
-import { ApiError } from '../api/client'
 import { createFeedback, feedbackPeople, feedbackPeopleKey, type FeedbackDetail, type FeedbackPerson } from '../api/feedback'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -15,6 +14,7 @@ import {
 } from '../constants/feedback'
 import { lastError, onError } from '../lib/lastError'
 import { istDay } from '../lib/time'
+import { errorText } from '../lib/friendlyError'
 
 /** "Assigned to": nobody, or one active person (name + email). Used by the form and the item drawer. */
 export function AssigneeSelect({ value, people, onChange, disabled }: { value: number | null; people: FeedbackPerson[]; onChange: (id: number | null) => void; disabled?: boolean }) {
@@ -32,7 +32,6 @@ export function AssigneeSelect({ value, people, onChange, disabled }: { value: n
  * error the backend gave (code, message, request id for CloudWatch). Screenshots: paste, drop or pick, at most 4.
  */
 
-const errText = (e: unknown) => (e instanceof ApiError ? (Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message) : String(e))
 
 /** What is sent along with a report (shown in the form, so people see it). */
 const captured = (page: string) => ({
@@ -70,7 +69,7 @@ export function FeedbackForm({ open, onClose, onSent }: { open: boolean; onClose
       onSent?.(item)
       close()
     } catch (e) {
-      setNote(errText(e))
+      setNote(errorText(e))
     } finally {
       setSending(false)
     }

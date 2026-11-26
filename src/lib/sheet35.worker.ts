@@ -1,4 +1,5 @@
 import { inventoryFromSheet35 } from './sheet35'
+import { errorText } from './friendlyError'
 
 /* Works out Inventory Calculation's rows off the page's thread (Sheet35(2) is tens of MB). */
 
@@ -7,6 +8,6 @@ self.onmessage = (e: MessageEvent<{ id: number; text: string }>) => {
     const out = inventoryFromSheet35(e.data.text)
     self.postMessage({ id: e.data.id, ...out })
   } catch (err) {
-    self.postMessage({ id: e.data.id, error: err instanceof Error ? err.message : String(err) })
+    self.postMessage({ id: e.data.id, error: errorText(err) })
   }
 }

@@ -2,11 +2,11 @@ import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'r
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink, Loader2, Megaphone, Reply, Search, Send, Users, X } from 'lucide-react'
 import { useLocation } from 'react-router'
-import { ApiError } from '../api/client'
 import { noticePeople, noticePeopleKey, sendNotice, type MyNotices, type Notice, type NoticePerson, type NoticeSend } from '../api/notices'
 import { NOTICE_REVEAL_OUT_MS, NOTICE_TEXT_MAX, NOTICES_TEXT as T } from '../constants/notices'
 import { istDateTime } from '../lib/time'
 import { useLeaving } from '../lib/useLeaving'
+import { errorText } from '../lib/friendlyError'
 
 /*
  * The notices part of the bell (2026-11-10): the Send form (person picked by searching a name or email), the list
@@ -124,7 +124,7 @@ export function NoticeSendForm({ canSendEveryone, onSent, onCancel }: { canSendE
       const body: NoticeSend = { to: to === 'everyone' ? 'everyone' : Number(to), text, ...(withLink ? { link: location.pathname + location.search } : {}) }
       onSent(await sendNotice(body))
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e))
+      setError(errorText(e))
     } finally {
       setBusy(false)
     }
@@ -151,7 +151,7 @@ export function NoticeRow({ n, fresh, onSent, onOpenLink }: { n: Notice; fresh: 
       onSent(await sendNotice({ replyToId: n.id, text, ...(withLink ? { link: location.pathname + location.search } : {}) }))
       box.hide()
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e))
+      setError(errorText(e))
     } finally {
       setBusy(false)
     }

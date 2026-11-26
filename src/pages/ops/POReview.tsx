@@ -38,6 +38,7 @@ import type { OutsideFinding } from '../../api/uniwareOutside'
 import { OutsideBadge, OutsideBulkBar, OutsideStrip } from './UniwareOutside'
 import { useOutsideGuard } from './useOutsideGuard'
 import { inUniwareOf, outsideFilterDef } from '../../lib/uniwareOutside'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * In Review: POs that failed validation (GET /po-review?status=needs_review), oldest first, and the review panel
@@ -114,7 +115,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
       })
       .catch((e: unknown) => {
         if (ctrl.signal.aborted) return
-        setState({ loading: false, error: e instanceof ApiError ? e.message : String(e) })
+        setState({ loading: false, error: errorText(e) })
       })
     return () => ctrl.abort()
   }, [reload, liveTick, onCount])
@@ -157,7 +158,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
     setRechecking(true)
     recheckReview()
       .then((r) => { setNotice(RECHECK_TEXT.RESULT(r.issuesClosed, r.completed.length, r.partly)); setReload((n) => n + 1) })
-      .catch((e: unknown) => setNotice(e instanceof ApiError ? e.message : String(e)))
+      .catch((e: unknown) => setNotice(errorText(e)))
       .finally(() => setRechecking(false))
   }
 
@@ -175,7 +176,7 @@ export function InReview({ srcIcon, onCount, liveTick = 0 }: { srcIcon: Record<s
     try {
       await downloadReviewLineItems(await getReviewLineItems(forDownload.map((r) => r.id)), as)
     } catch (e) {
-      setNotice(e instanceof ApiError ? e.message : String(e))
+      setNotice(errorText(e))
     } finally {
       setLinesBusy(false)
     }
@@ -322,7 +323,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
         setChoices(Object.fromEntries(d.issues.filter((i) => i.status === ISSUE_STATUS.OPEN && PRICE_ISSUES[i.type] && i.lineNo !== null)
           .map((i) => [String(i.lineNo), PRICE_CHOICE.OURS])))
       })
-      .catch((e: unknown) => !ctrl.signal.aborted && setError(e instanceof ApiError ? e.message : String(e)))
+      .catch((e: unknown) => !ctrl.signal.aborted && setError(errorText(e)))
     return () => ctrl.abort()
   }, [uploadId])
 
@@ -440,7 +441,7 @@ function ReviewPanel({ uploadId, poNumber, onClose: closeNow, onDone, onStale, g
   const fail = (e: unknown) => {
     if (e instanceof ApiError && e.code === REVIEW_ERROR.NOT_IN_REVIEW) onStale()
     const stillOpen = e instanceof ApiError && e.code === REVIEW_ERROR.INCOMPLETE ? (e.details as StillOpen | undefined)?.openIssues : undefined
-    setActionError({ message: e instanceof ApiError ? e.message : String(e), stillOpen })
+    setActionError({ message: errorText(e), stillOpen })
   }
 
   const submit = () => {

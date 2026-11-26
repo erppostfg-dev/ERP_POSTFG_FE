@@ -24,7 +24,6 @@ import { PATHS, URL_PARAM } from '../../constants/pages'
 import { oneOf, useUrlParam } from '../../lib/urlState'
 import { Check, Download as DownloadIcon, Upload as UploadIcon, X as XIcon } from 'lucide-react'
 import { listAllPoReview, type PoReviewItem } from '../../api/poReview'
-import { ApiError } from '../../api/client'
 import { LIST_FILTER, LIST_PAGE_SIZE, LIST_SORT, PO_STATUS, PROCESSED_FILTER, REVIEW_LIVE, SOURCE_LABELS } from '../../constants/poReview'
 import { useLiveReview } from '../../lib/liveReview'
 import { LiveDot } from '../../components/LiveDot'
@@ -45,6 +44,7 @@ import { useQuery } from '@tanstack/react-query'
 import { BulkOrdersTab } from './BulkOrdersTab'
 import { listTeamBulkOrders } from '../../api/bulkOrders'
 import { BULK_TEXT, BULK_TYPES } from '../../constants/bulkOrders'
+import { errorText } from '../../lib/friendlyError'
 
 // PO issues (2026-10-29): moved here from Users & Roles, for everyone who can open this page
 // Price differences (2026-10-30): lines kept at our price, to tell the channel
@@ -175,7 +175,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       })
       .catch((e: unknown) => {
         if (ctrl.signal.aborted) return
-        setState({ loading: false, error: e instanceof ApiError ? e.message : String(e) })
+        setState({ loading: false, error: errorText(e) })
       })
     return () => ctrl.abort()
   }, [reload, liveTick, onCount])
@@ -203,7 +203,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       else if (!match.marked) fail(match.unclear.length ? `${VERIFY_UPLOAD.NONE_MARKED} ${VERIFY_UPLOAD.UNCLEAR(match.unclear)}` : VERIFY_UPLOAD.NONE_MARKED)
       else setUpload({ file: file.name, match })
     } catch (e) {
-      fail(e instanceof Error ? e.message : String(e))
+      fail(errorText(e))
     } finally {
       setVerifying(null)
     }
@@ -225,7 +225,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       setUpload(null)
       done(VERIFY_UPLOAD.DONE(verified, skipped))
     } catch (e) {
-      fail(e instanceof ApiError ? e.message : String(e))
+      fail(errorText(e))
       if (verified) setReload((n) => n + 1)
     } finally {
       setVerifying(null)
@@ -289,7 +289,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
     try {
       setPreview(await previewUniwareCreate(previewable.map((x) => x.id)))
     } catch (e) {
-      fail(e instanceof ApiError ? e.message : String(e))
+      fail(errorText(e))
     } finally {
       setBulkBusy(false)
     }
@@ -303,7 +303,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       done(UNIWARE_CREATE_TEXT.QUEUED(r.queued.length, r.refused.map((x) => `${name(x.uploadId)}: ${x.reason}`)))
       await loadCreates()
     } catch (e) {
-      fail(e instanceof ApiError ? e.message : String(e))
+      fail(errorText(e))
     } finally {
       setBulkBusy(false)
     }
@@ -320,7 +320,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
         if (what === 'csv') { await (use.length === 1 ? downloadOneCsv(use[0]) : downloadCombinedCsv(use)); done(UNIWARE_TEXT.DOWNLOADED(use.length)) }
         else { await markUniwareUploaded(use); done(UNIWARE_TEXT.MARKED(use.length)) }
       } catch (e) {
-        fail(e instanceof ApiError ? e.message : String(e))
+        fail(errorText(e))
       } finally {
         setBulkBusy(false)
       }
@@ -341,7 +341,7 @@ function Processed({ onCount, liveTick }: { onCount: (n: number) => void; liveTi
       const missing = new Set(lines.filter((l) => l.s3Missing).map((l) => l.uploadId)).size
       setNote({ tone: 'ok', text: T.DONE(linePos.length, lines.length) + (missing ? T.S3_MISSING(missing) : '') })
     } catch (e) {
-      fail(e instanceof ApiError ? e.message : String(e))
+      fail(errorText(e))
     } finally {
       setBulkBusy(false)
     }

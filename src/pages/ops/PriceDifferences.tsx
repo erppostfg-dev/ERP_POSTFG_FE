@@ -4,13 +4,13 @@ import { AlertTriangle, Check, ChevronRight, Copy, Download, Loader2, Mail } fro
 import { Button, Drawer } from '../../components/ui'
 import { exportRows, exportRowsExcel } from '../../components/kit'
 import type { ColKind } from '../../lib/ops'
-import { ApiError } from '../../api/client'
 import {
   listPriceDiffs, markPriceDiffsSent, priceDiffDraft, priceDiffsKey,
   type PriceDiffChannelGroup, type PriceDiffLine, type PriceDiffPoGroup, type PriceDiffScope,
 } from '../../api/priceDifferences'
 import { PRICE_CHECK_TEXT, PRICE_DIFF_STATUSES, PRICE_DIFF_TEXT as T, PRICE_DIFF_VIEWS, type PriceDiffStatus, type PriceDiffView } from '../../constants/priceDifferences'
 import { istDateTime } from '../../lib/time'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * PO Processing & Review -> Price differences (user, 2026-10-30): approved PO lines where we kept our price / MRP although
@@ -62,7 +62,7 @@ export function PriceDifferences({ canEdit }: { canEdit: boolean }) {
       </div>
 
       {q.error ? (
-        <div className="flex items-center gap-2 rounded-[var(--radius)] bg-crit-soft px-4 py-3 text-[13px] text-crit"><AlertTriangle className="size-4" />{q.error instanceof ApiError ? q.error.message : String(q.error)}</div>
+        <div className="flex items-center gap-2 rounded-[var(--radius)] bg-crit-soft px-4 py-3 text-[13px] text-crit"><AlertTriangle className="size-4" />{errorText(q.error)}</div>
       ) : !q.data ? (
         <div className="flex items-center justify-center gap-2 rounded-[var(--radius)] border border-line bg-surface px-4 py-10 text-[13px] text-ink-600"><Loader2 className="size-4 animate-spin" />{T.LOADING}</div>
       ) : !rows.length ? (
@@ -136,7 +136,7 @@ function EmailDrawer({ scope, title, status, canEdit, onClose }: { scope: PriceD
         setNote({ ok: true, text: T.MARKED(r.marked) })
         void queryClient.invalidateQueries({ queryKey: ['price-differences'] })
       })
-      .catch((e: unknown) => setNote({ ok: false, text: e instanceof ApiError ? e.message : String(e) }))
+      .catch((e: unknown) => setNote({ ok: false, text: errorText(e) }))
       .finally(() => setBusy(false))
   }
   const CopyBtn = ({ what, text }: { what: string; text: string }) => (
@@ -159,7 +159,7 @@ function EmailDrawer({ scope, title, status, canEdit, onClose }: { scope: PriceD
         </div>
       ) : <span className="text-[12.5px] text-ink-400">{T.VIEW_ONLY}</span>}>
       {q.error ? (
-        <div className="flex items-center gap-2 rounded-[var(--radius)] bg-crit-soft px-4 py-3 text-[13px] text-crit"><AlertTriangle className="size-4" />{q.error instanceof ApiError ? q.error.message : String(q.error)}</div>
+        <div className="flex items-center gap-2 rounded-[var(--radius)] bg-crit-soft px-4 py-3 text-[13px] text-crit"><AlertTriangle className="size-4" />{errorText(q.error)}</div>
       ) : !d ? (
         <div className="flex items-center gap-2 text-[13px] text-ink-600"><Loader2 className="size-4 animate-spin" />{T.LOADING}</div>
       ) : (

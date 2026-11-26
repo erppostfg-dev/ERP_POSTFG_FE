@@ -68,10 +68,10 @@ function Trend() {
       <div className="h-[340px]">
         <ResponsiveContainer>
           <LineChart data={DRR_HISTORY} margin={{ left: -10, right: 8 }}>
-            <CartesianGrid stroke="#f3f4f6" vertical={false} />
-            <XAxis dataKey="week" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }} />
+            <CartesianGrid stroke="var(--color-alt)" vertical={false} />
+            <XAxis dataKey="week" tick={{ fontSize: 12, fill: 'var(--color-ink-600)' }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 12, fill: 'var(--color-ink-600)' }} axisLine={false} tickLine={false} />
+            <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid var(--color-line)', fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             {DRR_ROWS.map((r, i) => picked.includes(r.sku) && (
               <Line key={r.sku} name={r.sku} dataKey={metric === 'drr' ? r.sku : `${r.sku}__aging`} stroke={SERIES[i % SERIES.length]} strokeWidth={2} dot={false} />

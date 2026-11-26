@@ -7,7 +7,6 @@ import { DataGrid, inputCls, textareaCls } from '../components/kit'
 import { AuthImage } from '../components/FeedbackImages'
 import { pickImages } from '../lib/feedbackImages'
 import { AssigneeSelect, FeedbackForm } from '../components/ReportProblem'
-import { ApiError } from '../api/client'
 import {
   addFeedbackImages, addFeedbackMember, commentFeedback, feedbackImagePath, feedbackItemKey, feedbackKey, feedbackNotifications, feedbackNotificationsKey, feedbackPeople,
   feedbackPeopleKey, getFeedback, listFeedback, readFeedbackNotifications, removeFeedbackImage, removeFeedbackMember, updateFeedback, type FeedbackDetail, type FeedbackListItem, type FeedbackPatch,
@@ -22,6 +21,8 @@ import { SEARCH_DELAY_MS } from '../constants/poOverview'
 import { istDateTime } from '../lib/time'
 import { oneOf, useUrlParam } from '../lib/urlState'
 import type { ColKind } from '../lib/ops'
+import { errorText } from '../lib/friendlyError'
+import { ErrorNote } from '../components/ErrorNote'
 
 /*
  * Feedback page (2026-10-29): every item for everyone, newest first; status chips, type, Mine, search. A row opens its
@@ -29,7 +30,6 @@ import type { ColKind } from '../lib/ops'
  * the reporter, the people added to it and developer / admin (canEdit from the server, which checks it again).
  */
 
-const errText = (e: unknown) => (e instanceof ApiError ? (Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message) : String(e))
 
 type Row = { id: string; num: string; type: string; title: string; status: string; severity: string; by: string; assigned: string; people: string; images: number; comments: number; updated: string; raw: FeedbackListItem }
 // Added by + Assigned to right after the title (user 2026-10-29: "always in the app")
@@ -87,7 +87,7 @@ export default function Feedback() {
           <input value={text} onChange={(e) => setText(e.target.value)} placeholder={T.SEARCH} className={`${inputCls} w-64 pl-8`} />
         </label>
       </div>
-      {list.error && <div className="rounded-md bg-crit-soft px-3 py-2 text-[12.5px] text-crit">{errText(list.error)}</div>}
+      <ErrorNote error={list.error} onRetry={() => void list.refetch()} />
       {list.isPending ? <div className="text-[13px] text-ink-400">{T.LOADING}</div> : !rows.length ? (
         <div className="rounded-[var(--radius-card)] border border-dashed border-line px-4 py-10 text-center text-[13px] text-ink-400">{T.EMPTY}</div>
       ) : (
@@ -126,7 +126,7 @@ function ItemDrawer({ id, onClose }: { id: string; onClose: () => void }) {
       void queryClient.invalidateQueries({ queryKey: ['feedback', 'list'] })
       return true
     } catch (e) {
-      setNote(errText(e))
+      setNote(errorText(e))
       return false
     } finally {
       setBusy(false)
@@ -137,7 +137,7 @@ function ItemDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   return (
     <Drawer open onClose={onClose} wide title={d ? <span>#{d.id} · {d.title}</span> : T.LOADING}
       sub={d && <>{FEEDBACK_TYPE_LABEL[d.type]} · {T.REPORTED_BY} {d.reporter.name} · {istDateTime(d.createdAt)}</>}>
-      {item.error && <div className="rounded-md bg-crit-soft px-3 py-2 text-[12.5px] text-crit">{errText(item.error)}</div>}
+      <ErrorNote error={item.error} onRetry={() => void item.refetch()} />
       {d && (
         <div className="space-y-5">
           {note && <div className="rounded-md bg-crit-soft px-3 py-2 text-[12.5px] text-crit">{note}</div>}

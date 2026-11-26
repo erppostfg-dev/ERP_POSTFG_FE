@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { AlertTriangle, ArrowRight, DatabaseZap, Moon } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge, Button } from '../../components/ui'
-import { ApiError } from '../../api/client'
 import { getDataSync, setNightlyDataSync, startDataSync, type DataSyncJob, type DataSyncRun, type DataSyncStatus } from '../../api/admin'
 import { DATA_SYNC_REFRESH_MS, DATA_SYNC_TEXT as T } from '../../constants/admin'
 import { istDateTime } from '../../lib/time'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Admin > Data sync (2026-11-17, user: "every night ~1 AM IST until I say; a tab in Admin for developers with the
@@ -15,7 +15,6 @@ import { istDateTime } from '../../lib/time'
  */
 
 const KEY = ['admin', 'data-sync'] as const
-const errText = (e: unknown) => (e instanceof ApiError ? e.message : String(e))
 
 function JobCard({ job, run, d, busy, onRun }: { job: DataSyncJob; run: DataSyncRun; d: DataSyncStatus; busy: boolean; onRun: () => void }) {
   const t = T.JOBS[job]
@@ -56,14 +55,14 @@ export function DataSyncTab() {
       qc.setQueryData(KEY, await fn())
       if (ok) setNote({ tone: 'ok', text: ok })
     } catch (e) {
-      setNote({ tone: 'err', text: errText(e) })
+      setNote({ tone: 'err', text: errorText(e) })
       void q.refetch()
     } finally {
       setBusy(false)
     }
   }
   const d = q.data
-  if (q.isError) return <p className="text-[12.5px] text-crit">{errText(q.error)}</p>
+  if (q.isError) return <p className="text-[12.5px] text-crit">{errorText(q.error)}</p>
   if (!d) return <p className="text-[12.5px] text-ink-400">Loading…</p>
   const n = d.nightly
   return (

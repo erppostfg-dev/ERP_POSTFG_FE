@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Building2 } from 'lucide-react'
-import { ApiError } from '../../api/client'
 import { addBuyerOrg, listBuyerOrgs, updateBuyerOrg, type BulkBuyerOrg } from '../../api/bulkOrders'
 import { BULK_TEXT } from '../../constants/bulkOrders'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Users & Roles -> Settings -> Bulk Orders -> Buyer organisations (2026-11-24, user "yes do this too"): an outside buyer
@@ -13,7 +13,6 @@ import { BULK_TEXT } from '../../constants/bulkOrders'
 
 const input = 'rounded-md border border-line bg-surface px-2.5 py-1.5 text-[12.5px] outline-none focus:border-primary'
 const emailsOf = (text: string) => text.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean)
-const errText = (e: Error) => (e instanceof ApiError && Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message)
 
 function OrgRow({ o, onDone }: { o: BulkBuyerOrg; onDone: () => void }) {
   const [editing, setEditing] = useState(false)
@@ -23,7 +22,7 @@ function OrgRow({ o, onDone }: { o: BulkBuyerOrg; onDone: () => void }) {
   const save = useMutation({
     mutationFn: (change: { name?: string; active?: boolean; emails?: string[] }) => updateBuyerOrg(o.id, change),
     onSuccess: () => { setEditing(false); setErr(''); onDone() },
-    onError: (e) => setErr(errText(e)),
+    onError: (e) => setErr(errorText(e)),
   })
   return (
     <li className={`border-t border-line px-3 py-2.5 first:border-t-0 ${o.active ? '' : 'opacity-60'}`}>
@@ -60,7 +59,7 @@ export function BulkBuyerOrgsCard() {
   const add = useMutation({
     mutationFn: () => addBuyerOrg(name.trim(), emailsOf(emails)),
     onSuccess: () => { setName(''); setEmails(''); setErr(''); refresh() },
-    onError: (e) => setErr(errText(e)),
+    onError: (e) => setErr(errorText(e)),
   })
   return (
     <div className="flex items-start gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">

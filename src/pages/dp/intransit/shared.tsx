@@ -5,6 +5,7 @@ import { Badge } from '../../../components/ui'
 import { uploadInput, type CsvTarget, type IntransitRun } from '../../../api/intransit'
 import { RUN_STATUS, RUN_STATUS_LABEL, RUN_STATUS_TONE } from '../../../constants/intransit'
 import { fileKey } from '../../../lib/folderFiles'
+import { errorText } from '../../../lib/friendlyError'
 
 /* Small pieces shared by the In-transit Stock page's tabs. */
 
@@ -37,7 +38,7 @@ export type OnNotice = (tone: 'ok' | 'warn', text: string) => void
 /** Opens the CSV viewer on a file. */
 export type OpenCsv = (target: CsvTarget, subtitle?: string) => void
 export const isCsv = (name: string) => /\.csv$/i.test(name)
-export const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
+export const errText = (err: unknown) => errorText(err)
 
 export function NoticeBar({ notice, onClose }: { notice: Notice; onClose: () => void }) {
   if (!notice) return null

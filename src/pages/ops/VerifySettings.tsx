@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Check, Loader2, ShieldCheck, X } from 'lucide-react'
-import { ApiError } from '../../api/client'
 import { listVerifySettings, updateVerifySetting, type VerifyChannelSetting } from '../../api/poVerify'
 import { VERIFY_SETTINGS_TEXT as T } from '../../constants/poVerify'
 import { istDateTime } from '../../lib/time'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Users & Roles -> Settings (2026-10-22, user): the verify-before-Uniware switch, one per channel ("ON for the channels
@@ -38,7 +38,7 @@ export function VerifySettings() {
       await qc.invalidateQueries({ queryKey: KEY })
       setNotice({ tone: 'ok', text: T.SAVED(c.channel, required) })
     } catch (e) {
-      setNotice({ tone: 'err', text: e instanceof ApiError ? e.message : String(e) })
+      setNotice({ tone: 'err', text: errorText(e) })
     } finally {
       setBusy(null)
     }
@@ -63,7 +63,7 @@ export function VerifySettings() {
         </div>
       )}
       {q.error ? (
-        <div className="rounded-[var(--radius)] bg-crit-soft px-4 py-3 text-[13px] text-crit">{q.error instanceof ApiError ? q.error.message : String(q.error)}</div>
+        <div className="rounded-[var(--radius)] bg-crit-soft px-4 py-3 text-[13px] text-crit">{errorText(q.error)}</div>
       ) : !q.data ? (
         <div className="rounded-[var(--radius)] border border-line bg-surface px-4 py-10 text-center text-[13px] text-ink-600">{T.LOADING}</div>
       ) : (

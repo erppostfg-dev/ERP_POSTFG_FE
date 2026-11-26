@@ -50,3 +50,9 @@ export const COPYABLE_COLUMNS: ReadonlySet<string> = new Set([
   'plan', 'fba id', 'fc',
 ])
 
+
+/** The day / night switch (components/ThemeToggle.tsx, 2026-11-26). */
+export const THEME_TEXT = {
+  TO_DARK: 'Lights off 🌙 — switch to dark mode',
+  TO_LIGHT: 'Good morning ☀️ — switch to light mode',
+} as const

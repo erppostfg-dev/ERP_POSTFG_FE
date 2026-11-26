@@ -4,7 +4,6 @@ import { AlertTriangle, ArrowRight, Ban, Check, RotateCcw, X } from 'lucide-reac
 import { Badge, Button, Drawer, PillToggle } from '../../components/ui'
 import { DataGrid, FilterChips, FilterPanel, SectionToolbar, exportRows, useSection, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
-import { ApiError } from '../../api/client'
 import { bulkDismissFailed, bulkReopenRejected, bulkRereadUploads, bulkRetryFailed, getRejection, listAllPoReview, reopenPo, type BulkEndedResult, type PoReviewItem } from '../../api/poReview'
 import { BULK_ENDED_TEXT as B, ENDED_TEXT, FAIL_STEP_HINT, FAIL_STEP_LABEL, FIX_FIELD_LABEL, ISSUE_LABELS, PO_REVIEW_REMARK_MAX, PO_STATUS, REJECTED_FROM_LABEL, SOURCE_LABELS } from '../../constants/poReview'
 import { inputCls } from '../../components/kit'
@@ -13,6 +12,7 @@ import { istDateTime } from '../../lib/time'
 import { FileCell } from './SourceCells'
 import { OutsideBadge, OutsideBulkBar, OutsideStrip } from './UniwareOutside'
 import { inUniwareOf, outsideFilterDef } from '../../lib/uniwareOutside'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Rejected & Failed (2026-11-02, user: "a section after Price differences with the rejected POs, and OCR failed / all the
@@ -92,7 +92,7 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
       setRemark('')
       void qc.invalidateQueries({ queryKey: ['po-ended'] })
     } catch (e) {
-      setBulkError(e instanceof ApiError ? e.message : String(e))
+      setBulkError(errorText(e))
     } finally {
       setBulkBusy(false)
     }
@@ -176,7 +176,7 @@ export function RejectedFailed({ liveTick, canEdit }: { liveTick: number; canEdi
       )}
       {q.isError ? (
         <div className="rounded-[var(--radius)] bg-crit-soft px-3 py-2 text-[12.5px] text-crit">
-          {q.error instanceof ApiError ? q.error.message : String(q.error)} <button onClick={() => void q.refetch()} className="font-semibold underline">Try again</button>
+          {errorText(q.error)} <button onClick={() => void q.refetch()} className="font-semibold underline">Try again</button>
         </div>
       ) : (
         <div key={view} className="pf-tab-in">
@@ -219,7 +219,7 @@ function RejectionDrawer({ row, canEdit, onClose, onReopened }: { row: Row; canE
       const r = await reopenPo(row.id, remark.trim())
       onReopened(ENDED_TEXT.REOPENED(row.poNumber, r.openIssues))
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e))
+      setError(errorText(e))
       setBusy(false)
     }
   }
@@ -227,7 +227,7 @@ function RejectionDrawer({ row, canEdit, onClose, onReopened }: { row: Row; canE
   return (
     <Drawer open onClose={onClose} title={`Rejected PO ${row.poNumber}`} sub={row.channel}>
       {d.isPending && <p className="text-[12.5px] text-ink-400">Loading…</p>}
-      {d.isError && <p className="text-[12.5px] text-crit">{d.error instanceof ApiError ? d.error.message : String(d.error)}</p>}
+      {d.isError && <p className="text-[12.5px] text-crit">{errorText(d.error)}</p>}
       {x && (
         <div className="space-y-5 text-[12.5px]">
           <section>

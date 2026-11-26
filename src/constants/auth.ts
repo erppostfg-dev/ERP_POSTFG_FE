@@ -7,6 +7,8 @@ export const AUTH_ENDPOINTS = {
   GOOGLE: '/auth/google',
   ME: '/auth/me',
   LOGOUT: '/auth/logout',
+  /** PUT { theme }: the signed-in person's own light / dark mode (2026-11-26). */
+  PREFERENCES: '/auth/me/preferences',
 } as const
 
 export const ACCESS = { NONE: 'none', VIEWER: 'viewer', EDITOR: 'editor' } as const

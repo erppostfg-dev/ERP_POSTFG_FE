@@ -18,6 +18,8 @@ export type AdminUser = {
   lastLoginAt: string | null
   welcomeSentAt: string | null
   welcomeError: string | null
+  /** light / dark mode the person picked (2026-11-26); null = never picked (light) */
+  theme: 'light' | 'dark' | null
 }
 
 export type UserOptions = {
@@ -95,7 +97,9 @@ export const setNightlyDataSync = (enabled: boolean) => api<DataSyncStatus>(ADMI
 /* Admin > Monitor (2026-11-05; developers only): GET /admin/monitor/access, /overview?window=, /peak?at=. */
 export type MonitorPart<T> = { ok: boolean; error: string | null; data: T | null }
 export type MonitorAccessCheck = { action: string; ok: boolean; error: string | null }
-export type MonitorAccess = { onServer: boolean; instanceId: string | null; logGroup: string; region: string; checks: MonitorAccessCheck[] }
+/** Which POST_FG this server is: its database (mcaff_postfg_dev / _prod) and log group. */
+export type MonitorEnv = { database: string; logGroup: string }
+export type MonitorAccess = { onServer: boolean; instanceId: string | null; logGroup: string; region: string; env: MonitorEnv; checks: MonitorAccessCheck[] }
 export type HealthPoint = {
   t: string; rssMb: number | null; heapUsedMb: number | null; cpuPct: number | null; loopP99Ms: number | null; loopMaxMs: number | null
   requests: number | null; errors5xx: number | null; errors4xx: number | null; slow: number | null; avgMs: number | null; maxMs: number | null
@@ -104,12 +108,10 @@ export type HealthPoint = {
 }
 export type AlertRow = { t: string; level: string; code: string; source: string; msg: string; reason: string; fix: string; requestId: string; jobId: string; path: string; errorCode: string }
 export type AlertCount = { code: string; level: string; count: number; last: string }
-export type MetricSeries = { id: string; label: string; points: { t: string; v: number }[] }
-export type MonitorAlarm = { name: string; state: string; reason: string; updatedAt: string | null }
+/* Only POST_FG itself since 2026-11-26 (user): no machine / shared-database metrics, no alarms. */
 export type MonitorOverview = {
-  onServer: boolean; window: string; from: string; to: string
+  onServer: boolean; window: string; from: string; to: string; env: MonitorEnv
   health: MonitorPart<HealthPoint[]>; alerts: MonitorPart<AlertRow[]>; alertCounts: MonitorPart<AlertCount[]>
-  metrics: MonitorPart<{ server: MetricSeries[]; database: MetricSeries[] }>; alarms: MonitorPart<MonitorAlarm[]>
 }
 export type PeakApi = { method: string; path: string; calls: number; avgMs: number; maxMs: number; dbQueries: number; kb: number }
 export type PeakJob = { jobId: string; source: string; lines: number; from: string; to: string; firstMsg: string }
@@ -120,3 +122,20 @@ export type MonitorPeak = {
 export const getMonitorAccess = (signal?: AbortSignal) => api<MonitorAccess>(ADMIN_ENDPOINT.MONITOR_ACCESS, { signal })
 export const getMonitorOverview = (window: string, signal?: AbortSignal) => api<MonitorOverview>(ADMIN_ENDPOINT.MONITOR_OVERVIEW(window), { signal })
 export const getMonitorPeak = (at: string, signal?: AbortSignal) => api<MonitorPeak>(ADMIN_ENDPOINT.MONITOR_PEAK(at), { signal })
+
+/* Admin > Monitor > Errors (2026-11-26; developers only): read from CloudWatch, nothing stored. */
+export type ErrorKind = 'server' | 'background' | 'browser'
+export type ErrorGroup = {
+  what: string; where: string; count: number; first: string; last: string; people: number
+  level: string; status: number | null; error: string; reason: string; fix: string; requestId: string; jobId: string
+  lastUser: { id: number; name: string; email: string } | null
+}
+export type MonitorErrors = {
+  onServer: boolean; window: string; from: string; to: string; env: MonitorEnv
+  totals: Record<ErrorKind, number>
+  server: MonitorPart<ErrorGroup[]>; background: MonitorPart<ErrorGroup[]>; browser: MonitorPart<ErrorGroup[]>
+}
+export type RequestLine = { t: string; level: string; code: string; source: string; msg: string; reason: string; fix: string; fields: Record<string, unknown> }
+export const getMonitorErrors = (window: string, signal?: AbortSignal) => api<MonitorErrors>(ADMIN_ENDPOINT.MONITOR_ERRORS(window), { signal })
+export const getMonitorErrorCount = (signal?: AbortSignal) => api<{ onServer: boolean; lastHour: number | null }>(ADMIN_ENDPOINT.MONITOR_ERRORS_COUNT, { signal })
+export const getRequestLines = (id: string, signal?: AbortSignal) => api<{ onServer: boolean; requestId: string; lines: RequestLine[] }>(ADMIN_ENDPOINT.MONITOR_ERROR_REQUEST(id), { signal })

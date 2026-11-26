@@ -4,7 +4,6 @@ import { AlertTriangle, Check, CornerUpLeft, Loader2, Search, ShieldCheck, X } f
 import { Badge } from '../../components/ui'
 import { FileViewer } from '../../components/FileViewer'
 import { FindValue } from '../../components/FindValue'
-import { ApiError } from '../../api/client'
 import { getPoFile } from '../../api/poReview'
 import { getVerifyDetail, sendBackPo, verifyPo, type VerifyDetail } from '../../api/poVerify'
 import {
@@ -12,6 +11,7 @@ import {
 } from '../../constants/poVerify'
 import { useFindOnPo } from '../../lib/useFindOnPo'
 import { istDateTime } from '../../lib/time'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Verify a processed PO against its original (user, 2026-10-22): full screen, the original PO on the left (the in-app
@@ -47,7 +47,7 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
     const ctrl = new AbortController()
     getVerifyDetail(uploadId, ctrl.signal)
       .then(setData)
-      .catch((e: unknown) => { if (!ctrl.signal.aborted) setError(e instanceof ApiError ? e.message : String(e)) })
+      .catch((e: unknown) => { if (!ctrl.signal.aborted) setError(errorText(e)) })
     return () => ctrl.abort()
   }, [uploadId])
 
@@ -80,7 +80,7 @@ export function VerifyPanel({ uploadId, canEdit, onClose, onDone }: {
       }
       onClose()
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e))
+      setError(errorText(e))
     } finally {
       setBusy(null)
     }

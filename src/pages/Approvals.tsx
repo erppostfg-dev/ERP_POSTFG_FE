@@ -23,6 +23,7 @@ import { oneOf, useUrlParam } from '../lib/urlState'
 import { fmtDate, type ColKind } from '../lib/ops'
 import { useOutsideGuard } from './ops/useOutsideGuard'
 import MarginApprovals from './MarginApprovals'
+import { errorText } from '../lib/friendlyError'
 
 /*
  * Approvals (2026-10-15, user): PO reviews the reviewers submitted. Pending (oldest first) / Approved / Rejected tabs
@@ -203,7 +204,7 @@ function PoReviewApprovals({ switcher }: { switcher: ReactNode }) {
       <FilterChips defs={filterDefs} value={filters} onChange={setFilters} />
       {list.isError ? (
         <div className="rounded-[var(--radius)] bg-crit-soft px-3 py-2 text-[12.5px] text-crit">
-          {list.error instanceof ApiError ? list.error.message : String(list.error)} <button onClick={() => void list.refetch()} className="font-semibold underline">Try again</button>
+          {errorText(list.error)} <button onClick={() => void list.refetch()} className="font-semibold underline">Try again</button>
         </div>
       ) : (
         <div key={tab} className="pf-tab-in">
@@ -255,7 +256,7 @@ function BulkDialog({ action, items, onClose, onDone }: { action: 'approve' | 'r
         : await bulkReject(ids, remark.trim())
       onDone(bulkSummary(out))
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e))
+      setError(errorText(e))
       setBusy(false)
     }
   }
@@ -345,7 +346,7 @@ function ApprovalDrawer({ id, canDecide, onClose, onDone }: {
       .catch((e: unknown) => {
         // The system sent it back to In Review, or someone else decided first: the list is refreshed either way.
         if (e instanceof ApiError && (e.code === APPROVAL_ERROR.RETURNED || e.code === APPROVAL_ERROR.NOT_PENDING)) onDone({ tone: 'warn', text: e.message })
-        else setError(e instanceof ApiError ? e.message : String(e))
+        else setError(errorText(e))
       })
       .finally(() => setBusy(false))
   }
@@ -390,7 +391,7 @@ function ApprovalDrawer({ id, canDecide, onClose, onDone }: {
         </div>
       )}>
       {d.isPending ? <p className="text-[12.5px] text-ink-400">Loading the PO…</p>
-        : d.isError ? <p className="text-[12.5px] text-crit">{d.error instanceof ApiError ? d.error.message : String(d.error)}</p>
+        : d.isError ? <p className="text-[12.5px] text-crit">{errorText(d.error)}</p>
         : a && <ApprovalBody a={a} />}
       {outsideGuard.dialog}
     </Drawer>

@@ -51,10 +51,10 @@ export default function Analytics({ go }: { go: (v: string) => void }) {
         <div className="mt-4 h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={fill} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-              <XAxis dataKey="channel" tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} unit="%" />
-              <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
+              <XAxis dataKey="channel" tick={{ fontSize: 11, fill: 'var(--color-ink-600)' }} tickLine={false} axisLine={{ stroke: 'var(--color-line)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--color-ink-600)' }} tickLine={false} axisLine={false} unit="%" />
+              <Tooltip cursor={{ fill: 'var(--color-alt)' }} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--color-line)' }} />
               <Bar dataKey="fill" radius={[4, 4, 0, 0]} name="Fill %">
                 {fill.map((f, i) => <Cell key={i} fill={f.fill < 60 ? DANGER : ACCENT} />)}
               </Bar>
@@ -84,10 +84,10 @@ export default function Analytics({ go }: { go: (v: string) => void }) {
         <div className="mt-4 h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={PO_TO_DELIVERY} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-              <XAxis dataKey="channel" tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} unit="d" />
-              <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
+              <XAxis dataKey="channel" tick={{ fontSize: 11, fill: 'var(--color-ink-600)' }} tickLine={false} axisLine={{ stroke: 'var(--color-line)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--color-ink-600)' }} tickLine={false} axisLine={false} unit="d" />
+              <Tooltip cursor={{ fill: 'var(--color-alt)' }} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--color-line)' }} />
               <ReferenceLine y={PO_TO_DELIVERY_TARGET} stroke={DANGER} strokeDasharray="4 4" label={{ value: 'Target 12d', fontSize: 10, fill: DANGER, position: 'right' }} />
               <Bar dataKey="days" radius={[4, 4, 0, 0]} name="Days">
                 {PO_TO_DELIVERY.map((d, i) => <Cell key={i} fill={d.days > PO_TO_DELIVERY_TARGET ? DANGER : ACCENT} />)}
