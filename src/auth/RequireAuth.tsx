@@ -3,6 +3,9 @@ import { Navigate, useLocation } from 'react-router'
 import { PATHS } from '../constants/pages'
 import { useAuth } from './AuthContext'
 import { rememberNext } from './nextPage'
+import { isMovedHost } from '../lib/moved'
+import { MovedScreen } from '../components/MovedScreen'
+import { DEVELOPER_ROLE } from '../constants/admin'
 
 /**
  * Shows the app only when signed in; otherwise the login page (keeping ?error= from the backend redirect). The page
@@ -17,6 +20,8 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     rememberNext(`${location.pathname}${location.search}`)
     return <Navigate to={`${PATHS.LOGIN}${location.search}`} replace />
   }
+  // the test server (2026-11-26 go-live): only developers use it; everyone else is sent to the live POST_FG
+  if (isMovedHost() && !auth.user.roles.includes(DEVELOPER_ROLE)) return <MovedScreen />
   return <>{children}</>
 }
 
