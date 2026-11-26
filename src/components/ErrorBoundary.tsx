@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { UI_TEXT } from '../constants/auth'
 import { rememberError } from '../lib/lastError'
+import { reportClientError } from '../lib/clientErrors'
 
 /*
  * Error screens (2026-11-24, backlog A17 step 1 / L17; POST_FG + the Bulk Orders portal). Was: one render error or a
@@ -25,6 +26,8 @@ export class ErrorBoundary extends Component<Props, State> {
     // the person sees only the plain card; the technical text goes to the console and to Report a problem
     console.error('[ui] a part of the page crashed', error, info.componentStack)
     rememberError({ status: 0, code: 'UI_CRASH', message: `${error.name}: ${error.message}`, path: window.location.pathname })
+    reportClientError({ kind: 'crash', code: 'UI_CRASH', message: `${error.name}: ${error.message}
+${(info.componentStack ?? '').slice(0, 600)}` })
   }
 
   render() {

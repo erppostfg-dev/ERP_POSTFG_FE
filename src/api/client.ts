@@ -1,6 +1,7 @@
 import { API_BASE_URL, ERROR_CODE } from '../constants/auth'
 import { rememberError } from '../lib/lastError'
 import { messageForStatus, plainMessage } from '../lib/friendlyError'
+import { flushClientErrors, reportClientError } from '../lib/clientErrors'
 
 /*
  * Every backend call goes through here: the session cookie is sent (credentials: 'include'), success bodies are
@@ -39,7 +40,10 @@ const failure = (res: Response, body: unknown, path: string): ApiError => {
   return new ApiError(res.status, code, err ? raw : '', err?.details, requestId)
 }
 
-const networkFailure = () => new ApiError(0, ERROR_CODE.NETWORK, '')
+const networkFailure = () => {
+  reportClientError({ kind: 'network', message: "Can't reach the server", code: ERROR_CODE.NETWORK, status: 0 })
+  return new ApiError(0, ERROR_CODE.NETWORK, '')
+}
 
 export const apiUrl = (path: string) => `${API_BASE_URL}${path}`
 
@@ -58,6 +62,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const body = await res.json().catch(() => null)
   if (!res.ok) throw failure(res, body, path)
+  flushClientErrors()
   return body?.data as T
 }
 
@@ -71,6 +76,7 @@ export async function apiForm<T>(path: string, form: FormData): Promise<T> {
   }
   const body = await res.json().catch(() => null)
   if (!res.ok) throw failure(res, body, path)
+  flushClientErrors()
   return body?.data as T
 }
 
@@ -84,5 +90,6 @@ export async function apiWithMeta<T, M>(path: string, init: RequestInit = {}): P
   }
   const body = await res.json().catch(() => null)
   if (!res.ok) throw failure(res, body, path)
+  flushClientErrors()
   return { data: body?.data as T, meta: body?.meta as M }
 }
