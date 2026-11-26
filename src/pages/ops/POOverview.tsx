@@ -4,7 +4,6 @@ import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-qu
 import { Drawer, Button, PageTitle } from '../../components/ui'
 import { DataGrid, Field, FilterPanel, SectionToolbar, exportRows, countActive, Cell, type FilterDef, type FilterValues } from '../../components/kit'
 import { PO_LINE_COLS, type ColKind, type POLineRow } from '../../lib/ops'
-import { ApiError } from '../../api/client'
 import { getColumns, getFilterOptions, listLines, listShipments, type ColumnDef, type FilterOptions, type LineItem, type ListParams, type PoOverviewColumns, type ShipmentItem, type TeamColumns } from '../../api/poOverview'
 import { COLUMN_GROUP_LABEL, FACILITY_SCOPE_NOTE, NOT_ASSIGNED_DATES, OVERVIEW_TAB, PO_OVERVIEW_PAGE_SIZE, PO_OVERVIEW_ROWS, SEARCH_DELAY_MS, STATUS_POPUP } from '../../constants/poOverview'
 import { StatusCell } from './StatusPopup'
@@ -19,6 +18,7 @@ import { HistoryDrawer } from './ShipmentHistory'
 import { NOT_AVAILABLE_YET } from '../../constants/masters'
 import { PATHS, URL_PARAM } from '../../constants/pages'
 import { oneOf, useUrlParam } from '../../lib/urlState'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * PO Overview from the backend (GET /po-overview/shipments, /lines, /filter-options, /columns): our POs, filtered and
@@ -102,7 +102,7 @@ function useServerList<I, R>(
   const err = query.error
   return {
     key, setPerPage, q, setQ, filters, setFilters, open, setOpen, rows, total, active: countActive(filters),
-    state: { loading: query.isPending || query.isFetchingNextPage, error: err ? (err instanceof ApiError ? err.message : String(err)) : undefined },
+    state: { loading: query.isPending || query.isFetchingNextPage, error: err ? errorText(err) : undefined },
     more: query.hasNextPage, loadMore: () => void query.fetchNextPage(), retry: () => void query.refetch(),
   }
 }

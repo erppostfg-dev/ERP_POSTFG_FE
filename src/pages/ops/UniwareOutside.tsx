@@ -4,10 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Ban, Check, CheckCircle2, Link2, RefreshCw, XCircle, type LucideIcon } from 'lucide-react'
 import { Badge, Button, Modal } from '../../components/ui'
 import { inputCls, type FilterValues } from '../../components/kit'
-import { ApiError } from '../../api/client'
 import { bulkResolveOutside, checkOutsideNow, getOutsideLive, getOutsideStatus, resolveOutside, type OutsideFinding } from '../../api/uniwareOutside'
 import { OUTSIDE_FILTER_KEY, OUTSIDE_REMARK_MAX, OUTSIDE_TEXT as T, OUTSIDE_YES, type OutsideAction, type OutsideKind } from '../../constants/uniwareOutside'
 import { istDateTime } from '../../lib/time'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * POs punched in Uniware outside POST_FG (2026-11-25): the strip above a tab (how many, Show only these, Check now, last
@@ -35,7 +35,7 @@ export function OutsideStrip({ kind, filters, setFilters, canEdit, liveTick = 0 
   const check = useMutation({
     mutationFn: checkOutsideNow,
     onSuccess: () => { setNote(T.STARTED); void qc.invalidateQueries({ queryKey: STATUS_KEY }) },
-    onError: (e) => setNote(e instanceof ApiError ? e.message : String(e)),
+    onError: (e) => setNote(errorText(e)),
   })
   const n = st.data?.counts[kind] ?? 0
   const cur = filters[OUTSIDE_FILTER_KEY]
@@ -96,7 +96,7 @@ function OutsideDialog({ f, poNumber, canEdit, onClose, onDone }: { f: OutsideFi
       void qc.invalidateQueries({ queryKey: ['po-ended'] })
       onDone(action === 'reject' || action === 'use_code' ? T.DONE[action](poNumber, f.code) : T.DONE[action](poNumber))
     },
-    onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
+    onError: (e) => setError(errorText(e)),
   })
   const status = live.data?.status ?? f.status
   const [pick, setPick] = useState<OutsideAction>(f.actions[0])
@@ -203,7 +203,7 @@ export function OutsideBulkBar({ findings, canEdit, onDone }: { findings: Outsid
       const skipped = r.filter((x) => x.result === 'skipped')
       onDone(T.BULK_RESULT(r.length - skipped.length, skipped.length) + (skipped.length ? ` ${skipped.slice(0, 3).map((x) => x.reason).join('; ')}` : ''))
     },
-    onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
+    onError: (e) => setError(errorText(e)),
   })
   if (!canEdit || !findings.length) return null
   return (

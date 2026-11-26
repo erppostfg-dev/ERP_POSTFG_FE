@@ -8,6 +8,7 @@ import { ApiError } from '../../api/client'
 import { getEditOptions, saveShipment, type ColumnDef, type ConflictDetail, type FieldChanges, type ShipmentItem } from '../../api/poOverview'
 import { replaceShipmentRow } from '../../lib/liveShipments'
 import { HistoryTimeline } from './ShipmentHistory'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * The row drawer of the Shipment Status (2026-10-14): the sections of the current tab; the person's own fields are
@@ -62,7 +63,7 @@ export function ShipmentDrawer({ row, parts, onClose, fieldLabel }: { row: Row; 
       setMessage({ tone: 'ok', text: `Saved ${changed.length} change(s).` })
     } catch (e) {
       if (e instanceof ApiError && e.code === ERR_CONFLICT) setConflicts((e.details as ConflictDetail[]) ?? [])
-      setMessage({ tone: 'err', text: e instanceof ApiError ? e.message : String(e) })
+      setMessage({ tone: 'err', text: errorText(e) })
     } finally {
       setSaving(false)
     }

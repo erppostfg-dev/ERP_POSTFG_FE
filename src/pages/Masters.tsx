@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { AlertTriangle, CheckCircle2, Eye, History, Layers, Pencil, Plus, Power, RefreshCw, X } from 'lucide-react'
-import { ApiError } from '../api/client'
 import { setMasterActive, listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSkus, listPepWarehouses, type ChannelCustomerItem, type ChannelSkuItem, type ChannelWarehouseItem, type PepSkuItem, type PepWarehouseItem } from '../api/masters'
 import { ADD_TEXT, EDIT_TEXT, HISTORY_TEXT, MASTER_ADD_ROLES, SWITCH_OFF_EFFECT, SWITCH_ON_EFFECT, MASTER_LOG_TYPE, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS, STOCK_FEED_LABEL, STOCK_FORMULA_LABEL, STOCK_NOT_COUNTED } from '../constants/masters'
 import { IconBtn, RecentChangesDrawer, RowHistoryDrawer } from './masters/MasterHistory'
@@ -17,6 +16,7 @@ import { OPS_CHANNELS, type ColKind } from '../lib/ops'
 import { Badge, Button, Drawer, PageTitle } from '../components/ui'
 import { Reveal } from '../components/shell'
 import { DataGrid, FilterPanel, PrimaryBtn, SectionToolbar, exportRows, inputCls, useSection, type FilterDef } from '../components/kit'
+import { errorText } from '../lib/friendlyError'
 
 type Row = Record<string, string | number>
 type FieldDef = { key: string; label: string; options?: readonly string[]; type?: 'number' }
@@ -224,7 +224,7 @@ function MasterPage({ tab }: { tab: string }) {
   const queryClient = useQueryClient()
   const query = useQuery({ queryKey: mastersKey(id), queryFn: ({ signal }) => LOADERS[id](signal) })
   const rowsOf = (k: string): Row[] => (k === id ? query.data : queryClient.getQueryData<Row[]>(mastersKey(k))) ?? NO_ROWS
-  const state = { loading: query.isPending, error: query.error ? (query.error instanceof ApiError ? query.error.message : String(query.error)) : undefined }
+  const state = { loading: query.isPending, error: query.error ? errorText(query.error) : undefined }
 
   const fromApi = CFG[id].readOnly
   // Warehouses: the weekly Uniware facility check's prompt (also on In-transit Stock); an editor of either page acts on it
@@ -403,7 +403,7 @@ function ChannelListingsDrawer({ pepCode, name, onClose }: { pepCode: string; na
       {q.isPending ? <p className="px-2 py-3 text-[12.5px] text-ink-400">Loading channel SKUs…</p>
         : q.isError ? (
           <div className="px-2 py-3 text-[12.5px] text-crit">
-            Could not load the channel SKUs: {q.error instanceof ApiError ? q.error.message : String(q.error)}{' '}
+            Could not load the channel SKUs: {errorText(q.error)}{' '}
             <button onClick={() => void q.refetch()} className="font-semibold underline">Try again</button>
           </div>
         )
@@ -442,7 +442,7 @@ function SwitchDrawer({ master, row, title, onClose, onDone }: { master: string;
       await setMasterActive(MASTER_LOG_TYPE[master], String(row.rid), { active: on, ...(remark.trim() ? { remark: remark.trim() } : {}) })
       onDone(EDIT_TEXT.SWITCHED(title, on))
     } catch (e) {
-      setFailed(e instanceof ApiError ? e.message : String(e))
+      setFailed(errorText(e))
     } finally {
       setSaving(false)
     }

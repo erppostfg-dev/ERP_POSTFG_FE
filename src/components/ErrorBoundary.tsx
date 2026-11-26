@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { UI_TEXT } from '../constants/auth'
+import { rememberError } from '../lib/lastError'
 
 /*
  * Error screens (2026-11-24, backlog A17 step 1 / L17; POST_FG + the Bulk Orders portal). Was: one render error or a
@@ -21,7 +22,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
+    // the person sees only the plain card; the technical text goes to the console and to Report a problem
     console.error('[ui] a part of the page crashed', error, info.componentStack)
+    rememberError({ status: 0, code: 'UI_CRASH', message: `${error.name}: ${error.message}`, path: window.location.pathname })
   }
 
   render() {
@@ -33,7 +36,6 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="w-full max-w-md rounded-[var(--radius-card)] border border-line bg-surface p-6 text-center shadow-sm">
           <div className="text-[15px] font-semibold text-ink-900">{UI_TEXT.CRASH_TITLE}</div>
           <p className="mt-1.5 text-[13px] text-ink-600">{UI_TEXT.CRASH_SUB}</p>
-          <p className="mt-2 break-words rounded-md bg-alt px-3 py-2 font-mono text-[11.5px] text-ink-600">{error.message || String(error)}</p>
           <div className="mt-4 flex justify-center gap-2">
             {page && <button onClick={() => this.setState({ error: null })} className="rounded-md border border-line px-3 py-1.5 text-[12px] font-semibold">{UI_TEXT.CRASH_RETRY}</button>}
             <button onClick={() => window.location.reload()} className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-white">{UI_TEXT.CRASH_RELOAD}</button>

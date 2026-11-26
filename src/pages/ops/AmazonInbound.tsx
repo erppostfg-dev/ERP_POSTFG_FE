@@ -4,7 +4,6 @@ import { AlertTriangle, ArrowRight, Check, Clock, Loader2, RefreshCw, X as XIcon
 import { Badge, Drawer, KPI, PageTitle, SubTabs } from '../../components/ui'
 import { DataGrid, FilterChips, FilterPanel, SectionToolbar, exportRows, useSection, type FilterDef } from '../../components/kit'
 import { Reveal } from '../../components/shell'
-import { ApiError } from '../../api/client'
 import {
   getPlan, getShipment, getSyncState, listLimits, listPlans, listShipments, refreshShipment, updateLimit,
   type InboundEvent, type PlanItem, type ShipmentItem,
@@ -20,6 +19,7 @@ import { PATHS, URL_PARAM } from '../../constants/pages'
 import { oneOf, useUrlParam } from '../../lib/urlState'
 import { fmtDate, type ColKind } from '../../lib/ops'
 import { istDateTime } from '../../lib/time'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Amazon Inbound (2026-10-19). Plans tab: every inbound plan with a bar of its shipments by status; a plan opens its
@@ -110,7 +110,7 @@ function ShipmentDrawer({ id, onClose, canEdit }: { id: string; onClose: () => v
       setNote({ ok: true, text: INBOUND_TEXT.REFRESHED(r.changes?.length ?? 0, r.calls ?? 0) })
       void qc.invalidateQueries({ queryKey: ['amazon-inbound', 'list'] })
     } catch (e) {
-      setNote({ ok: false, text: e instanceof ApiError ? e.message : String(e) })
+      setNote({ ok: false, text: errorText(e) })
     } finally {
       setBusy(false)
     }
@@ -317,7 +317,7 @@ function Limits({ canEdit }: { canEdit: boolean }) {
       setDraft((d) => { const x = { ...d }; delete x[id]; return x })
       void qc.invalidateQueries({ queryKey: ['amazon-inbound'] })
     } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : String(e))
+      setMsg(errorText(e))
     }
   }
   return (

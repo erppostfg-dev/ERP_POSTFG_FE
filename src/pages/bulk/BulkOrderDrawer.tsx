@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronDown, RotateCcw, Trash2 } from 'lucide-react'
-import { ApiError } from '../../api/client'
 import { approveBulkOrder, cancelBulkOrder, getBulkOrderStock, remindBulkOrder, getBulkOrder, rejectBulkOrder, setBulkPayment, setBulkPaymentDetails, uploadBulkDocument, type BulkOrderEvent, type BulkOrderFull, type BulkRights } from '../../api/bulkOrders'
 import { Badge, Drawer } from '../../components/ui'
 import {
@@ -12,6 +11,7 @@ import { BulkProcessPanel } from '../ops/BulkProcessPanel'
 import { BulkDocumentViewer } from './BulkDocumentViewer'
 import { BulkDocumentsSection } from './BulkDocumentsSection'
 import { lineTooSmall, lineTotal, round2, rupees, unitPrice, validDiscount } from '../../lib/bulkPrice'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * One bulk order (step 1 + 2): status timeline on top, details, lines, History (activity log, folded). While it waits for approval: its type's people may Edit /
@@ -29,7 +29,6 @@ import { lineTooSmall, lineTotal, round2, rupees, unitPrice, validDiscount } fro
 
 const day = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 const when = (s: string) => new Date(s).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-const errorText = (e: Error) => (e instanceof ApiError && Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message)
 const input = 'w-full rounded-md border border-line bg-surface px-2 py-1 text-right text-[13px] outline-none focus:border-primary'
 
 /** The design's status stepper: each step done with who / when where we know it; rejected / cancelled = a closed card. */

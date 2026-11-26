@@ -6,6 +6,7 @@ import { addChannel, addChannelLocation, addChannelSku, addPepSku, editMasterRow
 import { ADD_RULE, ADD_TEXT, EDIT_TEXT, HISTORY_TEXT, MARGIN_ADD_TEXT, MASTER_LOG_TYPE, STOCK_EDIT_KEYS, STOCK_NOT_COUNTED, STOCK_TEXT } from '../constants/masters'
 import { Button, Drawer } from './ui'
 import { inputCls } from './kit'
+import { errorText } from '../lib/friendlyError'
 
 /*
  * Add forms of the Masters pages (2026-10-27): every field is required; Save stays off until all are filled and pass
@@ -268,7 +269,7 @@ export function MasterAddDrawer({ master, defaultChannelId, edit, onClose, onAdd
         if (details.length) {
           setServer(Object.fromEntries(details.map((d) => [d.field, d.message])))
           setFailed(`${details.length} field${details.length === 1 ? '' : 's'} refused: see below`)
-        } else setFailed(e instanceof ApiError ? e.message : String(e))
+        } else setFailed(errorText(e))
       }
     } finally {
       setSaving(false)
@@ -297,7 +298,7 @@ export function MasterAddDrawer({ master, defaultChannelId, edit, onClose, onAdd
       if (details.length) {
         setServer(Object.fromEntries(details.map((d) => [d.field, d.message])))
         setFailed(`${details.length} field${details.length === 1 ? '' : 's'} refused: see below`)
-      } else setFailed(e instanceof ApiError ? e.message : String(e))
+      } else setFailed(errorText(e))
     } finally {
       setSaving(false)
     }
@@ -346,7 +347,7 @@ export function MasterAddDrawer({ master, defaultChannelId, edit, onClose, onAdd
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="primary" onClick={() => void save()} disabled={!!left || saving || opts.isPending}>{saving ? 'Adding…' : 'Add'}</Button>
       </>}>
-      {opts.error && <div className="mb-3 flex items-center gap-2 rounded-md border border-crit/30 bg-crit-soft px-3 py-2 text-[12px] text-crit"><AlertTriangle className="size-4" />Could not load the form's lists: {opts.error instanceof ApiError ? opts.error.message : String(opts.error)}</div>}
+      {opts.error && <div className="mb-3 flex items-center gap-2 rounded-md border border-crit/30 bg-crit-soft px-3 py-2 text-[12px] text-crit"><AlertTriangle className="size-4" />Could not load the form's lists: {errorText(opts.error)}</div>}
       {failed && <div className="mb-3 flex items-center gap-2 rounded-md border border-crit/30 bg-crit-soft px-3 py-2 text-[12px] text-crit"><AlertTriangle className="size-4" />{failed}</div>}
       {conflicts.length > 0 && (
         <div className="mb-3 rounded-md border border-warn/40 bg-warn-soft px-3 py-2 text-[12px] text-ink-900">

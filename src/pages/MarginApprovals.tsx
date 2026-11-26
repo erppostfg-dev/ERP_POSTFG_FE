@@ -3,10 +3,11 @@ import { ArrowRight, Check, X } from 'lucide-react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge, Button, SubTabs } from '../components/ui'
 import { inputCls } from '../components/kit'
-import { ApiError } from '../api/client'
 import { approveMarginRequest, listMarginRequests, rejectMarginRequest, type MarginPerson, type MarginRequest } from '../api/approvals'
 import { marginStatusLabel, MARGIN_TABS, MARGIN_TEXT as T, PO_REVIEW_REMARK_MAX } from '../constants/poReview'
 import { istDateTime } from '../lib/time'
+import { errorText } from '../lib/friendlyError'
+import { ErrorNote } from '../components/ErrorNote'
 
 /*
  * Approvals → Margin changes (2026-11-06): a channel SKU's margin % / rate after margin (Masters Edit, price check
@@ -48,7 +49,7 @@ function RequestCard({ r, onDone }: { r: MarginRequest; onDone: (text: string) =
       onDone(text)
       void qc.invalidateQueries({ queryKey: ['approvals', 'margins'] })
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e))
+      setError(errorText(e))
     } finally {
       setBusy(false)
     }
@@ -110,7 +111,7 @@ export default function MarginApprovals() {
       <SubTabs value={tab} onChange={(t) => { setTab(t); setNotice('') }}
         tabs={MARGIN_TABS.map((t) => ({ ...t, ...(t.key === 'open' && counts ? { count: counts.open } : {}) }))} />
       {notice && <div className="rounded-md bg-ok-soft px-3 py-2 text-[12.5px] text-ok">{notice}</div>}
-      {list.error && <div className="rounded-md bg-crit-soft px-3 py-2 text-[12.5px] text-crit">{list.error instanceof ApiError ? list.error.message : String(list.error)}</div>}
+      <ErrorNote error={list.error} onRetry={() => void list.refetch()} />
       {tab === 'open' && items && <div className="text-[12px] text-ink-600">{T.WAITING_SUMMARY(items.filter((r) => r.approvalsNeeded === 1).length, items.filter((r) => r.approvalsNeeded === 2 && r.status === 'pending_l1').length, items.filter((r) => r.approvalsNeeded === 2 && r.status === 'pending_l2').length)}</div>}
       {list.isPending ? <div className="text-[13px] text-ink-400">Loading…</div> : !list.data?.items.length ? (
         <div className="rounded-[var(--radius-card)] border border-dashed border-line px-4 py-10 text-center text-[13px] text-ink-400">{T.EMPTY}</div>

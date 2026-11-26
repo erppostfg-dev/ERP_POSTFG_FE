@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ChevronRight, Loader2, RefreshCw } from 'lucide-react'
 import { Badge } from '../../components/ui'
-import { ApiError } from '../../api/client'
 import { getPoIssuePos, getPoIssues, poIssuesKey, type ChannelIssues, type IssueGroup } from '../../api/poIssues'
 import {
   ISSUE_ITEM_LABEL, ISSUE_KIND_LABEL, PO_ISSUES_DAYS, PO_ISSUES_DEFAULT_DAYS, PO_ISSUES_TEXT as T, PO_STATUS_LABEL, PO_STATUS_TONE,
@@ -11,6 +10,7 @@ import { istDateTime } from '../../lib/time'
 import { PoIssuesByCategory } from './PoIssuesByCategory'
 import { PATHS, URL_PARAM } from '../../constants/pages'
 import { oneOf, useUrlParam } from '../../lib/urlState'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * PO Processing & Review -> PO issues (user, 2026-10-22: channel based; channels on the left with only "n of m with issues",
@@ -88,7 +88,7 @@ export function PoIssues() {
       </div>
 
       {q.error ? (
-        <div className="flex items-center gap-2 rounded-[var(--radius)] bg-crit-soft px-4 py-3 text-[13px] text-crit"><AlertTriangle className="size-4" />{q.error instanceof ApiError ? q.error.message : String(q.error)}</div>
+        <div className="flex items-center gap-2 rounded-[var(--radius)] bg-crit-soft px-4 py-3 text-[13px] text-crit"><AlertTriangle className="size-4" />{errorText(q.error)}</div>
       ) : !q.data ? (
         <div className="flex items-center justify-center gap-2 rounded-[var(--radius)] border border-line bg-surface px-4 py-10 text-[13px] text-ink-600"><Loader2 className="size-4 animate-spin" />{T.LOADING}</div>
       ) : !channels.length ? (

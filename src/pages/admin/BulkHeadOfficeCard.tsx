@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ApiError } from '../../api/client'
 import { getHeadOffice, saveHeadOffice, type BulkHeadOffice } from '../../api/bulkOrders'
 import { BULK_TEXT } from '../../constants/bulkOrders'
+import { ErrorNote } from '../../components/ErrorNote'
 
 const input = 'w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-primary'
 type Form = Record<'receiverName' | 'receiverPhone' | 'line' | 'city' | 'state' | 'pincode', string>
@@ -58,7 +59,7 @@ export function BulkHeadOfficeCard() {
         <p className="mt-1 max-w-3xl text-[12.5px] text-ink-600">{BULK_TEXT.HO_SUB}</p>
         {q.data === null && <p className="mt-1 text-[12px] text-ink-400">{BULK_TEXT.HO_NOT_SET}</p>}
         {q.isSuccess && <HeadOfficeForm saved={q.data} />}
-        {q.error && <p className="mt-1 text-[12px] text-crit">{q.error.message}</p>}
+        <ErrorNote inline error={q.error} className="mt-1" />
       </div>
     </div>
   )

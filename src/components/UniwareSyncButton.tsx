@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from './ui'
-import { ApiError } from '../api/client'
 import { getUniwareSync, startUniwareSync } from '../api/poOverview'
 import { UNIWARE_SYNC_REFRESH_MS, UNIWARE_SYNC_TEXT as T } from '../constants/poOverview'
 import { istDateTime } from '../lib/time'
+import { errorText, outsideErrorText } from '../lib/friendlyError'
+import { OUTSIDE_SERVICE } from '../constants/errors'
 
 /*
  * PO Overview's Uniware sync (2026-11-06): "Uniware · synced N min ago" + Sync now. The server reads every 30 min by
@@ -32,14 +33,14 @@ export function UniwareSyncButton({ canSync }: { canSync: boolean }) {
       qc.setQueryData(['po-overview', 'uniware-sync'], r)
       setNote(T.STARTED)
     } catch (e) {
-      setNote(T.FAILED(e instanceof ApiError ? e.message : String(e)))
+      setNote(T.FAILED(errorText(e)))
       void status.refetch()
     }
   }
   return (
     <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-600" title={T.HINT}>
       <span className={s?.lastError ? 'text-warn' : ''}>
-        {s?.minutesAgo === null || s?.minutesAgo === undefined ? T.NEVER : T.AGO(s.minutesAgo)}{s?.lastError ? ` · ${s.lastError}` : ''}
+        {s?.minutesAgo === null || s?.minutesAgo === undefined ? T.NEVER : T.AGO(s.minutesAgo)}{s?.lastError ? ` · ${outsideErrorText(OUTSIDE_SERVICE.UNIWARE, s.lastError)}` : ''}
       </span>
       {canSync && (
         <span title={waitMin && s?.button?.lastAt ? T.WAIT_HINT(s.button.lastBy, istDateTime(s.button.lastAt)) : T.HINT}>

@@ -16,6 +16,7 @@ import HistoryTab from './intransit/HistoryTab'
 import MastersTab from './intransit/MastersTab'
 import RunAlerts, { useRunAlerts } from './intransit/RunAlerts'
 import { NoticeBar, type Notice, type OpenCsv } from './intransit/shared'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * In-transit Stock (Demand Planning, user 2026-10-15 / 19): one day at a time.
@@ -50,7 +51,7 @@ export default function IntransitStock() {
         return downloadInputsBook(r.id, r.asOf)
       })
       .then(() => setNotice(null))
-      .catch((err: unknown) => onNotice('warn', INPUTS_BOOK.GONE(linkRun, err instanceof Error ? err.message : String(err))))
+      .catch((err: unknown) => onNotice('warn', INPUTS_BOOK.GONE(linkRun, errorText(err))))
   }, [linkRun])
 
   const day = useQuery({

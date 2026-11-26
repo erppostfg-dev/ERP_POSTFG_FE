@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge, Button, Drawer, PageTitle, SubTabs } from '../components/ui'
 import { DataGrid, Field, MultiSelect, inputCls } from '../components/kit'
 import { SelectBox } from '../components/pickers'
-import { ApiError } from '../api/client'
 import {
   createUser, getRolePages, getUserOptions, listRoles, listUsers, resendWelcome, updateRole, updateUser,
   type AccessLevel, type AdminUser, type RoleItem, type RolePage, type UserBody, type UserOptions,
@@ -25,6 +24,7 @@ import { DataSyncTab } from './admin/DataSyncTab'
 import { useAuth } from '../auth/AuthContext'
 import { IntakeSettings } from './ops/IntakeSettings'
 import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
+import { errorText } from '../lib/friendlyError'
 
 /*
  * Users & Roles (2026-10-15, user): admins / developers add people with a role, a PO Overview team and facilities;
@@ -39,7 +39,6 @@ import { VERIFY_SETTINGS_TEXT } from '../constants/poVerify'
 const TABS = ['users', 'roles', 'email', 'settings', 'server', 'monitor', 'data-sync'] as const
 type Tab = (typeof TABS)[number]
 type Notice = { tone: 'ok' | 'err'; text: string } | null
-const errText = (e: unknown) => (e instanceof ApiError ? (Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message) : String(e))
 
 export default function Admin() {
   const [tab, setTab] = useUrlParam<Tab>(PATHS.ADMIN, URL_PARAM.TAB, oneOf(TABS), 'users')
@@ -111,13 +110,13 @@ function UsersTab() {
       await updateUser(u.id, { status: u.status === 'active' ? 'inactive' : 'active' })
       setNotice({ tone: 'ok', text: `${u.email} switched ${u.status === 'active' ? 'off' : 'on'}.` })
       refresh()
-    } catch (e) { setNotice({ tone: 'err', text: errText(e) }) }
+    } catch (e) { setNotice({ tone: 'err', text: errorText(e) }) }
   }
   const resend = async (u: AdminUser) => {
     try {
       await resendWelcome(u.id)
       setNotice({ tone: 'ok', text: ADMIN_TEXT.RESENT(u.email) })
-    } catch (e) { setNotice({ tone: 'err', text: errText(e) }) }
+    } catch (e) { setNotice({ tone: 'err', text: errorText(e) }) }
     refresh()
   }
 
@@ -131,7 +130,7 @@ function UsersTab() {
         </label>
         <div className="ml-auto"><Button variant="primary" icon={<UserPlus className="size-4" />} onClick={() => setEdit('new')}>{ADMIN_TEXT.ADD_USER}</Button></div>
       </div>
-      {users.isError ? <p className="text-[12.5px] text-crit">{errText(users.error)}</p> : (
+      {users.isError ? <p className="text-[12.5px] text-crit">{errorText(users.error)}</p> : (
         <DataGrid pageSizeKey="users" cols={UCOLS} rows={rows} rowKey={(r) => String(r.id)} onRowClick={(r) => setEdit(r.user)} pageSize={25}
           trailing={[
             { label: 'Status', render: (r) => <Badge tone={r.status === 'active' ? 'ok' : 'neutral'}>{r.status === 'active' ? 'Active' : 'Off'}</Badge> },
@@ -185,7 +184,7 @@ function UserDrawer({ user, options, onClose, onSaved }: { user: AdminUser | nul
     try {
       if (user) { await updateUser(user.id, body); onSaved(ADMIN_TEXT.SAVED) }
       else { await createUser({ ...body, email: email.trim(), sendEmail }); onSaved(ADMIN_TEXT.ADDED(email.trim(), sendEmail)) }
-    } catch (e) { setError(errText(e)) } finally { setBusy(false) }
+    } catch (e) { setError(errorText(e)) } finally { setBusy(false) }
   }
 
   return (
@@ -292,7 +291,7 @@ function RoleEditor({ role, pages, onSaved }: { role: RoleItem; pages: RolePage[
     setError(null)
     try {
       onSaved(await updateRole(role.key, { grants }))
-    } catch (e) { setError(errText(e)) } finally { setBusy(false) }
+    } catch (e) { setError(errorText(e)) } finally { setBusy(false) }
   }
 
   return (

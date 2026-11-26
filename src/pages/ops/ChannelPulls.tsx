@@ -3,11 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Bot, Check, Cloud, Download, Loader2, Play, RefreshCw, ScrollText, X as XIcon } from 'lucide-react'
 import { Badge, Button, Drawer } from '../../components/ui'
 import { DataGrid, exportRowsExcel } from '../../components/kit'
-import { ApiError } from '../../api/client'
 import { getRobotRun, listChannelPulls, listPullItems, processPull, pullsKey, runRobot, setRobotSchedule, type ChannelPull, type PullItem } from '../../api/channelPulls'
 import { PULLS_REFRESH_BUSY_MS, PULLS_REFRESH_IDLE_MS, PULLS_TEXT as T, ROBOT_SCHEDULE_HOURS, UPLOAD_STATE } from '../../constants/channelPulls'
 import { istDateTime } from '../../lib/time'
 import type { ColKind } from '../../lib/ops'
+import { errorText } from '../../lib/friendlyError'
+import { ErrorNote } from '../../components/ErrorNote'
 
 /*
  * Channel Pulls > Channels tab (2026-10-30): one card per channel pulled by API (Amazon) or robot (Flipkart Seller Hub).
@@ -15,7 +16,6 @@ import type { ColKind } from '../../lib/ops'
  * Editors act; viewers see. The PO intake switch (ON / OFF, start date) stays on Users & Roles > Settings > PO intake.
  */
 
-const errText = (e: unknown) => (e instanceof ApiError ? e.message : String(e))
 const busy = (p: ChannelPull) => p.processing || !!p.robot?.running
 
 type Row = { id: string; consignment: string; warehouse: string; created: string; status: string; fetched: string; po: string; raw: PullItem }
@@ -71,7 +71,7 @@ function RobotLog({ pullKey, onClose }: { pullKey: string; onClose: () => void }
     <Drawer open onClose={onClose} wide title={T.LOG_TITLE} sub={r ? `${istDateTime(r.startedAt)} · ${r.trigger}` : undefined}>
       {!r ? <div className="text-[13px] text-ink-400">{T.NO_LOG}</div> : (
         <div className="space-y-3">
-          {r.error && <div className="rounded-md bg-crit-soft px-3 py-2 text-[12.5px] text-crit">{r.error}</div>}
+          <ErrorNote error={r.error} technical={r.error} />
           {r.failed.length > 0 && (
             <ul className="rounded-md bg-warn-soft px-3 py-2 text-[12.5px] text-warn">
               {r.failed.map((f) => <li key={f.id}><span className="font-mono">{f.id}</span>: {f.error}</li>)}
@@ -98,7 +98,7 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
     try {
       onNote('ok', (await fn()) || ok)
     } catch (e) {
-      onNote('err', errText(e))
+      onNote('err', errorText(e))
     } finally {
       setActing(false)
       void qc.invalidateQueries({ queryKey: pullsKey })
@@ -264,7 +264,7 @@ export function ChannelPullsTab({ canEdit }: { canEdit: boolean }) {
           <button type="button" onClick={() => setNote(null)}><XIcon className="size-4" /></button>
         </div>
       )}
-      {q.error ? <div className="rounded-md bg-crit-soft px-3 py-2 text-[13px] text-crit">{errText(q.error)}</div>
+      {q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} />
         : !q.data ? <div className="text-[13px] text-ink-400">Loading…</div>
         : q.data.map((p) => <PullCard key={p.key} p={p} canEdit={canEdit} onNote={(tone, text) => setNote({ tone, text })} />)}
     </div>

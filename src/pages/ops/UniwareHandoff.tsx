@@ -6,6 +6,7 @@ import { markUniwareUploaded, type UniwareCreateState } from '../../api/poReview
 import { useOutsideGuard } from './useOutsideGuard'
 import { UNIWARE_AGE, UNIWARE_CREATE_STATUS, UNIWARE_CREATE_TEXT, UNIWARE_ENDPOINT, UNIWARE_STATE, UNIWARE_TEXT, type UniwareState } from '../../constants/poReview'
 import { istDateTime } from '../../lib/time'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Uniware hand-off on the Processed tab (user, 2026-10-19): a completed PO waits here until its sale order CSV is
@@ -74,7 +75,7 @@ export function UniwareCell({ h, canEdit, onDone, onError, create }: {
       await markUniwareUploaded([h.id], what === 'undo')
       onDone(what === 'undo' ? UNIWARE_TEXT.UNDONE(1) : UNIWARE_TEXT.MARKED(1))
     } catch (e) {
-      onError(e instanceof ApiError ? e.message : String(e))
+      onError(errorText(e))
     } finally {
       setBusy(null)
     }

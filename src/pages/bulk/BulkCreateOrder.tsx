@@ -10,6 +10,8 @@ import { BULK_INSTITUTION_RE, BULK_STATUS, bulkHidesMoney, isMarketingLike, BULK
 import { formProblems } from '../../lib/bulkForm'
 import { readGrid, receiverErrorsCsv, receiverQty, receiverTemplateCsv, rowsFromGrid } from '../../lib/bulkReceivers'
 import { approvalWhy, lineTooSmall, sameAddress, lineTotal, normalPhone, priceAfterDiscount, round2, rupees, validDiscount } from '../../lib/bulkPrice'
+import { errorText } from '../../lib/friendlyError'
+import { ErrorNote } from '../../components/ErrorNote'
 
 /*
  * Create a bulk order (design: figma-make-bulk-orders CreateOrder, 3 steps). The screen works prices out as the server
@@ -350,7 +352,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
       }
       setUpload({ busy: false, checked, rows, note: BULK_TEXT.UPLOAD_DONE(got.length, checked.rowCount) })
     } catch (e) {
-      setUpload({ busy: false, error: e instanceof Error ? e.message : String(e) })
+      setUpload({ busy: false, error: errorText(e) })
     }
   }
   /** The receivers part of a request: several = `receivers`; one = the order's own fields + `lines` (as before). */
@@ -607,7 +609,7 @@ export default function BulkCreateOrder({ types, initial, onClose, onCreated }: 
                 <button type="button" onClick={() => downloadText('bulk-receivers-template.csv', receiverTemplateCsv())} className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[12px] font-semibold text-ink-600 hover:bg-alt"><Download className="size-3.5" />{BULK_TEXT.UPLOAD_TEMPLATE}</button>
               </div>
               <p className="mb-2 mt-1 text-[12px] text-ink-600">{BULK_TEXT.RECEIVERS_SUB} {BULK_TEXT.UPLOAD_HINT}</p>
-              {upload.error && <p className="mb-2 rounded-md bg-crit-soft px-3 py-2 text-[12px] text-crit">{upload.error}</p>}
+              <ErrorNote error={upload.error} className="mb-2" />
               {upload.note && <p className="mb-2 rounded-md bg-ok-soft px-3 py-2 text-[12px] text-ink-900">{upload.note}</p>}
               {!!upload.checked?.errors.length && (
                 <div className="mb-2 rounded-md bg-crit-soft px-3 py-2 text-[12px] text-crit">

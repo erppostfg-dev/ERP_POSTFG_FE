@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle } from 'lucide-react'
-import { ApiError } from '../../api/client'
 import { GroupedSelect } from '../../components/pickers'
 import { getBulkProcessOptions, hideBulkCustomer, processBulkOrder, type BulkCustomerMatch, type BulkOrderFull } from '../../api/bulkOrders'
 import { BULK_FIXED_PRICE, BULK_LIMIT, BULK_PAYMENT, BULK_TEXT } from '../../constants/bulkOrders'
 import { rupees } from '../../lib/bulkPrice'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Bulk Orders step 3b (2026-11-12, POST_FG PO Processing & Review > Bulk Orders, PO review editors): an APPROVED
@@ -19,7 +19,6 @@ import { rupees } from '../../lib/bulkPrice'
  */
 
 const input = 'w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-primary'
-const errorText = (e: Error) => (e instanceof ApiError && Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message)
 const day = (s: string) => new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 const oneLine = (a: { line: string; city: string | null; pincode: string | null } | null) => (a ? [a.line, a.city, a.pincode].filter(Boolean).join(', ') : '')
 

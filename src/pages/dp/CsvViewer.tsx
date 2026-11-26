@@ -6,6 +6,7 @@ import { downloadCsvFile, type CsvTarget } from '../../api/intransit'
 import { tablePage } from '../../lib/csvTable'
 import { CSV_VIEWER_PAGE, CSV_SEARCH_DELAY_MS } from '../../constants/intransit'
 import { istDateTime } from '../../lib/time'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Table viewer (In-transit Stock, user 2026-10-16 / 18): any input file, a file a connector run fetched (Uniware,
@@ -56,7 +57,7 @@ export function CsvTable({ target, subtitle, onClose, maxHeight = '60vh', showNa
             <Search className="size-3.5 text-ink-400" />
             <input autoFocus={!!onClose} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search every column…" className="w-full bg-transparent text-[12.5px] outline-none" />
           </label>
-          <Button icon={<Download className="size-3.5" />} onClick={() => void downloadCsvFile(target).catch((e) => setError(e instanceof Error ? e.message : String(e)))}>
+          <Button icon={<Download className="size-3.5" />} onClick={() => void downloadCsvFile(target).catch((e) => setError(errorText(e)))}>
             {target.kind === 'sheet' ? 'Download CSV' : 'Download'}
           </Button>
           {onClose && <button onClick={onClose} title="Close (Esc)" className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-ink-900"><X className="size-4" /></button>}

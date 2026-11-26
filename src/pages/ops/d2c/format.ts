@@ -1,5 +1,6 @@
 import { ApiError } from '../../../api/client'
 import type { D2cProblem } from '../../../api/d2cTransfers'
+import { errorText } from '../../../lib/friendlyError'
 
 /* Formatting helpers of the D2C Internal Transfers screens (2026-11-03). */
 
@@ -24,6 +25,6 @@ export const errorOf = (e: unknown): { message: string; code: string; problems: 
     const problems = Array.isArray(e.details) ? (e.details as D2cProblem[]).filter((p) => p && typeof p.message === 'string') : []
     return { message: e.message, code: e.code, problems }
   }
-  return { message: e instanceof Error ? e.message : String(e), code: '', problems: [] }
+  return { message: errorText(e), code: '', problems: [] }
 }
 

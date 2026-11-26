@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge, Button, Drawer } from '../../components/ui'
 import { Field, inputCls } from '../../components/kit'
 import { SelectBox } from '../../components/pickers'
-import { ApiError } from '../../api/client'
 import {
   addMailRecipient, getMailListHistory, listMailLists, listUsers, removeMailRecipient, sendMailListTest, setMailListEnabled, updateMailRecipient,
   type MailList, type MailRecipient, type RecipientKind,
@@ -12,6 +11,7 @@ import {
 import { EMAIL_TEXT, RECIPIENT_KIND_LABEL, RECIPIENT_KINDS } from '../../constants/admin'
 import { istDateTime } from '../../lib/time'
 import { Toggle } from '../ops/VerifySettings'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Users & Roles -> Email (2026-10-30, user): one card per mail the ERP sends (the list comes from the backend), with who
@@ -24,7 +24,6 @@ type Notice = { tone: 'ok' | 'err'; text: string } | null
 /** What a change says when it worked: fixed text, or made from its answer. */
 type Ok<T> = string | ((result: T) => string)
 type Act = <T>(fn: () => Promise<T>, ok?: Ok<T>) => Promise<void>
-const errText = (e: unknown) => (e instanceof ApiError ? (Array.isArray(e.details) ? (e.details as { message: string }[]).map((d) => d.message).join(' · ') : e.message) : String(e))
 const kindByLabel = Object.fromEntries(RECIPIENT_KINDS.map((k) => [RECIPIENT_KIND_LABEL[k], k])) as Record<string, RecipientKind>
 
 export function EmailTab() {
@@ -37,7 +36,7 @@ export function EmailTab() {
       const result = await fn()
       if (ok) setNotice({ tone: 'ok', text: typeof ok === 'string' ? ok : ok(result) })
     } catch (e) {
-      setNotice({ tone: 'err', text: errText(e) })
+      setNotice({ tone: 'err', text: errorText(e) })
     }
     refresh()
   }
@@ -53,7 +52,7 @@ export function EmailTab() {
         </div>
       )}
       {lists.isPending && <p className="text-[12.5px] text-ink-400">Loading…</p>}
-      {lists.isError && <p className="text-[12.5px] text-crit">{errText(lists.error)}</p>}
+      {lists.isError && <p className="text-[12.5px] text-crit">{errorText(lists.error)}</p>}
       {lists.data?.map((l) => <MailCard key={l.key} list={l} run={run} />)}
     </div>
   )
@@ -157,7 +156,7 @@ function AddRecipient({ list, onClose, onAdded }: { list: MailList; onClose: () 
       await addMailRecipient(list.key, { email: email.trim(), kind })
       onAdded(email.trim().toLowerCase())
       close()
-    } catch (e) { setError(errText(e)) } finally { setBusy(false) }
+    } catch (e) { setError(errorText(e)) } finally { setBusy(false) }
   }
   return (
     <Drawer open onClose={onClose} title={EMAIL_TEXT.ADD} sub={list.name}
@@ -187,7 +186,7 @@ function HistoryDrawer({ list, onClose }: { list: MailList; onClose: () => void 
   return (
     <Drawer open onClose={onClose} title={EMAIL_TEXT.HISTORY} sub={list.name}>
       {history.isPending && <p className="text-[12.5px] text-ink-400">Loading…</p>}
-      {history.isError && <p className="text-[12.5px] text-crit">{errText(history.error)}</p>}
+      {history.isError && <p className="text-[12.5px] text-crit">{errorText(history.error)}</p>}
       {history.data && !history.data.length && <p className="text-[12.5px] text-ink-400">{EMAIL_TEXT.NO_HISTORY}</p>}
       <ul className="divide-y divide-line">
         {history.data?.map((h, i) => (

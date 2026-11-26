@@ -13,6 +13,7 @@ import { DataGrid, FilterPanel, SectionToolbar, exportRows, inputCls, useSection
 import type { ColKind } from '../../lib/ops'
 import { IconBtn, RecentChangesDrawer, RowHistoryDrawer } from './MasterHistory'
 import { RouteUploadDialog } from './RouteUploadDialog'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * Masters -> Transfer Routes (2026-11-03): every D2C internal transfer route (sending warehouse + transfer location ->
@@ -84,7 +85,7 @@ export default function TransferRoutes() {
       )}
       {q.isError ? (
         <div className="flex items-center gap-3 rounded-[var(--radius)] border border-crit/30 bg-crit-soft px-4 py-3 text-[13px] text-crit">
-          <AlertTriangle className="size-4" /> Could not load {T.ENTITY}: {q.error instanceof ApiError ? q.error.message : String(q.error)}
+          <AlertTriangle className="size-4" /> Could not load {T.ENTITY}: {errorText(q.error)}
           <button onClick={() => void q.refetch()} className="ml-auto font-semibold">Retry</button>
         </div>
       ) : q.isPending ? (
@@ -181,7 +182,7 @@ function EditRouteDrawer({ item, onClose, onSaved }: { item: TransferRouteItem; 
       onSaved(T.SAVED(n))
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && Array.isArray(e.details)) setConflicts(e.details as EditConflict[])
-      else setFailed(e instanceof ApiError ? e.message : String(e))
+      else setFailed(errorText(e))
     } finally {
       setSaving(false)
     }

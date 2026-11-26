@@ -6,6 +6,7 @@ import { getPoIssuePos, getPoIssues, poIssuesKey, type ChannelIssues, type Issue
 import { ISSUE_ITEM_LABEL, ISSUE_KIND_LABEL, PO_ISSUES_TEXT as T, PO_STATUS_LABEL, PO_STATUS_TONE } from '../../constants/poIssues'
 import { downloadExcel } from '../../lib/excelExport'
 import { istDateTime } from '../../lib/time'
+import { errorText } from '../../lib/friendlyError'
 
 /*
  * PO Processing & Review -> PO issues -> By category (user, 2026-10-23; the default view): the kinds of problems across every
@@ -80,7 +81,7 @@ export function PoIssuesByCategory({ channels, days }: { channels: ChannelIssues
       setNote(null)
       await downloadExcel(T.EXCEL_FILE(label, who, days), sheets)
     } catch (e) {
-      setNote(T.DOWNLOAD_FAILED(e instanceof Error ? e.message : String(e)))
+      setNote(T.DOWNLOAD_FAILED(errorText(e)))
     } finally {
       setDownloading(false)
     }
