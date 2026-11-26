@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import type { ReactNode } from 'react'
 import { api, ApiError } from '../api/client'
 import { ACCESS, AUTH_ENDPOINTS, ERROR_CODE, type AccessLevel } from '../constants/auth'
-import { PAGE_ACCESS_OF } from '../constants/pages'
 import { preview, PREVIEW_ACCESS, PREVIEW_ENABLED, PREVIEW_USER } from '../dev/intransitPreview'
 
 /* The signed-in user from GET /auth/me; the session itself is the backend's httpOnly cookie. */
@@ -45,8 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const accessFor = useCallback(
-    // a page that is not a backend page key takes its access from the page the backend checks (PAGE_ACCESS_OF)
-    (path: string): AccessLevel => (state.status === 'signedIn' ? state.access[path] ?? state.access[PAGE_ACCESS_OF[path] ?? ''] ?? ACCESS.NONE : ACCESS.NONE),
+    // every page is a backend page key (2026-11-26): one the backend does not know = no access (never borrowed)
+    (path: string): AccessLevel => (state.status === 'signedIn' ? state.access[path] ?? ACCESS.NONE : ACCESS.NONE),
     [state],
   )
 

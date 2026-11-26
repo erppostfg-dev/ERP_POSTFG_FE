@@ -113,7 +113,7 @@ const LOADERS: Record<string, (signal: AbortSignal) => Promise<Row[]>> = {
 const ADDABLE: readonly string[] = ['pep', 'channelSku', 'customer', 'chWh'] satisfies AddMaster[]
 /** The page whose access decides who changes each master (2026-11-25: Editor there = Add / Edit / Switch; the backend checks the same). */
 const MASTER_PAGE: Record<string, string> = {
-  pep: PATHS.PEP_SKUS, channelSku: PATHS.CHANNEL_SKUS, customer: PATHS.CHANNEL_CUSTOMERS, chWh: PATHS.CHANNEL_LOCATIONS, pepWh: PATHS.WAREHOUSES, routes: PATHS.WAREHOUSES,
+  pep: PATHS.PEP_SKUS, channelSku: PATHS.CHANNEL_SKUS, customer: PATHS.CHANNEL_CUSTOMERS, chWh: PATHS.CHANNEL_LOCATIONS, pepWh: PATHS.WAREHOUSES, routes: PATHS.TRANSFER_ROUTES,
 }
 const distinct = (rows: Row[], k: string) => [...new Set(rows.map((r) => String(r[k] ?? '')).filter(Boolean))].sort()
 

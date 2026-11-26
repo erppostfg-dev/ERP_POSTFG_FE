@@ -60,7 +60,7 @@ export default function TransferRoutes() {
   const filters = useMemo<FilterDef[]>(() => FILTER_KEYS.map(([key, label]) => ({ key, label, type: 'multi', options: distinct(rows, key) })), [rows])
   const auth = useAuth()
   // admin / developer, or Editor on Warehouses (2026-11-25, as the backend)
-  const canEdit = (auth.status === 'signedIn' && auth.user.roles.some((r) => (MASTER_ADD_ROLES as readonly string[]).includes(r))) || auth.accessFor(PATHS.WAREHOUSES) === ACCESS.EDITOR
+  const canEdit = (auth.status === 'signedIn' && auth.user.roles.some((r) => (MASTER_ADD_ROLES as readonly string[]).includes(r))) || auth.accessFor(PATHS.TRANSFER_ROUTES) === ACCESS.EDITOR
   const [editing, setEditing] = useState<TransferRouteItem | null>(null)
   const [historyOf, setHistoryOf] = useState<Row | null>(null)
   const [changesOpen, setChangesOpen] = useState(false)
