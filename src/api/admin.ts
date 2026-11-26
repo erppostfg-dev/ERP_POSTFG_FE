@@ -18,6 +18,8 @@ export type AdminUser = {
   lastLoginAt: string | null
   welcomeSentAt: string | null
   welcomeError: string | null
+  /** light / dark mode the person picked (2026-11-26); null = never picked (light) */
+  theme: 'light' | 'dark' | null
 }
 
 export type UserOptions = {

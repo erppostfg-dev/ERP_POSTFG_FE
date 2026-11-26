@@ -12,11 +12,14 @@ import './index.css'
 import { blockNumberStepping } from './lib/numberInputs'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { reloadOnStaleChunks } from './lib/staleChunks'
+import { initTheme } from './lib/theme'
 
 // Number boxes change only by typing (no wheel / arrow-key stepping).
 blockNumberStepping()
 // After a deploy an old tab reloads once instead of a white screen (2026-11-24).
 reloadOnStaleChunks()
+// Light / dark mode as this browser chose it (2026-11-26).
+initTheme()
 
 // The frontend data cache (TanStack Query): pages show what they loaded before at once and refresh it quietly.
 const queryClient = new QueryClient({

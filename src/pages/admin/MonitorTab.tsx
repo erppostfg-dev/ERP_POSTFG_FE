@@ -59,10 +59,10 @@ function Chart({ title, rows, lines, onPick }: { title: string; rows: Record<str
             <LineChart data={rows} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}
               onClick={(s) => { const t = s?.activeLabel; if (onPick && typeof t === 'string') onPick(t) }}
               style={{ cursor: onPick ? 'pointer' : undefined }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
               <XAxis dataKey="t" tickFormatter={hhmm} fontSize={10} minTickGap={28} />
               <YAxis fontSize={10} />
-              <Tooltip labelFormatter={(t) => (typeof t === 'string' ? istDateTime(t) : '')} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
+              <Tooltip labelFormatter={(t) => (typeof t === 'string' ? istDateTime(t) : '')} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--color-line)' }} />
               {lines.map((l) => <Line key={l.key} dataKey={l.key} name={l.label} stroke={l.color} dot={false} strokeWidth={1.6} isAnimationActive={false} connectNulls />)}
             </LineChart>
           </ResponsiveContainer>

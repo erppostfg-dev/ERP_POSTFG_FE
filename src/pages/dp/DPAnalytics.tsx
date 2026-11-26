@@ -8,7 +8,7 @@ export default function DPAnalytics() {
   const crit = DRR_ROWS.filter((r) => r.aging < 45).length
   const avgAging = Math.round(DRR_ROWS.reduce((a, r) => a + r.aging, 0) / DRR_ROWS.length)
   const spikes = DRR_ROWS.filter((r) => Math.abs(r.deviation) >= 15).length
-  const tick = { fontSize: 12, fill: '#6b7280' }
+  const tick = { fontSize: 12, fill: 'var(--color-ink-600)' }
   return (
     <div className="space-y-5">
       <PageTitle title="Demand Planning Analytics" sub="Cover, run-rate swings and where inventory sits" />
@@ -23,7 +23,7 @@ export default function DPAnalytics() {
           <SectionHeader title="Aging by SKU" sub="Days of cover on DRR 7d · red under 45" />
           <div className="mt-4 h-72"><ResponsiveContainer>
             <BarChart data={[...DRR_ROWS].sort((a, b) => a.aging - b.aging)} layout="vertical" margin={{ left: 40 }}>
-              <CartesianGrid stroke="#f3f4f6" horizontal={false} />
+              <CartesianGrid stroke="var(--color-alt)" horizontal={false} />
               <XAxis type="number" tick={tick} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="sku" tick={{ ...tick, fontFamily: 'JetBrains Mono' }} width={110} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
@@ -37,7 +37,7 @@ export default function DPAnalytics() {
           <SectionHeader title="SOH by channel" sub="On-hand vs in-transit" />
           <div className="mt-4 h-72"><ResponsiveContainer>
             <BarChart data={ch}>
-              <CartesianGrid stroke="#f3f4f6" vertical={false} />
+              <CartesianGrid stroke="var(--color-alt)" vertical={false} />
               <XAxis dataKey="channel" tick={tick} axisLine={false} tickLine={false} />
               <YAxis tick={tick} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />

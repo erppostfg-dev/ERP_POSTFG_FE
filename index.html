@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <title>Post FG ERP</title>
+    <!-- dark mode before the app loads (no white flash): lib/theme.ts keeps the choice in localStorage pf-theme -->
+    <script>try{if(localStorage.getItem('pf-theme')==='dark'){document.documentElement.dataset.theme='dark';document.documentElement.style.colorScheme='dark'}}catch(e){}</script>
   </head>
   <body>
     <div id="root"></div>

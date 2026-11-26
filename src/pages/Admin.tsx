@@ -137,6 +137,8 @@ function UsersTab() {
         <DataGrid pageSizeKey="users" cols={UCOLS} rows={rows} rowKey={(r) => String(r.id)} onRowClick={(r) => setEdit(r.user)} pageSize={25}
           trailing={[
             { label: 'Status', render: (r) => <Badge tone={r.status === 'active' ? 'ok' : 'neutral'}>{r.status === 'active' ? 'Active' : 'Off'}</Badge> },
+            // light / dark mode the person uses (2026-11-26)
+            { label: ADMIN_TEXT.THEME, render: (r) => <span className="text-[12px] text-ink-600" title={r.user.theme === 'dark' ? ADMIN_TEXT.THEME_DARK : ADMIN_TEXT.THEME_LIGHT}>{r.user.theme === 'dark' ? '🌙 Dark' : '☀️ Light'}</span> },
             { label: 'Welcome email', render: (r) => r.user.welcomeSentAt
               ? <span className="inline-flex items-center gap-1 text-[12px] text-ok"><Check className="size-3.5" />{istDateTime(r.user.welcomeSentAt)}</span>
               : r.user.welcomeError ? <span className="inline-flex items-center gap-1 text-[12px] text-crit" title={r.user.welcomeError}><AlertTriangle className="size-3.5" />{ADMIN_TEXT.EMAIL_NOT_SENT}</span>

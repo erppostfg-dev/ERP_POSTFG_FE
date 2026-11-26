@@ -39,6 +39,9 @@ export const ACCESS_LABEL: Record<string, string> = { none: 'Hidden', viewer: 'V
 export const ACCESS_LEVELS = ['none', 'viewer', 'editor'] as const
 
 export const ADMIN_TEXT = {
+  THEME: 'Mode',
+  THEME_DARK: 'Uses dark mode',
+  THEME_LIGHT: 'Uses light mode (or never switched)',
   TITLE: 'Users & Roles',
   SUB: 'Add people, give them a role (which pages they can open, view or edit), a PO Overview team and facilities. They get a welcome email and sign in with Google.',
   ADD_USER: 'Add user',
