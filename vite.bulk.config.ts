@@ -6,9 +6,11 @@ import path from 'node:path'
 
 // The Bulk Orders portal (2026-11-11): a second app of this repo with its own page (bulk.html -> src/bulk-main.tsx).
 //   npm run dev:bulk     http://localhost:5174 (the backend's BULK_PORTAL_URL; CORS allows it)
-//   npm run build:bulk   dist-bulk/index.html + assets, served at the root of its own domain (orders.mcaffeine.com,
-//                        dev.orders.mcaffeine.com; bucket folder bulk-orders/). It calls the API on the POST_FG address
-//                        (VITE_API_BASE_URL = the deploy's VITE_BULK_API_BASE_URL, a full https://.../postfg/api/v1).
+//   npm run build:bulk   dist-bulk/index.html + assets (bucket folder bulk-orders/), built for the address in
+//                        BULK_BASE: '/' (default) = the root of its own domain (dev: dev.orders.mcaffeine.com);
+//                        '/postfg/bulk-orders/' = under POST_FG (prod: erp.mcaffeine.com/postfg/bulk-orders, until
+//                        prod moves to orders.mcaffeine.com). It calls the API on the POST_FG address
+//                        (VITE_API_BASE_URL = the deploy's VITE_BULK_API_BASE_URL, else VITE_API_BASE_URL).
 
 /** Every page address of the dev server opens bulk.html; the build's bulk.html becomes index.html. */
 const bulkPage = (): Plugin => ({
@@ -26,7 +28,7 @@ const bulkPage = (): Plugin => ({
 })
 
 export default defineConfig(() => ({
-  base: '/',
+  base: process.env.BULK_BASE || '/',
   plugins: [react(), tailwindcss(), bulkPage()],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   build: { outDir: 'dist-bulk', emptyOutDir: true, rollupOptions: { input: path.resolve(__dirname, 'bulk.html') } },
