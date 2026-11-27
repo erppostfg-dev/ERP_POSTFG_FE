@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, Eye, History, Layers, Pencil, Plus, Power, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Eye, FileSpreadsheet, History, Layers, Pencil, Plus, Power, RefreshCw, X } from 'lucide-react'
 import { setMasterActive, listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSkus, listPepWarehouses, type ChannelCustomerItem, type ChannelSkuItem, type ChannelWarehouseItem, type PepSkuItem, type PepWarehouseItem } from '../api/masters'
-import { ADD_TEXT, EDIT_TEXT, HISTORY_TEXT, MASTER_ADD_ROLES, SWITCH_OFF_EFFECT, SWITCH_ON_EFFECT, MASTER_LOG_TYPE, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS, STOCK_FEED_LABEL, STOCK_FORMULA_LABEL, STOCK_NOT_COUNTED } from '../constants/masters'
+import { ADD_TEXT, BULK_TEXT, BULK_TYPES, EDIT_TEXT, HISTORY_TEXT, MASTER_ADD_ROLES, SWITCH_OFF_EFFECT, SWITCH_ON_EFFECT, MASTER_LOG_TYPE, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS, STOCK_FEED_LABEL, STOCK_FORMULA_LABEL, STOCK_NOT_COUNTED } from '../constants/masters'
 import { IconBtn, RecentChangesDrawer, RowHistoryDrawer } from './masters/MasterHistory'
 import TransferRoutes from './masters/TransferRoutes'
+import { BulkUploadDialog } from './masters/BulkUploadDialog'
 import { useAuth } from '../auth/AuthContext'
 import { ACCESS } from '../constants/auth'
 import { PATHS } from '../constants/pages'
@@ -274,6 +275,10 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
     || (!!MASTER_PAGE[id] && auth.accessFor(MASTER_PAGE[id]) === ACCESS.EDITOR)
   const canAdd = ADDABLE.includes(id) && isMasterAdmin
   const [adding, setAdding] = useState(false)
+  // Bulk upload (2026-11-27): the same people as Add / Edit; Channel SKUs first (BULK_TYPES)
+  const bulkType = MASTER_LOG_TYPE[id] as string | undefined
+  const canBulk = !!bulkType && BULK_TYPES.includes(bulkType) && isMasterAdmin
+  const [bulkOpen, setBulkOpen] = useState(false)
   const [historyOf, setHistoryOf] = useState<Row | null>(null)
   const [editing, setEditing] = useState<Row | null>(null)
   const [switching, setSwitching] = useState<Row | null>(null)
@@ -309,10 +314,17 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder={c.placeholder} filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
         entity={c.entity} onExport={(e) => exportRows(id, e, c.fields.map((f) => [f.label, f.key, 'text'] as [string, string, ColKind]), view)}
         primary={canAdd
-          ? <PrimaryBtn icon={<Plus className="size-4" />} onClick={() => setAdding(true)}>{c.addLabel}</PrimaryBtn>
+          ? <span className="flex items-center gap-2">
+              {canBulk && <Button icon={<FileSpreadsheet className="size-4" />} onClick={() => setBulkOpen(true)}>{BULK_TEXT.BUTTON}</Button>}
+              <PrimaryBtn icon={<Plus className="size-4" />} onClick={() => setAdding(true)}>{c.addLabel}</PrimaryBtn>
+            </span>
           : c.readOnly
             ? <span title={ADDABLE.includes(id) ? ADD_TEXT.ADMIN_ONLY : NOT_AVAILABLE_YET}><Button disabled icon={<Plus className="size-4" />}>{c.addLabel}</Button></span>
             : <PrimaryBtn icon={<Plus className="size-4" />} onClick={() => setEdit({ row: blank() })}>{c.addLabel}</PrimaryBtn>} />
+      {bulkOpen && bulkType && (
+        <BulkUploadDialog type={bulkType} label={c.entity} canUpload={canBulk} onClose={() => setBulkOpen(false)}
+          onSaved={(message) => { setBulkOpen(false); setNotice(message); refreshAfterChange() }} />
+      )}
       {notice && (
         <div className="flex items-start gap-2 rounded-[var(--radius)] border border-ok/30 bg-ok-soft px-3 py-2 text-[12.5px] text-ok">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0" /><span className="flex-1">{notice}</span>

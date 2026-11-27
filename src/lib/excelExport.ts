@@ -11,6 +11,33 @@ export interface ExcelSheet {
   lists?: { col: number; values: string[]; prompt?: string }[]
   /** Columns written in bold red, header included (2026-11-03: the Issues columns of the In Review downloads). */
   redCols?: number[]
+  /**
+   * Strict cells (2026-11-27, Masters bulk upload): Excel refuses a wrong value as it is typed. list = one of `source`
+   * (a range like 'Lists'!$A$2:$A$90, for lists too long to write inline); decimal / whole = a number in min..max;
+   * textLength = at most max characters. prompt = the tip shown when the cell is selected. Rows 2..ruleRows+1.
+   */
+  rules?: ExcelRule[]
+  ruleRows?: number
+}
+
+export interface ExcelRule {
+  col: number
+  type: 'list' | 'decimal' | 'whole' | 'textLength'
+  source?: string
+  min?: number
+  max?: number
+  title: string
+  prompt?: string
+  error?: string
+}
+
+const ruleXml = (r: ExcelRule, sqref: string): string => {
+  const t = (v: string, n: number) => xmlText(v.slice(0, n))
+  const tip = r.prompt ? ` showInputMessage="1" promptTitle="${t(r.title, 32)}" prompt="${t(r.prompt, 255)}"` : ''
+  const err = ` showErrorMessage="1" errorTitle="${t(r.title, 32)}" error="${t(r.error ?? r.prompt ?? r.title, 255)}"`
+  if (r.type === 'list') return `<dataValidation type="list" allowBlank="1"${err}${tip} sqref="${sqref}"><formula1>${xmlText(r.source ?? '""')}</formula1></dataValidation>`
+  if (r.type === 'textLength') return `<dataValidation type="textLength" operator="lessThanOrEqual" allowBlank="1"${err}${tip} sqref="${sqref}"><formula1>${r.max ?? 255}</formula1></dataValidation>`
+  return `<dataValidation type="${r.type}" operator="between" allowBlank="1"${err}${tip} sqref="${sqref}"><formula1>${r.min ?? 0}</formula1><formula2>${r.max ?? 999999999}</formula2></dataValidation>`
 }
 
 /** A bold red font + a cell style using it, added to the workbook's styles.xml; returns that style's index. */
@@ -51,7 +78,7 @@ export const downloadExcel = async (fileName: string, sheets: ExcelSheet[]) => {
     XLSX.utils.book_append_sheet(book, ws, sheetName(s.name, used))
   }
   const name = `${fileName.replace(/[\\/:*?"<>|]+/g, ' ').trim()}.xlsx`
-  if (!sheets.some((s) => s.lists?.length || s.redCols?.length)) { XLSX.writeFile(book, name); return }
+  if (!sheets.some((s) => s.lists?.length || s.redCols?.length || s.rules?.length)) { XLSX.writeFile(book, name); return }
 
   // Dropdowns (2026-11-02): SheetJS does not write data validation, so it goes into the sheet XML of the finished file
   // (an .xlsx is a zip, read and written with SheetJS's own CFB).
@@ -68,7 +95,7 @@ export const downloadExcel = async (fileName: string, sheets: ExcelSheet[]) => {
     }
   }
   sheets.forEach((s, n) => {
-    if (!s.lists?.length && !(s.redCols?.length && red >= 0)) return
+    if (!s.lists?.length && !s.rules?.length && !(s.redCols?.length && red >= 0)) return
     const i = zip.FullPaths.findIndex((p: string) => p.endsWith(`xl/worksheets/sheet${n + 1}.xml`))
     if (i < 0) return
     if (s.redCols?.length && red >= 0) {
@@ -78,13 +105,18 @@ export const downloadExcel = async (fileName: string, sheets: ExcelSheet[]) => {
         letters.has(col) ? `<c r="${col}${row}"${attrs.replace(/ s="\d+"/, '')} s="${red}"${close}>` : all)
       zip.FileIndex[i].content = new TextEncoder().encode(sx)
     }
-    if (!s.lists?.length) return
+    if (!s.lists?.length && !s.rules?.length) return
     const last = Math.max(2, s.rows.length + 1)
-    const rules = s.lists.map((l) => {
+    const ruleLast = Math.max(last, (s.ruleRows ?? 0) + 1)
+    const rules = (s.lists ?? []).map((l) => {
       const col = XLSX.utils.encode_col(l.col)
       const prompt = l.prompt ? ` showInputMessage="1" prompt="${xmlText(l.prompt.slice(0, 255))}"` : ''
       return `<dataValidation type="list" allowBlank="1" showErrorMessage="1"${prompt} sqref="${col}2:${col}${last}"><formula1>"${xmlText(l.values.join(','))}"</formula1></dataValidation>`
     })
+    for (const r of s.rules ?? []) {
+      const col = XLSX.utils.encode_col(r.col)
+      rules.push(ruleXml(r, `${col}2:${col}${ruleLast}`))
+    }
     let xml = new TextDecoder().decode(zip.FileIndex[i].content as Uint8Array)
     const at = Math.min(...AFTER_VALIDATIONS.map((t) => xml.indexOf(t)).filter((x) => x >= 0))
     xml = `${xml.slice(0, at)}<dataValidations count="${rules.length}">${rules.join('')}</dataValidations>${xml.slice(at)}`
