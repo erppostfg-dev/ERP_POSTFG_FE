@@ -31,6 +31,8 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { DummyDataStrip } from './components/DummyData'
 import { HOME_PATH, MASTER_TAB_BY_PATH, NAV_GROUPS, PATHS, RAIL_PAGES, isDummyPage, type NavGroup } from './constants/pages'
 import { SIDEBAR_COLLAPSED_KEY } from './constants/ui'
+import { isMovedHost } from './lib/moved'
+import { MOVED_TEXT } from './constants/moved'
 
 /** The sidebar choice survives a reload (browser storage; private windows may refuse it, then it just isn't kept). */
 const readCollapsed = (): boolean => {
@@ -207,6 +209,8 @@ export default function App() {
 
       {/* Main */}
       <div className="flex min-h-0 min-w-0 flex-col">
+        {/* the test server (2026-11-26): only developers get here; everyone else sees "POST_FG has moved" */}
+        {isMovedHost() && <div className="bg-warn-soft px-5 py-1.5 text-center text-[12px] font-medium text-warn">{MOVED_TEXT.DEV_BANNER}</div>}
         <header className="flex items-center gap-3 border-b border-line bg-surface px-5 py-3">
           <select value={pathname} onChange={(e) => navigate(e.target.value)} className="rounded-md border border-line px-2 py-1.5 text-xs md:hidden">
             {groups.map((g) => g.items.length ? (

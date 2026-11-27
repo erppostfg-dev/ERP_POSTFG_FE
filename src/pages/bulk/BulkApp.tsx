@@ -13,6 +13,10 @@ import { ErrorBoundary } from '../../components/ErrorBoundary'
 import { CAPABILITY } from '../../constants/reviewEdit'
 import { ThemeToggle } from '../../components/ThemeToggle'
 import { fromAccount } from '../../lib/theme'
+import { isMovedHost } from '../../lib/moved'
+import { MovedScreen } from '../../components/MovedScreen'
+import { MOVED_TEXT } from '../../constants/moved'
+import { DEVELOPER_ROLE } from '../../constants/admin'
 
 /*
  * The Bulk Orders portal (2026-11-11): its own app (src/bulk-main.tsx). Same Google login as POST_FG (the sign-in
@@ -52,6 +56,8 @@ export default function BulkApp() {
   const urlError = new URLSearchParams(window.location.search).get('error') ?? undefined
   const me = useQuery({ queryKey: ['bulk', 'me'], queryFn: () => api<Me>(AUTH_ENDPOINTS.ME).then((m) => { fromAccount(m.user.theme); return m }), retry: false })
   const [page, setPage] = useState<Page>('orders')
+  // the test server (2026-11-26): developers may still sign in / open it
+  const [devAnyway, setDevAnyway] = useState(false)
   const approver = me.data ? rightsOf(me.data.access).approve : false
   // the Approvals badge: how many wait (one count query, refreshed with the lists)
   const waiting = useQuery({
@@ -66,12 +72,16 @@ export default function BulkApp() {
   }, [urlError])
 
   if (me.isPending) return <div className="grid min-h-full place-items-center text-[13px] text-ink-600">{BULK_TEXT.LOADING}</div>
+  if (me.isError && isMovedHost() && !devAnyway) {
+    return <MovedScreen bulk><button type="button" onClick={() => setDevAnyway(true)} className="text-[12px] font-semibold text-ink-400 hover:text-ink-900">{MOVED_TEXT.DEV_SIGN_IN}</button></MovedScreen>
+  }
   if (me.isError) {
     const code = me.error instanceof ApiError ? me.error.code : ERROR_CODE.NETWORK
     return <SignIn error={urlError ?? (code === ERROR_CODE.UNAUTHENTICATED ? undefined : code)} />
   }
 
   const { user, access, capabilities } = me.data
+  if (isMovedHost() && !user.roles.includes(DEVELOPER_ROLE)) return <MovedScreen bulk />
   const rights = rightsOf(access, capabilities)
   const signOut = async () => {
     try {

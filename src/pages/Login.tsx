@@ -5,6 +5,9 @@ import { FullPageMessage } from '../auth/RequireAuth'
 import { AUTH_ENDPOINTS, LOGIN_ERROR_FALLBACK, LOGIN_ERROR_MESSAGES } from '../constants/auth'
 import { HOME_PATH } from '../constants/pages'
 import { takeNext } from '../auth/nextPage'
+import { isMovedHost } from '../lib/moved'
+import { MovedScreen } from '../components/MovedScreen'
+import { MOVED_TEXT } from '../constants/moved'
 
 export default function Login() {
   const auth = useAuth()
@@ -15,6 +18,15 @@ export default function Login() {
 
   const code = params.get('error') ?? auth.error
   const error = code ? LOGIN_ERROR_MESSAGES[code] ?? LOGIN_ERROR_FALLBACK : null
+
+  // the test server (2026-11-26 go-live): everyone is sent to the live POST_FG; developers may still sign in here
+  if (isMovedHost()) {
+    return (
+      <MovedScreen>
+        <a href={apiUrl(AUTH_ENDPOINTS.GOOGLE)} className="text-[12px] font-semibold text-ink-400 hover:text-ink-900">{MOVED_TEXT.DEV_SIGN_IN}</a>
+      </MovedScreen>
+    )
+  }
 
   return (
     <div className="flex h-full items-center justify-center bg-canvas px-4">
