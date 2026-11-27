@@ -53,10 +53,19 @@ export const PULLS_TEXT = {
   SAVED_SCHEDULE: 'Schedule saved.',
   VIEW_ONLY: 'View only: running and processing need editor access.',
   // Myntra STRs (2026-11-03): the robot starts with the "Request to Raise STRs" email; CSV + processed.json kept in S3
-  STARTED_BY_EMAIL: 'Starts by itself when a "Request to Raise STRs" email comes; Run robot now tries the waiting STRs again',
+  STARTED_BY_EMAIL: 'Starts by itself when a "Request to Raise STRs" email comes (never retries by itself); Run robot now tries the waiting STRs again',
+  // Connect & run (2026-11-27): the person's own Myntra login from Chrome (the same session they keep using, never a new
+  // login), then the waiting STRs run at once. The robot never logs in itself, so it never logs anyone out.
+  CONNECT_RUN: 'Connect & run',
+  CONNECTING: 'Connecting…',
+  CONNECT_DONE: (cookies: number, started: boolean) => `Myntra login saved (${cookies} cookies)${started ? ': the robot is running the waiting STRs now.' : '. No STRs waiting.'}`,
+  CONNECT_MISSING: 'Connect & run needs the ERP Robot Login extension in this Chrome (ask the tech team). Then log in at partners.myntrainfo.com and press Connect & run again.',
+  CONNECT_FAILED: (why: string) => `Myntra not connected: ${why}`,
+  BLOCKED_LOGIN: (waiting: number, since: string) => `Myntra login needed since ${since}: ${waiting} STR(s) waiting. Log in at partners.myntrainfo.com in Chrome, then press Connect & run.`,
+  BLOCKED_FAILED: (waiting: number, since: string, why: string) => `The robot could not run (${since}: ${why}). ${waiting} STR(s) waiting: press Run robot now, or upload their CSVs in Manual Upload.`,
   STARTS_WITH: 'Starts with',
   NO_PROCESSING: 'STRs are stored in S3 (CSV + processed.json); making POs from them is switched off',
-  STR_RUN_RESULT: (listed: number, stored: number, failed: number) => `${listed} STR(s) · ${stored} stored in S3${failed ? ` · ${failed} not yet (tried again)` : ''}`,
+  STR_RUN_RESULT: (listed: number, stored: number, failed: number) => `${listed} STR(s) · ${stored} downloaded${failed ? ` · ${failed} failed (upload by hand)` : ''}`,
   STR_COUNTS: (c: { fetched: number; waiting: number; stored?: number; failed?: number }) => `${c.fetched} STR(s) · ${c.stored ?? 0} stored in S3 · ${c.waiting} waiting${c.failed ? ` · ${c.failed} failed` : ''}`,
   RECENT_STRS: 'Recent STRs',
   // the robot's failed STRs (2026-11-04): the team downloads them from the portal and uploads them in Manual Upload
