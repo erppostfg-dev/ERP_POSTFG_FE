@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, Eye, FileSpreadsheet, History, Layers, Pencil, Plus, Power, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Eye, History, Layers, Pencil, Plus, Power, RefreshCw, X } from 'lucide-react'
 import { setMasterActive, listChannelCustomers, listChannelSkus, listChannelWarehouses, listPepSkus, listPepWarehouses, type ChannelCustomerItem, type ChannelSkuItem, type ChannelWarehouseItem, type PepSkuItem, type PepWarehouseItem } from '../api/masters'
 import { ADD_TEXT, BULK_TEXT, BULK_TYPES, EDIT_TEXT, HISTORY_TEXT, MASTER_ADD_ROLES, SWITCH_OFF_EFFECT, SWITCH_ON_EFFECT, MASTER_LOG_TYPE, NOT_AVAILABLE_YET, NOT_IN_DB, SKU_STATUS, STOCK_FEED_LABEL, STOCK_FORMULA_LABEL, STOCK_NOT_COUNTED } from '../constants/masters'
 import { IconBtn, RecentChangesDrawer, RowHistoryDrawer } from './masters/MasterHistory'
@@ -275,7 +275,8 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
     || (!!MASTER_PAGE[id] && auth.accessFor(MASTER_PAGE[id]) === ACCESS.EDITOR)
   const canAdd = ADDABLE.includes(id) && isMasterAdmin
   const [adding, setAdding] = useState(false)
-  // Bulk upload (2026-11-27): the same people as Add / Edit; Channel SKUs first (BULK_TYPES)
+  // Bulk upload (2026-11-27): the same people as Add / Edit; every master but Transfer Routes (BULK_TYPES). It takes the
+  // place of the toolbar's old "Upload CSV" (a sample window that imported nothing), which is gone from the Masters.
   const bulkType = MASTER_LOG_TYPE[id] as string | undefined
   const canBulk = !!bulkType && BULK_TYPES.includes(bulkType) && isMasterAdmin
   const [bulkOpen, setBulkOpen] = useState(false)
@@ -312,12 +313,9 @@ function MasterTable({ id, rows, onSave }: { id: string; rows: Row[]; onSave: (r
         </div>
       )}
       <SectionToolbar q={s.q} setQ={s.setQ} placeholder={c.placeholder} filtersOpen={s.open} onToggleFilters={() => s.setOpen(!s.open)} activeFilters={s.active}
-        entity={c.entity} onExport={(e) => exportRows(id, e, c.fields.map((f) => [f.label, f.key, 'text'] as [string, string, ColKind]), view)}
+        entity={c.entity} hideUpload={!canBulk} uploadLabel={BULK_TEXT.BUTTON} onUpload={canBulk ? () => setBulkOpen(true) : undefined} onExport={(e) => exportRows(id, e, c.fields.map((f) => [f.label, f.key, 'text'] as [string, string, ColKind]), view)}
         primary={canAdd
-          ? <span className="flex items-center gap-2">
-              {canBulk && <Button icon={<FileSpreadsheet className="size-4" />} onClick={() => setBulkOpen(true)}>{BULK_TEXT.BUTTON}</Button>}
-              <PrimaryBtn icon={<Plus className="size-4" />} onClick={() => setAdding(true)}>{c.addLabel}</PrimaryBtn>
-            </span>
+          ? <PrimaryBtn icon={<Plus className="size-4" />} onClick={() => setAdding(true)}>{c.addLabel}</PrimaryBtn>
           : c.readOnly
             ? <span title={ADDABLE.includes(id) ? ADD_TEXT.ADMIN_ONLY : NOT_AVAILABLE_YET}><Button disabled icon={<Plus className="size-4" />}>{c.addLabel}</Button></span>
             : <PrimaryBtn icon={<Plus className="size-4" />} onClick={() => setEdit({ row: blank() })}>{c.addLabel}</PrimaryBtn>} />

@@ -317,7 +317,9 @@ export interface BulkColumn {
   list?: string; min?: number; max?: number; pattern?: string; help: string; example: string
 }
 export interface BulkFormat {
-  type: string; label: string; columns: Record<BulkMode, BulkColumn[]>; lists: Record<string, string[]>; maxRows: number; yesNo: string[]
+  /** modes = what this master takes (Warehouses: update only, no columns.add). */
+  type: string; label: string; modes: BulkMode[]; columns: Partial<Record<BulkMode, BulkColumn[]>> & { update: BulkColumn[] }
+  lists: Record<string, string[]>; maxRows: number; yesNo: string[]
 }
 export interface BulkPlanRow {
   row: number; key: string; action: 'new' | 'update' | 'same' | 'error'; needsApproval: boolean

@@ -202,9 +202,9 @@ export const TRANSFER_CODE_MAX = 100
 /*
  * Masters bulk upload (2026-11-27, user: "a bulk upload in the masters, the format Excel to download, all in one go; Add OR
  * Update one at a time; strict about the types"). The columns, rules and lists come from the server (format); these are
- * the window's words. BULK_TYPES = the masters that have it (Channel SKUs first; the others next).
+ * the window's words. BULK_TYPES = the masters that have it: all but Transfer Routes (own upload); Warehouses = Update only.
  */
-export const BULK_TYPES: readonly string[] = ['channel_sku']
+export const BULK_TYPES: readonly string[] = ['channel_sku', 'pep_sku', 'channel', 'location', 'facility']
 export const BULK_TEXT = {
   BUTTON: 'Bulk upload',
   TITLE: (label: string) => `Bulk upload · ${label}`,
@@ -213,6 +213,7 @@ export const BULK_TEXT = {
   MODE_ADD_HINT: 'New rows only. Download the blank format, fill one row per item.',
   MODE_UPDATE: 'Update existing',
   MODE_UPDATE_HINT: 'Change rows that exist. Download the current data, change the cells you need (empty = keep), upload.',
+  NO_ADD: 'This master has no Add: Update existing only.',
   DOWNLOAD_ADD: 'Download format',
   DOWNLOAD_UPDATE: 'Download current data',
   DROP: 'Drop the filled Excel here or click to choose',

@@ -10,7 +10,7 @@ import { Badge, Button, Modal } from '../../components/ui'
 
 /*
  * Masters bulk upload (2026-11-27, user: "bulk upload in the masters: the format Excel to download, all in one go; Add OR
- * Update one at a time; strict about the types"). One window per master (Channel SKUs first):
+ * Update one at a time; strict about the types"). One window per master (all but Transfer Routes; Warehouses = Update only):
  *   1. pick Add new / Update existing;
  *   2. download the format (Add: blank) or the current data (Update), built here from the server's columns: a "Fill
  *      here" sheet with drop-downs / number / length rules (Excel refuses a wrong value while typing), "How to fill"
@@ -34,7 +34,7 @@ const ruleText = (c: BulkColumn) => [
 
 /** The strict Excel: Fill here (+ rules), How to fill, Lists. */
 const buildExcel = async (fmt: BulkFormat, mode: BulkMode, rows: Record<string, string>[], fileName: string) => {
-  const cols = fmt.columns[mode]
+  const cols = fmt.columns[mode] ?? []
   const listNames = Object.keys(fmt.lists)
   // the Lists sheet: one column per list (+ Yes / No), each read by its drop-down as 'Lists'!$X$2:$X$n
   const lists: [string, string[]][] = [...listNames.map((n) => [n, fmt.lists[n]] as [string, string[]]), ['yesNo', fmt.yesNo]]
@@ -105,7 +105,10 @@ export function BulkUploadDialog({ type, label, canUpload, onClose, onSaved }: {
 }) {
   const input = useRef<HTMLInputElement>(null)
   const fmt = useQuery({ queryKey: ['masters', 'bulk-format', type], queryFn: ({ signal }) => getBulkFormat(type, signal) })
-  const [mode, setMode] = useState<BulkMode>('add')
+  const [picked, setMode] = useState<BulkMode>('add')
+  // a master without Add (Warehouses) opens on Update
+  const modes = fmt.data?.modes ?? ['add', 'update']
+  const mode: BulkMode = modes.includes(picked) ? picked : 'update'
   const [file, setFile] = useState<{ name: string; rows: Record<string, unknown>[] } | null>(null)
   const [plan, setPlan] = useState<BulkPlan | null>(null)
   const [busy, setBusy] = useState<'' | 'download' | 'check' | 'save'>('')
@@ -128,7 +131,7 @@ export function BulkUploadDialog({ type, label, canUpload, onClose, onSaved }: {
     if (!/\.(xlsx|xls|csv)$/i.test(f.name)) { setError(T.NOT_EXCEL(f.name)); return }
     setBusy('check')
     try {
-      const rows = await readExcel(f, fmt.data.columns[mode])
+      const rows = await readExcel(f, fmt.data.columns[mode] ?? [])
       if (!rows.length) throw new Error(T.NO_ROWS)
       setFile({ name: f.name, rows })
       setPlan(await checkBulk(type, { mode, fileName: f.name, rows }))
@@ -166,8 +169,8 @@ export function BulkUploadDialog({ type, label, canUpload, onClose, onSaved }: {
       <div className="space-y-4">
         <div className="grid gap-2 sm:grid-cols-2">
           {([['add', T.MODE_ADD, T.MODE_ADD_HINT, PlusCircle], ['update', T.MODE_UPDATE, T.MODE_UPDATE_HINT, RefreshCw]] as const).map(([m, title, hint, Icon]) => (
-            <button key={m} type="button" onClick={() => reset(m)}
-              className={`rounded-[var(--radius)] border px-3 py-2.5 text-left transition-colors ${mode === m ? 'border-primary bg-primary-soft' : 'border-line bg-surface hover:border-primary/50'}`}>
+            <button key={m} type="button" onClick={() => reset(m)} disabled={!modes.includes(m)} title={modes.includes(m) ? undefined : T.NO_ADD}
+              className={`rounded-[var(--radius)] border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${mode === m ? 'border-primary bg-primary-soft' : 'border-line bg-surface hover:border-primary/50'}`}>
               <div className="flex items-center gap-2 text-[13px] font-semibold text-ink-900"><Icon className="size-4 text-primary" />{title}</div>
               <div className="mt-0.5 text-[11.5px] text-ink-600">{hint}</div>
             </button>
