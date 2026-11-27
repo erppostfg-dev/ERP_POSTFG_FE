@@ -28,12 +28,25 @@ export interface ChannelPull {
   processing: boolean
   sync: { lastRunAt: string | null; lastSuccessAt: string | null; failures: number; lastError: string | null; lastResult: Record<string, unknown> | null } | null
   /** schedule null = the robot starts with its email (Myntra STRs, 2026-11-03). */
-  robot: { running: boolean; lastRun: RobotRun | null; schedule: { everyHours: number | null; updatedBy: string | null; updatedAt: string | null } | null; nextRunAt: string | null; startedBy?: 'schedule' | 'email' } | null
+  robot: {
+    running: boolean; lastRun: RobotRun | null; schedule: { everyHours: number | null; updatedBy: string | null; updatedAt: string | null } | null; nextRunAt: string | null; startedBy?: 'schedule' | 'email'
+    /** Myntra STRs (2026-11-27): why the robot cannot run now (login = Connect & run needed), else null. */
+    blocked?: StrBlocked | null
+  } | null
   /** Process now / the timer make POs from what was fetched (Myntra STRs: not yet). */
   processes?: boolean
   /** API channels: how often the server pulls (everyHours null = defaultHours) and when next (null = not polled here). */
   poll: { everyHours: number | null; defaultHours: number; updatedBy: string | null; updatedAt: string | null; nextRunAt: string | null } | null
   counts: { fetched: number; notTaken: number; waiting: number; taken: number; stored?: number; failed?: number } | null
+}
+
+/** Myntra STRs: the robot cannot run (its saved Myntra login does not work, or the run failed); alerted once. */
+export interface StrBlocked {
+  since: string
+  kind: 'login' | 'failed'
+  error: string
+  waiting: number
+  alertedAt: string | null
 }
 
 export interface PullItem {
@@ -61,5 +74,8 @@ export const listPullItems = (key: string, signal?: AbortSignal, status?: 'faile
 export const getRobotRun = (key: string, signal?: AbortSignal) => api<RobotRun | null>(`${CHANNEL_PULLS_ENDPOINT}/${encodeURIComponent(key)}/robot`, { signal })
 export const runRobot = (key: string) => api<ChannelPull>(`${CHANNEL_PULLS_ENDPOINT}/${encodeURIComponent(key)}/robot`, { method: 'POST' })
 export const processPull = (key: string) => api<{ started: 'started' | 'queued'; pull: ChannelPull }>(`${CHANNEL_PULLS_ENDPOINT}/${encodeURIComponent(key)}/process`, { method: 'POST' })
+/** Connect & run (Myntra STRs, 2026-11-27): the person's Myntra login from Chrome, then the waiting STRs run (API #156). */
+export const connectAndRun = (key: string, login: { cookies: unknown[]; localStorage: { name: string; value: string }[] }) =>
+  api<{ cookies: number; started: boolean; pull: ChannelPull }>(`${CHANNEL_PULLS_ENDPOINT}/${encodeURIComponent(key)}/connect`, { method: 'POST', body: JSON.stringify(login) })
 export const setRobotSchedule = (key: string, robotEveryHours: number | null) =>
   api<ChannelPull>(`${CHANNEL_PULLS_ENDPOINT}/${encodeURIComponent(key)}/schedule`, { method: 'PATCH', body: JSON.stringify({ robotEveryHours }) })

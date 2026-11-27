@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Bot, Check, Cloud, Download, Loader2, Play, RefreshCw, ScrollText, X as XIcon } from 'lucide-react'
+import { AlertTriangle, Bot, Check, Cloud, Download, KeyRound, Loader2, Play, RefreshCw, ScrollText, X as XIcon } from 'lucide-react'
 import { Badge, Button, Drawer } from '../../components/ui'
 import { DataGrid, exportRowsExcel } from '../../components/kit'
-import { getRobotRun, listChannelPulls, listPullItems, processPull, pullsKey, runRobot, setRobotSchedule, type ChannelPull, type PullItem } from '../../api/channelPulls'
+import { connectAndRun, getRobotRun, listChannelPulls, listPullItems, processPull, pullsKey, runRobot, setRobotSchedule, type ChannelPull, type PullItem } from '../../api/channelPulls'
+import { portalLogin, RobotLoginError } from '../../lib/robotLogin'
 import { PULLS_REFRESH_BUSY_MS, PULLS_REFRESH_IDLE_MS, PULLS_TEXT as T, ROBOT_SCHEDULE_HOURS, UPLOAD_STATE } from '../../constants/channelPulls'
 import { istDateTime } from '../../lib/time'
 import type { ColKind } from '../../lib/ops'
@@ -117,6 +118,22 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
     refetchInterval: busy(p) ? PULLS_REFRESH_BUSY_MS : PULLS_REFRESH_IDLE_MS,
   })
   const failedRows = failed.data ?? []
+  // Myntra STRs (2026-11-27): the robot cannot run (its saved login does not work): Connect & run is the way back
+  const blocked = r?.blocked ?? null
+  const connect = async () => {
+    setActing(true)
+    try {
+      const done = await connectAndRun(p.key, await portalLogin('myntra'))
+      onNote('ok', T.CONNECT_DONE(done.cookies, done.started))
+    } catch (e) {
+      if (e instanceof RobotLoginError) {
+        if (e.reason !== 'cancelled') onNote('err', e.reason === 'missing' ? T.CONNECT_MISSING : T.CONNECT_FAILED(e.message))
+      } else onNote('err', errorText(e))
+    } finally {
+      setActing(false)
+      void qc.invalidateQueries({ queryKey: pullsKey })
+    }
+  }
   const shownItems = byEmail && onlyFailed ? failedRows : (items.data ?? [])
   return (
     <section className="space-y-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
@@ -131,11 +148,21 @@ function PullCard({ p, canEdit, onNote }: { p: ChannelPull; canEdit: boolean; on
           <div className={`mt-1 text-[12.5px] ${p.intake.enabled ? 'text-ok' : 'text-warn'}`}>
             {p.intake.enabled ? `${T.INTAKE_ON}${p.intake.processFrom ? ` · ${T.FROM(istDateTime(p.intake.processFrom))}` : ''}` : T.INTAKE_OFF}
           </div>
+          {blocked && !r?.running && (
+            <p className="mt-1 flex items-start gap-1.5 text-[12.5px] font-medium text-crit">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              {blocked.kind === 'login' ? T.BLOCKED_LOGIN(blocked.waiting, istDateTime(blocked.since)) : T.BLOCKED_FAILED(blocked.waiting, istDateTime(blocked.since), blocked.error)}
+            </p>
+          )}
         </div>
         {canEdit && (
           <div className="flex flex-wrap gap-2">
+            {r && byEmail && (
+              <Button variant={blocked?.kind === 'login' ? 'primary' : 'default'} disabled={acting || r.running} onClick={() => void connect()}
+                icon={<KeyRound className="size-4" />}>{acting ? T.CONNECTING : T.CONNECT_RUN}</Button>
+            )}
             {r && (
-              <Button variant="primary" disabled={acting || r.running || !p.configured} onClick={() => void act(async () => { await runRobot(p.key) }, T.STARTED)}
+              <Button variant={blocked?.kind === 'login' ? 'default' : 'primary'} disabled={acting || r.running || !p.configured} onClick={() => void act(async () => { await runRobot(p.key) }, T.STARTED)}
                 icon={r.running ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}>{r.running ? T.ROBOT_RUNNING : T.RUN_ROBOT}</Button>
             )}
             {/* an API channel pulls and processes in one step: "Pull now"; a robot channel processes what the robot fetched */}
