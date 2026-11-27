@@ -15,13 +15,19 @@ export const PO_OVERVIEW_ENDPOINT = {
   /** PEPIMS -> POST_FG sync (2026-11-16): GET last run; POST start (admin / developer). */
 } as const
 
-/** Rows per request (the backend's default; PEPIMS loads 200 at a time). */
-export const PO_OVERVIEW_PAGE_SIZE = 200
 /**
  * Rows per page on both tables (2026-11-16, user): the person types 1..MAX (MAX = the most one request may return,
- * backend PO_OVERVIEW_LIST.MAX_PAGE_SIZE); a request loads max(PO_OVERVIEW_PAGE_SIZE, their number) rows so a page is full.
+ * backend PO_OVERVIEW_LIST.MAX_PAGE_SIZE); a request loads exactly their number (2026-11-27; was at least 200).
  */
 export const PO_OVERVIEW_ROWS = { DEFAULT: 50, MAX: 500 } as const
+
+/*
+ * Light on the database (2026-11-27, prod jam: every open PO Overview re-read its whole line list on every change by
+ * anyone). Lists reload at most once per LIVE_LIST_REFRESH_MS after changes, and only while PO Overview is on screen;
+ * more than LIVE_ROW_BURST changed rows at once = one list reload instead of one request per row.
+ */
+export const LIVE_LIST_REFRESH_MS = 60_000
+export const LIVE_ROW_BURST = 10
 
 /** Wait this long after typing before searching. */
 export const SEARCH_DELAY_MS = 350

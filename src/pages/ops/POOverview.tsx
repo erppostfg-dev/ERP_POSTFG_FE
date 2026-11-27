@@ -5,7 +5,7 @@ import { Drawer, Button, PageTitle } from '../../components/ui'
 import { DataGrid, Field, FilterPanel, SectionToolbar, exportRows, countActive, Cell, type FilterDef, type FilterValues } from '../../components/kit'
 import { PO_LINE_COLS, type ColKind, type POLineRow } from '../../lib/ops'
 import { getColumns, getFilterOptions, listLines, listShipments, type ColumnDef, type FilterOptions, type LineItem, type ListParams, type PoOverviewColumns, type ShipmentItem, type TeamColumns } from '../../api/poOverview'
-import { COLUMN_GROUP_LABEL, FACILITY_SCOPE_NOTE, NOT_ASSIGNED_DATES, OVERVIEW_TAB, PO_OVERVIEW_PAGE_SIZE, PO_OVERVIEW_ROWS, SEARCH_DELAY_MS, STATUS_POPUP } from '../../constants/poOverview'
+import { COLUMN_GROUP_LABEL, FACILITY_SCOPE_NOTE, NOT_ASSIGNED_DATES, OVERVIEW_TAB, PO_OVERVIEW_ROWS, SEARCH_DELAY_MS, STATUS_POPUP } from '../../constants/poOverview'
 import { StatusCell } from './StatusPopup'
 import { UniwareSyncButton } from '../../components/UniwareSyncButton'
 import { TABLE_HEIGHT } from '../../constants/ui'
@@ -19,6 +19,7 @@ import { NOT_AVAILABLE_YET } from '../../constants/masters'
 import { PATHS, URL_PARAM } from '../../constants/pages'
 import { oneOf, useUrlParam } from '../../lib/urlState'
 import { errorText } from '../../lib/friendlyError'
+import { useLocation } from 'react-router'
 
 /*
  * PO Overview from the backend (GET /po-overview/shipments, /lines, /filter-options, /columns): our POs, filtered and
@@ -77,14 +78,17 @@ function useServerList<I, R>(
   key: string,
   load: (p: ListParams, s: AbortSignal) => Promise<{ data: I[]; meta: { total: number } }>,
   toRow: (i: I) => R,
+  /** On screen (this page and this tab): only then it loads / reloads (2026-11-27, light on the database). */
+  active = true,
 ) {
   const [q, setQ] = useState('')
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<FilterValues>({})
   const [open, setOpen] = useState(false)
-  // rows per page the person picked (the grid's box, same key): a request loads at least that many, so a page is full
+  // rows per page the person picked (the grid's box, same key): one request = one page of that size (2026-11-27: was at
+  // least 200 rows; smaller pages = faster first screen, less for the database); the next page is loaded ahead
   const [perPage, setPerPage] = useState(() => readPageSize(key, PO_OVERVIEW_ROWS.DEFAULT, PO_OVERVIEW_ROWS.MAX))
-  const fetchSize = Math.min(Math.max(PO_OVERVIEW_PAGE_SIZE, perPage), PO_OVERVIEW_ROWS.MAX)
+  const fetchSize = Math.min(Math.max(1, perPage), PO_OVERVIEW_ROWS.MAX)
   useEffect(() => {
     const t = setTimeout(() => { if (q.trim() !== search) setSearch(q.trim()) }, SEARCH_DELAY_MS)
     return () => clearTimeout(t)
@@ -96,7 +100,14 @@ function useServerList<I, R>(
     initialPageParam: 1,
     getNextPageParam: (last, all) => (all.reduce((n, pg) => n + pg.data.length, 0) < last.meta.total ? all.length + 1 : undefined),
     placeholderData: keepPreviousData,
+    enabled: active,
   })
+  // one page ahead, quietly: when only the first page is loaded, the second follows, so "next" opens at once
+  const { hasNextPage, isFetching, fetchNextPage } = query
+  const loadedPages = query.data?.pages.length ?? 0
+  useEffect(() => {
+    if (active && loadedPages === 1 && hasNextPage && !isFetching) void fetchNextPage()
+  }, [active, loadedPages, hasNextPage, isFetching, fetchNextPage])
   const rows = useMemo(() => (query.data?.pages ?? []).flatMap((pg) => pg.data.map(toRow)), [query.data, toRow])
   const total = query.data?.pages.at(-1)?.meta.total ?? 0
   const err = query.error
@@ -114,7 +125,9 @@ export default function POOverview() {
   const [seen, setSeen] = useState<Record<string, boolean>>({ lines: true, [tab]: true })
   const [full, setFull] = useState(false)
   // Live updates for the whole page (SSE, automatic 60 s polling fallback): rows changed by others swap in place.
-  const live = useLiveShipments()
+  // PO Overview stays loaded in the background once opened: it reads only while it is on screen (2026-11-27)
+  const onScreen = useLocation().pathname === PATHS.PO_OVERVIEW
+  const live = useLiveShipments(onScreen)
   const options = useQuery({ queryKey: ['po-overview', 'filter-options'], queryFn: ({ signal }) => getFilterOptions(signal) }).data ?? null
   const columns = useQuery({ queryKey: ['po-overview', 'columns'], queryFn: ({ signal }) => getColumns(signal) }).data ?? null
   const [totals, setTotals] = useState<{ shipment?: number; lines?: number }>({})
@@ -148,8 +161,8 @@ export default function POOverview() {
           </button>
         ))}
       </div>
-      <div hidden={tab !== 'shipment'} className="pf-slide-from-right"><ShipmentTab options={options} columns={columns} onTotal={shipmentTotal} tableHeight={tableHeight} flash={live.flash} /></div>
-      {(seen.lines || tab === 'lines') && <div hidden={tab !== 'lines'} className="pf-slide-from-left"><LinesTab options={options} columns={columns} onTotal={linesTotal} tableHeight={tableHeight} /></div>}
+      <div hidden={tab !== 'shipment'} className="pf-slide-from-right"><ShipmentTab options={options} columns={columns} onTotal={shipmentTotal} tableHeight={tableHeight} flash={live.flash} active={onScreen && tab === 'shipment'} /></div>
+      {(seen.lines || tab === 'lines') && <div hidden={tab !== 'lines'} className="pf-slide-from-left"><LinesTab options={options} columns={columns} onTotal={linesTotal} tableHeight={tableHeight} active={onScreen && tab === 'lines'} /></div>}
     </div>
   )
 }
@@ -258,8 +271,8 @@ function TeamTabs({ teams, value, onChange }: { teams: TeamColumns[]; value: str
 
 const shipmentToRow = (i: ShipmentItem): Row => i
 
-function ShipmentTab({ options, columns, onTotal, tableHeight, flash }: { options: FilterOptions | null; columns: PoOverviewColumns | null; onTotal: (n: number) => void; tableHeight: string; flash: Record<string, number> }) {
-  const s = useServerList('po-overview-shipments', listShipments, shipmentToRow)
+function ShipmentTab({ options, columns, onTotal, tableHeight, flash, active }: { options: FilterOptions | null; columns: PoOverviewColumns | null; onTotal: (n: number) => void; tableHeight: string; flash: Record<string, number>; active: boolean }) {
+  const s = useServerList('po-overview-shipments', listShipments, shipmentToRow, active)
   const [sel, setSel] = useState<Row | null>(null)
   const [historyOf, setHistoryOf] = useState<Row | null>(null)
   const teams = useMemo(() => (columns ? orderedTeams(columns.teams) : []), [columns])
@@ -312,8 +325,8 @@ const LINE_FIXED_COLS = PO_LINE_COLS.findIndex(([, key]) => key === 'poNumber') 
 /** Most width (px) of those fixed columns (stickyFit narrows them to their values): UID, Entry Date, Brand, Channel, Location, PO Date, PO Number. */
 const LINE_FIXED_WIDTHS = [96, 104, 100, 110, 150, 104, 150]
 
-function LinesTab({ options, columns, onTotal, tableHeight }: { options: FilterOptions | null; columns: PoOverviewColumns | null; onTotal: (n: number) => void; tableHeight: string }) {
-  const s = useServerList('po-overview-lines', listLines, lineRow)
+function LinesTab({ options, columns, onTotal, tableHeight, active }: { options: FilterOptions | null; columns: PoOverviewColumns | null; onTotal: (n: number) => void; tableHeight: string; active: boolean }) {
+  const s = useServerList('po-overview-lines', listLines, lineRow, active)
   useFacilityPreset(columns, s)
   const [sel, setSel] = useState<LineRow | null>(null)
   const defs = useMemo(() => lineFilters(options), [options])

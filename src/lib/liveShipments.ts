@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { apiUrl } from '../api/client'
 import { getChanges, getShipment, type ShipmentChange, type ShipmentItem } from '../api/poOverview'
-import { LIST_ACTIONS, LIVE_EVENT, LIVE_FLASH_MS, LIVE_POLL_MS, LIVE_SILENT_MS, LIVE_WATCHDOG_MS, PO_OVERVIEW_ENDPOINT } from '../constants/poOverview'
+import { LIST_ACTIONS, LIVE_EVENT, LIVE_FLASH_MS, LIVE_LIST_REFRESH_MS, LIVE_POLL_MS, LIVE_ROW_BURST, LIVE_SILENT_MS, LIVE_WATCHDOG_MS, PO_OVERVIEW_ENDPOINT } from '../constants/poOverview'
 
 /*
  * Live PO Overview (2026-10-14, self-healing; user: "reduce manual intervention"):
@@ -15,6 +15,10 @@ import { LIST_ACTIONS, LIVE_EVENT, LIVE_FLASH_MS, LIVE_POLL_MS, LIVE_SILENT_MS, 
  *   - Session expired (401 while polling): the page reloads, which shows the login.
  *   - A change re-reads only that shipment (with the person's own access) and swaps the row in every cached list; a new
  *     shipment reloads the lists. Rows changed by others flash for LIVE_FLASH_MS.
+ *   - Light on the database (2026-11-27, prod jam): only while PO Overview is ON SCREEN (pages stay loaded in the
+ *     background); off screen a change only marks the lists out of date, read once when the page is shown again. List
+ *     reloads (the heavy line list above all) at most once per LIVE_LIST_REFRESH_MS; a burst of more than LIVE_ROW_BURST
+ *     changed rows (e.g. the Uniware sync) = one list reload, not one request per row.
  */
 
 export type LiveMode = 'connecting' | 'live' | 'polling'
@@ -25,16 +29,44 @@ const LINE_LISTS = ['po-overview-lines']
 type Page = { data: ShipmentItem[]; meta: unknown }
 
 /** Puts the fresh row into every cached shipments list that has it. */
+/** List reloads after changes: at most once per LIVE_LIST_REFRESH_MS (the last call inside the window runs at its end). */
+let lastListReload = 0
+let listReloadTimer: ReturnType<typeof setTimeout> | undefined
+const reloadListsSoon = (qc: QueryClient, which: 'lines' | 'both') => {
+  const run = () => {
+    lastListReload = Date.now()
+    listReloadTimer = undefined
+    if (which === 'both') void qc.invalidateQueries({ queryKey: SHIPMENT_LISTS })
+    void qc.invalidateQueries({ queryKey: LINE_LISTS })
+  }
+  const wait = lastListReload + LIVE_LIST_REFRESH_MS - Date.now()
+  if (wait <= 0) run()
+  else if (!listReloadTimer) listReloadTimer = setTimeout(run, wait)
+}
+
 export const replaceShipmentRow = (qc: QueryClient, row: ShipmentItem) => {
   qc.setQueriesData<InfiniteData<Page>>({ queryKey: SHIPMENT_LISTS }, (old) =>
     old ? { ...old, pages: old.pages.map((p) => ({ ...p, data: p.data.map((r) => (r.uid === row.uid ? row : r)) })) } : old,
   )
-  void qc.invalidateQueries({ queryKey: LINE_LISTS })
+  reloadListsSoon(qc, 'lines')
   void qc.invalidateQueries({ queryKey: ['po-overview', 'history', row.uid] })
 }
 
-export function useLiveShipments() {
+export function useLiveShipments(onScreen = true) {
   const qc = useQueryClient()
+  // read inside the event handlers (the stream stays open; only what a change does depends on being on screen)
+  const shown = useRef(onScreen)
+  const missed = useRef(false)
+  const burst = useRef<{ n: number; at: number }>({ n: 0, at: 0 })
+  useEffect(() => {
+    shown.current = onScreen
+    // back on screen after changes happened elsewhere: the lists are read once now
+    if (onScreen && missed.current) {
+      missed.current = false
+      void qc.invalidateQueries({ queryKey: SHIPMENT_LISTS })
+      void qc.invalidateQueries({ queryKey: LINE_LISTS })
+    }
+  }, [onScreen, qc])
   const [mode, setMode] = useState<LiveMode>('connecting')
   const [flash, setFlash] = useState<Record<string, number>>({})
   const cursor = useRef<string | null>(null)
@@ -47,11 +79,13 @@ export function useLiveShipments() {
 
     const apply = async (c: ShipmentChange) => {
       seen(c.logId)
-      if (LIST_ACTIONS.includes(c.action)) {
-        void qc.invalidateQueries({ queryKey: SHIPMENT_LISTS })
-        void qc.invalidateQueries({ queryKey: LINE_LISTS })
-        return
-      }
+      // off screen: nothing is read now; the lists are read once when PO Overview is shown again
+      if (!shown.current) { missed.current = true; return }
+      if (LIST_ACTIONS.includes(c.action)) { reloadListsSoon(qc, 'both'); return }
+      // a burst (e.g. the Uniware sync changing many POs): one list reload instead of one request per row
+      const now = Date.now()
+      burst.current = now - burst.current.at < LIVE_FLASH_MS ? { n: burst.current.n + 1, at: burst.current.at } : { n: 1, at: now }
+      if (burst.current.n > LIVE_ROW_BURST) { reloadListsSoon(qc, 'both'); return }
       try {
         const { shipment } = await getShipment(c.uid)
         replaceShipmentRow(qc, shipment)

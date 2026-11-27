@@ -40,6 +40,9 @@ const failure = (res: Response, body: unknown, path: string): ApiError => {
   return new ApiError(res.status, code, err ? raw : '', err?.details, requestId)
 }
 
+/** A request the page itself cancelled (React Query on leave / refetch): never reported as "can't reach the server". */
+const isCancelled = (e: unknown) => (e as { name?: string } | null)?.name === 'AbortError'
+
 const networkFailure = () => {
   reportClientError({ kind: 'network', message: "Can't reach the server", code: ERROR_CODE.NETWORK, status: 0 })
   return new ApiError(0, ERROR_CODE.NETWORK, '')
@@ -55,7 +58,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       credentials: 'include',
       headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
     })
-  } catch {
+  } catch (e) {
+    if (isCancelled(e)) throw e // the page stopped this request (left / reloaded): not a connection problem
     throw networkFailure()
   }
   if (res.status === 204) return undefined as T
@@ -71,7 +75,8 @@ export async function apiForm<T>(path: string, form: FormData): Promise<T> {
   let res: Response
   try {
     res = await fetch(apiUrl(path), { method: 'POST', body: form, credentials: 'include', headers: { Accept: 'application/json' } })
-  } catch {
+  } catch (e) {
+    if (isCancelled(e)) throw e // the page stopped this request (left / reloaded): not a connection problem
     throw networkFailure()
   }
   const body = await res.json().catch(() => null)
@@ -85,7 +90,8 @@ export async function apiWithMeta<T, M>(path: string, init: RequestInit = {}): P
   let res: Response
   try {
     res = await fetch(apiUrl(path), { ...init, credentials: 'include', headers: { Accept: 'application/json', ...init.headers } })
-  } catch {
+  } catch (e) {
+    if (isCancelled(e)) throw e // the page stopped this request (left / reloaded): not a connection problem
     throw networkFailure()
   }
   const body = await res.json().catch(() => null)
