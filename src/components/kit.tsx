@@ -15,13 +15,17 @@ import { DATE_SORT_KEY, dateSortOf, isOrderKey, type DateSortDir } from '../lib/
 
 // ---- Toolbar -----------------------------------------------------------
 export function SectionToolbar({
-  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra, onUpload, selectedCount = 0, onClearSelection, exportMenu,
+  q, setQ, placeholder = 'Search…', filtersOpen, onToggleFilters, activeFilters = 0, entity, onExport, primary, extra, onUpload, uploadLabel = 'Upload CSV', hideUpload = false, selectedCount = 0, onClearSelection, exportMenu,
 }: {
   q: string; setQ: (v: string) => void; placeholder?: string
   filtersOpen?: boolean; onToggleFilters?: () => void; activeFilters?: number
   entity: string; onExport: (ext: 'csv' | 'xls') => void; primary?: ReactNode; extra?: ReactNode
   /** What Upload CSV does on a live page (e.g. open the page that takes the files); default: the sample upload modal. */
   onUpload?: () => void
+  /** The upload button's words (Masters: "Bulk upload"). */
+  uploadLabel?: string
+  /** No upload button (Masters without a real upload: the sample window imports nothing, 2026-11-27). */
+  hideUpload?: boolean
   /** Rows ticked in the table: CSV / Excel then download only those (the page's onExport decides). */
   selectedCount?: number
   onClearSelection?: () => void
@@ -71,9 +75,11 @@ export function SectionToolbar({
             <Download className="size-4" /> Excel
           </button>
         </>)}
-        <button onClick={() => (onUpload ? onUpload() : setUpload(true))} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line bg-surface px-3 text-[13px] font-medium text-ink-900 hover:bg-canvas">
-          <Upload className="size-4" /> Upload CSV
-        </button>
+        {!hideUpload && (
+          <button onClick={() => (onUpload ? onUpload() : setUpload(true))} className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-line bg-surface px-3 text-[13px] font-medium text-ink-900 hover:bg-canvas">
+            <Upload className="size-4" /> {uploadLabel}
+          </button>
+        )}
         {primary}
       </div>
       <BulkUpload open={upload} onClose={() => setUpload(false)} entity={entity} onDownloadTemplate={() => onExport('csv')} />

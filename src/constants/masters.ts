@@ -24,6 +24,8 @@ export const MASTERS_ENDPOINT = {
   TRANSFER_ROUTES_TEMPLATE: '/masters/transfer-routes/template',
   TRANSFER_ROUTES_PREVIEW: '/masters/transfer-routes/upload/preview',
   TRANSFER_ROUTES_IMPORT: '/masters/transfer-routes/upload/import',
+  /** Bulk upload (2026-11-27, API #157-160): /masters/bulk/<type>/format | current | check | apply. */
+  BULK: (type: string, what: 'format' | 'current' | 'check' | 'apply') => `/masters/bulk/${type}/${what}`,
 } as const
 
 /*
@@ -196,3 +198,41 @@ export const ROUTE_FIELD_LABEL: Record<string, string> = {
 export const TRANSFER_PREFIX_KEY = 'transferPoPrefix'
 /** Longest code / PO prefix the backend takes (D2C_UNIWARE_CODE_MAX, D2C_PO_PREFIX_MAX). */
 export const TRANSFER_CODE_MAX = 100
+
+/*
+ * Masters bulk upload (2026-11-27, user: "a bulk upload in the masters, the format Excel to download, all in one go; Add OR
+ * Update one at a time; strict about the types"). The columns, rules and lists come from the server (format); these are
+ * the window's words. BULK_TYPES = the masters that have it: all but Transfer Routes (own upload); Warehouses = Update only.
+ */
+export const BULK_TYPES: readonly string[] = ['channel_sku', 'pep_sku', 'channel', 'location', 'facility']
+export const BULK_TEXT = {
+  BUTTON: 'Bulk upload',
+  TITLE: (label: string) => `Bulk upload · ${label}`,
+  SUB: 'Many rows in one go: download the Excel, fill it, upload it, check, save.',
+  MODE_ADD: 'Add new',
+  MODE_ADD_HINT: 'New rows only. Download the blank format, fill one row per item.',
+  MODE_UPDATE: 'Update existing',
+  MODE_UPDATE_HINT: 'Change rows that exist. Download the current data, change the cells you need (empty = keep), upload.',
+  NO_ADD: 'This master has no Add: Update existing only.',
+  DOWNLOAD_ADD: 'Download format',
+  DOWNLOAD_UPDATE: 'Download current data',
+  DROP: 'Drop the filled Excel here or click to choose',
+  DROP_HINT: (max: number) => `.xlsx / .xls / .csv · at most ${max.toLocaleString('en-IN')} rows`,
+  CHECKING: 'Checking every row (nothing is saved yet)…',
+  NOT_EXCEL: (name: string) => `${name}: choose an Excel (.xlsx / .xls) or .csv file`,
+  NO_HEADER: 'Row 1 of this file does not have the column names of the format: download the format again and fill that.',
+  MISSING_COLUMNS: (cols: string[]) => `Columns missing in the file: ${cols.join(', ')}. Use the downloaded format.`,
+  NO_ROWS: 'The file has no rows to upload.',
+  HAS_ERRORS: 'Fix the rows with problems and upload the file again: nothing is saved while any row has a problem.',
+  ERRORS_FILE: 'Download problems (Excel)',
+  NOTHING: 'Every row is already as in the file: nothing to save.',
+  SAVE: (n: number) => `Save ${n} row${n === 1 ? '' : 's'}`,
+  SAVING: 'Saving…',
+  DONE: (saved: number, approval: number) =>
+    `Saved ${saved} row${saved === 1 ? '' : 's'}.${approval ? ` ${approval} wait${approval === 1 ? 's' : ''} for approval on the Approvals page (approve them together with "Approve selected").` : ''}`,
+  APPROVAL: 'needs approval',
+  HOW_TO: ['Excel blocks wrong values while you type (drop-downs, numbers only, length).', 'Row 1 = column names: do not change them. Columns with * are required.', 'Nothing is saved until every row is right; the whole file is saved together.'],
+  SHEET_FILL: 'Fill here',
+  SHEET_HOW: 'How to fill',
+  SHEET_LISTS: 'Lists',
+} as const

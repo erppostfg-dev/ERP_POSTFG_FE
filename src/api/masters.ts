@@ -309,3 +309,28 @@ const routesForm = (file: File, remark?: string) => {
 }
 export const previewRoutesUpload = (file: File) => apiForm<RouteUploadPreview>(MASTERS_ENDPOINT.TRANSFER_ROUTES_PREVIEW, routesForm(file))
 export const importRoutesUpload = (file: File, remark?: string) => apiForm<RouteUploadResult>(MASTERS_ENDPOINT.TRANSFER_ROUTES_IMPORT, routesForm(file, remark))
+
+/* Masters bulk upload (2026-11-27, API #157-160). The server sends the columns + lists; the browser builds the Excel. */
+export type BulkMode = 'add' | 'update'
+export interface BulkColumn {
+  key: string; label: string; type: 'text' | 'decimal' | 'int' | 'list' | 'yesno'; required: boolean; readOnly?: boolean
+  list?: string; min?: number; max?: number; pattern?: string; help: string; example: string
+}
+export interface BulkFormat {
+  /** modes = what this master takes (Warehouses: update only, no columns.add). */
+  type: string; label: string; modes: BulkMode[]; columns: Partial<Record<BulkMode, BulkColumn[]>> & { update: BulkColumn[] }
+  lists: Record<string, string[]>; maxRows: number; yesNo: string[]
+}
+export interface BulkPlanRow {
+  row: number; key: string; action: 'new' | 'update' | 'same' | 'error'; needsApproval: boolean
+  changes: { field: string; label: string; old: string; value: string }[]; errors: string[]; filled: string[]
+}
+export interface BulkPlan {
+  type: string; mode: BulkMode; fileName: string
+  counts: { rows: number; new: number; update: number; same: number; error: number; needsApproval: number }
+  rows: BulkPlanRow[]
+}
+export const getBulkFormat = (type: string, signal?: AbortSignal) => api<BulkFormat>(MASTERS_ENDPOINT.BULK(type, 'format'), { signal })
+export const getBulkCurrent = (type: string) => api<{ type: string; columns: BulkColumn[]; rows: Record<string, string>[] }>(MASTERS_ENDPOINT.BULK(type, 'current'))
+export const checkBulk = (type: string, body: { mode: BulkMode; fileName: string; rows: Record<string, unknown>[] }) => post<BulkPlan>(MASTERS_ENDPOINT.BULK(type, 'check'), body)
+export const applyBulk = (type: string, body: { mode: BulkMode; fileName: string; rows: Record<string, unknown>[] }) => post<BulkPlan>(MASTERS_ENDPOINT.BULK(type, 'apply'), body)
